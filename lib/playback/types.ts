@@ -28,6 +28,29 @@ export interface TriggerEvent {
   agentId?: string;
 }
 
+/**
+ * A text-less raised hand: 'raised' waits for the next action boundary,
+ * 'called' means the engine stopped and handed the floor to the learner.
+ */
+export type HandState = 'raised' | 'called';
+
+/** Why and where a raised hand was called (onHandCalled) */
+export interface HandCall {
+  /**
+   * The previous action finished naturally, so a question asked now resumes
+   * the lecture at the next action instead of replaying a cut-off line.
+   */
+  atBoundary: boolean;
+  /**
+   * The discussion the hand jumped ahead of: its card was withdrawn without
+   * being consumed and is offered again once the learner is done. The engine
+   * re-offers this same object, so when it has no agentId yet (the card's delay
+   * was still running) the handler may pick one and write it here; the card
+   * offered later then names the same agent.
+   */
+  deferredDiscussion?: TriggerEvent;
+}
+
 /** Playback engine callbacks */
 export interface PlaybackEngineCallbacks {
   onModeChange?: (mode: EngineMode) => void;
@@ -46,6 +69,11 @@ export interface PlaybackEngineCallbacks {
   onDiscussionConfirmed?: (topic: string, prompt?: string, agentId?: string) => void;
   onDiscussionEnd?: () => void;
   onUserInterrupt?: (text: string) => void;
+  /**
+   * A raised hand got the floor: the engine is paused (or stays idle) until
+   * the learner speaks (handleUserInterrupt) or lowers the hand (lowerHand).
+   */
+  onHandCalled?: (call: HandCall) => void;
 
   // Topic / Transcript
   onTopicStart?: (type: 'lecture' | 'discussion', title: string) => void;

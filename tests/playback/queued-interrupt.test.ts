@@ -634,6 +634,88 @@ describe('PlaybackEngine raised hand (queued interrupt)', () => {
     });
   });
 
+  describe('text questions next to the hand-only raise', () => {
+    it('enters live Q&A at the boundary and never calls a hand', async () => {
+      const onHandCalled = vi.fn();
+      const { player, fireEnded } = createAudioPlayer(true);
+      const engine = new PlaybackEngine(
+        [scene([speech('a'), speech('b')])],
+        createActionEngine(),
+        player,
+        { onHandCalled },
+      );
+      engine.start();
+      await flushPromises();
+      engine.queueUserInterrupt('Q');
+      expect(engine.getHandState()).toBeNull();
+
+      fireEnded();
+      await flushPromises();
+      expect(engine.getMode()).toBe('live');
+      expect(engine.getHandState()).toBeNull();
+      expect(onHandCalled).not.toHaveBeenCalled();
+    });
+
+    it('refuses a question while a bare hand waits (attachQuestion upgrades it)', async () => {
+      const { engine } = setup([speech('a'), speech('b')]);
+      engine.start();
+      await flushPromises();
+      engine.raiseHand();
+
+      expect(engine.queueUserInterrupt('Q')).toBe(false);
+      expect(engine.hasQueuedInterrupt()).toBe(true);
+      engine.stop();
+    });
+
+    it('cancels a bare hand without giving back any text', async () => {
+      const { engine } = setup([speech('a'), speech('b')]);
+      engine.start();
+      await flushPromises();
+      engine.raiseHand();
+
+      expect(engine.cancelQueuedInterrupt()).toBeNull();
+      expect(engine.hasQueuedInterrupt()).toBe(false);
+      expect(engine.getHandState()).toBeNull();
+      engine.stop();
+    });
+
+    it('is not lowered by lowerHand', async () => {
+      const { engine, fireEnded, callbacks } = setup([speech('a'), speech('b')]);
+      engine.start();
+      await flushPromises();
+      engine.queueUserInterrupt('Q');
+
+      expect(engine.lowerHand()).toBe(false);
+      fireEnded();
+      await flushPromises();
+      expect(callbacks.onUserInterrupt).toHaveBeenCalledExactlyOnceWith('Q');
+    });
+
+    it('clears the question on restoreFromSnapshot()', async () => {
+      const { engine, fireEnded, callbacks } = setup([speech('a'), speech('b')]);
+      engine.start();
+      await flushPromises();
+      engine.queueUserInterrupt('Q');
+
+      engine.restoreFromSnapshot({ sceneIndex: 0, actionIndex: 1, consumedDiscussions: [] });
+      expect(engine.hasQueuedInterrupt()).toBe(false);
+      fireEnded();
+      await flushPromises();
+      expect(callbacks.onUserInterrupt).not.toHaveBeenCalled();
+      engine.stop();
+    });
+
+    it('a direct question from a paused lecture still replays the cut line', async () => {
+      const { engine } = setup([speech('a'), speech('b')]);
+      engine.start();
+      await flushPromises();
+      engine.pause();
+      engine.handleUserInterrupt('Q');
+      engine.handleEndDiscussion();
+      expect(engine.getSnapshot().actionIndex).toBe(0);
+    });
+  });
+
   describe('what the raised hand waits for', () => {
     it('is a spoken line while one plays (audio or reading timer)', async () => {
       vi.useFakeTimers();
