@@ -830,7 +830,11 @@
     "voiceInputDisabled": "语音输入已禁用",
     "textInput": "文字输入",
     "stopRecording": "停止录音",
-    "startRecording": "开始录音"
+    "startRecording": "开始录音",
+    "handRaisedQueued": "已举手 · 老师讲完这句就回答你",
+    "handRaisedDelivered": "你的问题已发送",
+    "cancelQueuedQuestion": "撤回",
+    "queuedQuestionNotSent": "举手提问未发送"
   },
   "pbl": {
     "emptyProject": "PBL项目尚未生成，请通过课程生成创建",

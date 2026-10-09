@@ -59,4 +59,26 @@ describe('shouldAutoResumeLecture', () => {
     expect(shouldAutoResumeLecture({ ...base, isExhausted: true })).toBe(false);
     expect(shouldAutoResumeLecture({ ...base, playbackCompleted: true })).toBe(false);
   });
+
+  it('resumes an exhausted lecture whose completion a raised hand preempted', () => {
+    expect(
+      shouldAutoResumeLecture({ ...base, isExhausted: true, lectureCompletionPending: true }),
+    ).toBe(true);
+    expect(
+      shouldAutoResumeLecture({
+        ...base,
+        isExhausted: true,
+        lectureCompletionPending: true,
+        playbackCompleted: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoResumeLecture({
+        ...base,
+        isExhausted: true,
+        lectureCompletionPending: true,
+        source: 'manual_stop',
+      }),
+    ).toBe(false);
+  });
 });

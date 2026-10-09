@@ -21,6 +21,10 @@
  *                                 ▲                    │
  *                                 │ resume / user msg  │
  *                                 └────────────────────┘
+ *
+ * A question sent while playing can wait for the current action to finish
+ * (queueUserInterrupt — a "raised hand"); processNext then delivers it at the
+ * next action boundary, entering live mode just like handleUserInterrupt.
  */
 
 import type { Scene } from '@/lib/types/stage';
@@ -64,6 +68,10 @@ export class PlaybackEngine {
   // Discussion state save
   private savedSceneIndex: number | null = null;
   private savedActionIndex: number | null = null;
+  // The lecture played its last action but a raised hand answered at the final
+  // boundary preempted its completion (onComplete), which continuePlayback
+  // runs. Outlives the Q&A's restore; cleared once it runs or the cursor moves.
+  private lectureCompletionPending: boolean = false;
 
   // Discussion topic state
   private currentTopicState: TopicState | null = null;
@@ -91,6 +99,8 @@ export class PlaybackEngine {
   private playbackGeneration: number = 0;
   // Keep the cursor on speech for progress/persistence; defer its cues until playback starts.
   private pendingNavigationSpeechIndex: number | null = null;
+  // Question sent mid-line ("raised hand"); delivered at the next action boundary
+  private queuedInterrupt: string | null = null;
 
   constructor(
     scenes: Scene[],
@@ -121,6 +131,59 @@ export class PlaybackEngine {
     return this.savedSceneIndex !== null;
   }
 
+  /**
+   * Whether the lecture already played its last action — a raised hand
+   * answered at the final boundary — so resuming it only runs the completion
+   * branch. Unlike hasLectureInterruption it still holds after the Q&A ends
+   * (an exhausted cursor then means "Play completes", not "Play restarts").
+   */
+  hasPendingLectureCompletion(): boolean {
+    return this.lectureCompletionPending;
+  }
+
+  /**
+   * Raise a hand while the lecture plays: hold the question until the current
+   * action finishes, then deliver it through onUserInterrupt and resume at the
+   * next action afterwards. Returns false when the question should be sent
+   * right away instead (handleUserInterrupt): not playing, or waiting on a
+   * discussion trigger rather than in a line. One question waits at a time; a
+   * second one is refused (check hasQueuedInterrupt first).
+   */
+  queueUserInterrupt(text: string): boolean {
+    if (this.mode !== 'playing') return false;
+    if (this.triggerDelayTimer !== null || this.currentTrigger !== null) return false;
+    if (this.queuedInterrupt !== null) {
+      log.warn('queueUserInterrupt called while a question is already queued');
+      return false;
+    }
+    this.queuedInterrupt = text;
+    return true;
+  }
+
+  /** Whether a raised-hand question is waiting for the next action boundary */
+  hasQueuedInterrupt(): boolean {
+    return this.queuedInterrupt !== null;
+  }
+
+  /** Drop the waiting question; returns its text (null when none was queued) */
+  cancelQueuedInterrupt(): string | null {
+    const text = this.queuedInterrupt;
+    this.queuedInterrupt = null;
+    return text;
+  }
+
+  /**
+   * Deliver the waiting question now (e.g. the user pressed pause). The line is
+   * cut off, so handleUserInterrupt replays it on resume. Returns false when
+   * nothing was queued.
+   */
+  flushQueuedInterrupt(): boolean {
+    const text = this.queuedInterrupt;
+    if (text === null) return false;
+    this.handleUserInterrupt(text);
+    return true;
+  }
+
   /** Scene id at the current playback position (post-restore engine state) */
   getCurrentSceneId(): string | null {
     return this.scenes[this.sceneIndex]?.id ?? null;
@@ -139,6 +202,7 @@ export class PlaybackEngine {
   /** Restore playback position from a snapshot */
   restoreFromSnapshot(snapshot: PlaybackSnapshot): void {
     this.pendingNavigationSpeechIndex = null;
+    this.lectureCompletionPending = false;
     this.sceneIndex = snapshot.sceneIndex;
     this.actionIndex = snapshot.actionIndex;
     this.consumedDiscussions = new Set(snapshot.consumedDiscussions);
@@ -154,6 +218,7 @@ export class PlaybackEngine {
     this.sceneIndex = 0;
     this.actionIndex = 0;
     this.pendingNavigationSpeechIndex = null;
+    this.lectureCompletionPending = false;
     this.invalidatePlaybackGeneration();
     this.setMode('playing');
     this.processNext();
@@ -190,8 +255,10 @@ export class PlaybackEngine {
     this.actionIndex = 0;
     this.savedSceneIndex = null;
     this.savedActionIndex = null;
+    this.lectureCompletionPending = false;
     this.currentTopicState = null;
     this.currentTrigger = null;
+    this.queuedInterrupt = null;
     this.actionEngine.resetPlaybackVisualState();
 
     for (let i = 0; i < actionIndex; i++) {
@@ -337,8 +404,10 @@ export class PlaybackEngine {
     this.actionIndex = 0;
     this.savedSceneIndex = null;
     this.savedActionIndex = null;
+    this.lectureCompletionPending = false;
     this.currentTopicState = null;
     this.currentTrigger = null;
+    this.queuedInterrupt = null;
   }
 
   /**
@@ -441,6 +510,8 @@ export class PlaybackEngine {
   /** User sends a message during playback → interrupt → live mode */
   handleUserInterrupt(text: string): void {
     this.invalidatePlaybackGeneration();
+    // A direct message supersedes a raised hand still waiting for its boundary
+    this.queuedInterrupt = null;
     if (this.mode === 'playing' || this.mode === 'paused') {
       // Save lecture state BEFORE stopping audio — actionIndex was already
       // incremented by processNext, so subtract 1 to replay the interrupted
@@ -449,12 +520,20 @@ export class PlaybackEngine {
       if (this.savedSceneIndex === null) {
         this.savedSceneIndex = this.sceneIndex;
         this.savedActionIndex = Math.max(0, this.actionIndex - 1);
+        this.lectureCompletionPending = false;
       }
 
       // Cancel pending trigger delay
       if (this.triggerDelayTimer) {
         clearTimeout(this.triggerDelayTimer);
         this.triggerDelayTimer = null;
+      }
+      // Hide a shown ProactiveCard WITHOUT consuming its discussion: the saved
+      // cursor is the discussion itself, so it is offered again on resume (and
+      // the card can't auto-skip or "Join" over the saved cursor mid-Q&A).
+      if (this.currentTrigger) {
+        this.currentTrigger = null;
+        this.callbacks.onProactiveHide?.();
       }
     }
 
@@ -535,6 +614,35 @@ export class PlaybackEngine {
   }
 
   /**
+   * Deliver a raised-hand question at an action boundary. The previous action
+   * finished naturally, so the lecture resumes at the NEXT action (unlike
+   * handleUserInterrupt, which replays the line it cut off).
+   */
+  private deliverQueuedInterrupt(): void {
+    const text = this.queuedInterrupt;
+    if (text === null) return;
+    this.queuedInterrupt = null;
+    this.invalidatePlaybackGeneration();
+
+    if (this.savedSceneIndex === null) {
+      this.savedSceneIndex = this.sceneIndex;
+      this.savedActionIndex = this.actionIndex;
+      this.lectureCompletionPending = this.isExhausted();
+    }
+    // Publish the boundary so the UI cursor and persisted progress already
+    // point past the finished action while the question is answered.
+    this.callbacks.onProgress?.(this.getSnapshot());
+
+    // Mode BEFORE stopping audio, mirroring handleUserInterrupt (both are
+    // no-ops at a boundary, but must never re-enter processNext).
+    this.currentTopicState = 'active';
+    this.setMode('live');
+    this.audioPlayer.stop();
+    this.cancelBrowserTTS();
+    this.callbacks.onUserInterrupt?.(text);
+  }
+
+  /**
    * Get the current action, or null if playback is complete.
    * Advances sceneIndex automatically when a scene's actions are exhausted.
    * A scene with no actions yields one synthetic dwell beat (so the slide still
@@ -565,6 +673,13 @@ export class PlaybackEngine {
   private async processNext(generation: number = this.playbackGeneration): Promise<void> {
     if (this.mode !== 'playing' || !this.isCurrentGeneration(generation)) return;
 
+    // Every action boundary passes through here: answer a raised hand before
+    // the next action (or the completion branch) starts.
+    if (this.queuedInterrupt !== null) {
+      this.deliverQueuedInterrupt();
+      return;
+    }
+
     // Check for scene boundary (fire scene change callback at start of each new scene)
     if (this.actionIndex === 0 && this.sceneIndex < this.scenes.length) {
       const scene = this.scenes[this.sceneIndex];
@@ -578,6 +693,7 @@ export class PlaybackEngine {
       if (!this.isCurrentGeneration(generation)) return;
       // All scenes complete
       this.invalidatePlaybackGeneration();
+      this.lectureCompletionPending = false;
       this.actionEngine.clearEffects();
       this.setMode('idle');
       this.callbacks.onComplete?.();

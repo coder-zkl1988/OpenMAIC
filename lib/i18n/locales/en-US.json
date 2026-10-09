@@ -830,7 +830,11 @@
     "voiceInputDisabled": "Voice input disabled",
     "textInput": "Text input",
     "stopRecording": "Stop recording",
-    "startRecording": "Start recording"
+    "startRecording": "Start recording",
+    "handRaisedQueued": "Hand raised — the teacher will answer after this sentence",
+    "handRaisedDelivered": "Your question has been sent",
+    "cancelQueuedQuestion": "Cancel",
+    "queuedQuestionNotSent": "Your raised-hand question wasn't sent"
   },
   "pbl": {
     "emptyProject": "PBL project has not been generated yet. Please create via course generation.",

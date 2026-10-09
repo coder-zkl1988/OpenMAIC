@@ -17,13 +17,14 @@ const mocks = vi.hoisted(() => ({
   piEnabled: true,
   coursewareReferenceEnabled: true,
   topicActive: false,
-  engineMode: 'idle' as 'idle' | 'playing' | 'paused',
+  engineMode: 'idle' as 'idle' | 'playing' | 'paused' | 'live',
   engineOptions: undefined as
     | {
-        onModeChange?: (mode: 'idle' | 'playing' | 'paused') => void;
+        onModeChange?: (mode: 'idle' | 'playing' | 'paused' | 'live') => void;
         onProgress?: (snapshot: { actionIndex: number; sceneId: string }) => void;
         onUserInterrupt?: (text: string) => void;
         onComplete?: () => void;
+        onDiscussionEnd?: () => void;
       }
     | undefined,
   startLecture: vi.fn(),
@@ -32,6 +33,19 @@ const mocks = vi.hoisted(() => ({
   engineStart: vi.fn(),
   engineContinuePlayback: vi.fn(),
   handleUserInterrupt: vi.fn(),
+  // Raised hand: the fake engine's queued slot and its spies
+  queuedText: null as string | null,
+  queueUserInterrupt: vi.fn(),
+  // The engine refuses to queue (waiting on a discussion trigger)
+  queueRefused: false,
+  cancelQueuedInterrupt: vi.fn(),
+  flushQueuedInterrupt: vi.fn(),
+  enginePause: vi.fn(),
+  lectureCompletionPending: false,
+  engineExhausted: false,
+  shouldAutoResume: vi.fn((_args: unknown) => false),
+  lastSendResult: undefined as unknown,
+  chatAreaProps: undefined as Record<string, unknown> | undefined,
 }));
 
 const textElement = {
@@ -234,8 +248,11 @@ vi.mock('@/components/roundtable', async () => {
           {
             type: 'button',
             'data-testid': 'send',
-            onClick: () =>
-              (props.onMessageSend as ((message: string) => void) | undefined)?.('Explain this'),
+            onClick: () => {
+              mocks.lastSendResult = (
+                props.onMessageSend as ((message: string) => unknown) | undefined
+              )?.('Explain this');
+            },
           },
           'send',
         ),
@@ -253,7 +270,10 @@ vi.mock('@/components/roundtable', async () => {
 vi.mock('@/components/chat/chat-area', async () => {
   const React = await import('react');
   return {
-    ChatArea: React.forwardRef(function MockChatArea(_props, ref) {
+    ChatArea: React.forwardRef(function MockChatArea(props, ref) {
+      React.useEffect(() => {
+        mocks.chatAreaProps = props as Record<string, unknown>;
+      });
       React.useImperativeHandle(ref, () => ({
         sendMessage: mocks.sendMessage,
         endActiveSession: vi.fn().mockResolvedValue(undefined),
@@ -284,22 +304,60 @@ vi.mock('@/lib/playback', () => ({
       _actionEngine: unknown,
       _audioPlayer: unknown,
       options: {
-        onModeChange?: (mode: 'idle' | 'playing' | 'paused') => void;
+        onModeChange?: (mode: 'idle' | 'playing' | 'paused' | 'live') => void;
         onUserInterrupt?: (text: string) => void;
         onComplete?: () => void;
+        onDiscussionEnd?: () => void;
       },
     ) {
       mocks.engineOptions = options;
       options.onModeChange?.(mocks.engineMode);
     }
     stop() {
+      mocks.queuedText = null;
       mocks.engineStop();
+    }
+    queueUserInterrupt(text: string) {
+      mocks.queueUserInterrupt(text);
+      if (mocks.engineMode !== 'playing' || mocks.queueRefused || mocks.queuedText !== null) {
+        return false;
+      }
+      mocks.queuedText = text;
+      return true;
+    }
+    hasQueuedInterrupt() {
+      return mocks.queuedText !== null;
+    }
+    cancelQueuedInterrupt() {
+      mocks.cancelQueuedInterrupt();
+      const text = mocks.queuedText;
+      mocks.queuedText = null;
+      return text;
+    }
+    flushQueuedInterrupt() {
+      mocks.flushQueuedInterrupt();
+      const text = mocks.queuedText;
+      if (text === null) return false;
+      this.handleUserInterrupt(text);
+      return true;
+    }
+    hasLectureInterruption() {
+      return mocks.lectureCompletionPending;
+    }
+    hasPendingLectureCompletion() {
+      return mocks.lectureCompletionPending;
+    }
+    handleEndDiscussion() {
+      mocks.engineOptions?.onDiscussionEnd?.();
+    }
+    getCurrentSceneId() {
+      return 'scene-1';
     }
     getMode() {
       return mocks.engineMode;
     }
     isExhausted() {
-      return false;
+      return mocks.engineExhausted;
     }
     canJumpToAction() {
       return false;
@@ -308,6 +366,7 @@ vi.mock('@/lib/playback', () => ({
       return Promise.resolve(false);
     }
     handleUserInterrupt(text: string) {
+      mocks.queuedText = null;
       mocks.handleUserInterrupt(text);
       mocks.engineOptions?.onUserInterrupt?.(text);
     }
@@ -317,12 +376,14 @@ vi.mock('@/lib/playback', () => ({
     continuePlayback() {
       mocks.engineContinuePlayback();
     }
-    pause() {}
+    pause() {
+      mocks.enginePause();
+    }
     confirmDiscussion() {}
     skipDiscussion() {}
   },
   computePlaybackView: () => ({ kind: 'idle', isTopicActive: mocks.topicActive }),
-  shouldAutoResumeLecture: () => false,
+  shouldAutoResumeLecture: (args: unknown) => mocks.shouldAutoResume(args),
 }));
 vi.mock('@/lib/playback/action-navigation', () => ({
   canJumpWithinReconstructablePrefix: () => false,
@@ -373,6 +434,7 @@ vi.mock('@/lib/config/feature-flags', () => ({
   isCoursewareReferenceEnabled: () => mocks.coursewareReferenceEnabled,
 }));
 
+import { toast } from 'sonner';
 import {
   PlaybackChromeRoot,
   type PlaybackChromeRootHandle,
@@ -404,6 +466,18 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.engineStart.mockReset();
     mocks.engineContinuePlayback.mockReset();
     mocks.handleUserInterrupt.mockReset();
+    mocks.queuedText = null;
+    mocks.queueUserInterrupt.mockReset();
+    mocks.queueRefused = false;
+    mocks.cancelQueuedInterrupt.mockReset();
+    mocks.flushQueuedInterrupt.mockReset();
+    mocks.enginePause.mockReset();
+    mocks.lectureCompletionPending = false;
+    mocks.engineExhausted = false;
+    mocks.shouldAutoResume.mockReset();
+    mocks.shouldAutoResume.mockReturnValue(false);
+    mocks.lastSendResult = undefined;
+    mocks.chatAreaProps = undefined;
     stageState.scenes = [scene, secondScene];
     stageState.currentSceneId = scene.id;
     stageState.setCurrentSceneId.mockClear();
@@ -676,7 +750,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     );
   });
 
-  it.each(['playing', 'paused'] as const)(
+  it.each(['paused', 'live'] as const)(
     'freezes the draft through the synchronous %s interrupt bridge and sends exactly once',
     async (mode) => {
       mocks.engineMode = mode;
@@ -1041,5 +1115,283 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe('raised hand while the lecture plays', () => {
+    const textReference = { kind: 'slide_element', sceneId: 'scene-1', elementId: 'text-1' };
+
+    function queuedQuestion() {
+      return mocks.roundtableProps?.queuedQuestion as
+        | { id: number; text: string; status: string }
+        | null
+        | undefined;
+    }
+
+    /** The engine clears its slot, then calls back at the action boundary. */
+    function deliverAtBoundary(text: string) {
+      mocks.queuedText = null;
+      act(() => mocks.engineOptions?.onUserInterrupt?.(text));
+    }
+
+    async function raiseHandWithTextReference() {
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      click('toggle-pick');
+      click('pick-text');
+      click('send');
+    }
+
+    it('queues the question instead of interrupting, then sends the frozen reference on delivery', async () => {
+      await raiseHandWithTextReference();
+
+      expect(mocks.lastSendResult).toBe('queued');
+      expect(mocks.queueUserInterrupt).toHaveBeenCalledExactlyOnceWith('Explain this');
+      expect(mocks.handleUserInterrupt).not.toHaveBeenCalled();
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+      expect(queuedQuestion()).toMatchObject({ text: 'Explain this', status: 'queued' });
+
+      // The draft changes while the hand is up; the question keeps its own reference
+      click('toggle-pick');
+      act(() => (mocks.canvasProps?.onPickElement as (element: unknown) => void)(shapeElement));
+      expect(container.querySelector('[data-testid="owner-pill"]')?.textContent).toContain('Shape');
+
+      deliverAtBoundary('Explain this');
+      expect(mocks.sendMessage).toHaveBeenCalledOnce();
+      expect(mocks.sendMessage).toHaveBeenCalledWith(
+        'Explain this',
+        expect.objectContaining({ elementReference: textReference }),
+      );
+      expect(queuedQuestion()).toMatchObject({ text: 'Explain this', status: 'delivered' });
+    });
+
+    it('cancels: gives the text back and drops the frozen reference', async () => {
+      await raiseHandWithTextReference();
+      const { id } = queuedQuestion()!;
+
+      act(() => (mocks.roundtableProps?.onCancelQueuedQuestion as () => void)());
+      expect(mocks.cancelQueuedInterrupt).toHaveBeenCalledOnce();
+      expect(queuedQuestion()).toEqual({ id, text: 'Explain this', status: 'cancelled' });
+
+      // Anything later is an ordinary interrupt, without the dropped snapshot
+      act(() => mocks.engineOptions?.onUserInterrupt?.('Explain this'));
+      expect(mocks.sendMessage).toHaveBeenCalledExactlyOnceWith('Explain this', undefined);
+    });
+
+    it('pausing with a raised hand delivers it now instead of pausing', async () => {
+      await raiseHandWithTextReference();
+
+      await act(async () => {
+        await (mocks.roundtableProps?.onPlayPause as () => Promise<void>)();
+      });
+      expect(mocks.flushQueuedInterrupt).toHaveBeenCalledOnce();
+      expect(mocks.enginePause).not.toHaveBeenCalled();
+      expect(mocks.handleUserInterrupt).toHaveBeenCalledExactlyOnceWith('Explain this');
+      expect(mocks.sendMessage).toHaveBeenCalledExactlyOnceWith(
+        'Explain this',
+        expect.objectContaining({ elementReference: textReference }),
+      );
+      expect(queuedQuestion()?.status).toBe('delivered');
+
+      // With no raised hand, pause is an ordinary pause again
+      await act(async () => {
+        await (mocks.roundtableProps?.onPlayPause as () => Promise<void>)();
+      });
+      expect(mocks.enginePause).toHaveBeenCalledOnce();
+    });
+
+    it('keeps playing while typing, but pauses for voice and in live Q&A', async () => {
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      const onInputActivate = mocks.roundtableProps?.onInputActivate as (
+        kind: 'text' | 'voice',
+      ) => void;
+
+      act(() => onInputActivate('text'));
+      expect(mocks.enginePause).not.toHaveBeenCalled();
+      act(() => onInputActivate('voice'));
+      expect(mocks.enginePause).toHaveBeenCalledOnce();
+
+      mocks.engineMode = 'live';
+      act(() => onInputActivate('text'));
+      expect(mocks.enginePause).toHaveBeenCalledTimes(2);
+    });
+
+    it('cancels before awaiting a scene switch so it is never answered in the old scene', async () => {
+      await raiseHandWithTextReference();
+
+      act(() => (mocks.roundtableProps?.onNextSlide as () => void)());
+      expect(mocks.cancelQueuedInterrupt).toHaveBeenCalledOnce();
+      expect(queuedQuestion()).toMatchObject({ text: 'Explain this', status: 'cancelled' });
+      expect(stageState.setCurrentSceneId).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(stageState.setCurrentSceneId).toHaveBeenCalledWith(secondScene.id);
+      deliverAtBoundary('Explain this');
+      expect(mocks.sendMessage).toHaveBeenCalledExactlyOnceWith('Explain this', undefined);
+    });
+
+    it('refuses a delivery after the scene changed underneath and gives the text back', async () => {
+      await raiseHandWithTextReference();
+
+      // The store moved on before the scene-init effect could cancel it
+      stageState.currentSceneId = secondScene.id;
+      deliverAtBoundary('Explain this');
+
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+      expect(queuedQuestion()?.status).toBe('cancelled');
+      // Stopped right away (and again by the scene-init effect catching up)
+      expect(mocks.engineStop).toHaveBeenCalled();
+    });
+
+    it('blocks a second question while one is waiting', async () => {
+      await raiseHandWithTextReference();
+      click('send');
+
+      expect(mocks.lastSendResult).toBe('blocked');
+      expect(mocks.queueUserInterrupt).toHaveBeenCalledOnce();
+      expect(mocks.handleUserInterrupt).not.toHaveBeenCalled();
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('surfaces the text of a waiting question when playback is torn down', async () => {
+      const toastInfo = vi.spyOn(toast, 'info');
+      try {
+        mocks.engineMode = 'playing';
+        const ownerRef = createRef<PlaybackChromeRootHandle>();
+        await renderOwner({ ref: ownerRef });
+        click('send');
+
+        await act(async () => {
+          await ownerRef.current?.teardown();
+        });
+        expect(mocks.cancelQueuedInterrupt).toHaveBeenCalledOnce();
+        expect(toastInfo).toHaveBeenCalledWith('roundtable.queuedQuestionNotSent', {
+          description: 'Explain this',
+        });
+        expect(mocks.sendMessage).not.toHaveBeenCalled();
+      } finally {
+        toastInfo.mockRestore();
+      }
+    });
+
+    it('resumes into completion when the question was answered after the last line', async () => {
+      await renderOwner();
+      mocks.lectureCompletionPending = true;
+      mocks.shouldAutoResume.mockReturnValue(true);
+
+      await act(async () => {
+        await (mocks.chatAreaProps?.onStopSession as (payload: unknown) => Promise<void>)({
+          sessionId: 'qa-1',
+          source: 'soft_close_confirmed',
+          endReason: 'user_done',
+        });
+      });
+      expect(mocks.shouldAutoResume).toHaveBeenCalledWith(
+        expect.objectContaining({ hadLectureInterruption: true, lectureCompletionPending: true }),
+      );
+      expect(mocks.engineContinuePlayback).toHaveBeenCalledOnce();
+    });
+
+    it('interrupts right away when the engine will not queue (waiting on a discussion)', async () => {
+      mocks.queueRefused = true;
+      await raiseHandWithTextReference();
+
+      expect(mocks.queueUserInterrupt).toHaveBeenCalledExactlyOnceWith('Explain this');
+      expect(mocks.lastSendResult).toBeUndefined();
+      expect(queuedQuestion()).toBeNull();
+      expect(mocks.handleUserInterrupt).toHaveBeenCalledExactlyOnceWith('Explain this');
+      expect(mocks.sendMessage).toHaveBeenCalledExactlyOnceWith(
+        'Explain this',
+        expect.objectContaining({ elementReference: textReference }),
+      );
+    });
+
+    it.each([
+      ['continues into the completion', true],
+      ['restarts', false],
+    ] as const)(
+      'Play after an exhausted Q&A stopped by hand %s (pending completion: %s)',
+      async (_label, pendingCompletion) => {
+        await renderOwner();
+        mocks.engineExhausted = true;
+        mocks.lectureCompletionPending = pendingCompletion;
+
+        await act(async () => {
+          await (mocks.chatAreaProps?.onStopSession as (payload: unknown) => Promise<void>)({
+            sessionId: 'qa-1',
+            source: 'manual_stop',
+          });
+        });
+        await act(async () => {
+          await (mocks.roundtableProps?.onPlayPause as () => Promise<void>)();
+        });
+
+        if (pendingCompletion) {
+          // A raised hand answered after the last line: Play runs the
+          // completion it preempted (onComplete), never a restart from 0
+          expect(mocks.engineContinuePlayback).toHaveBeenCalledOnce();
+          expect(mocks.engineStart).not.toHaveBeenCalled();
+        } else {
+          expect(mocks.engineStart).toHaveBeenCalledOnce();
+          expect(mocks.engineContinuePlayback).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    describe('scene auto-advance while the student is composing', () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+        settingsState.autoPlayLecture = true;
+        mocks.engineExhausted = true;
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      async function completeWhileComposing() {
+        await renderOwner();
+        setComposing(true);
+        act(() => mocks.engineOptions?.onComplete?.());
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1500);
+        });
+      }
+
+      function setComposing(active: boolean) {
+        act(() =>
+          (mocks.roundtableProps?.onPresentationInteractionChange as (active: boolean) => void)(
+            active,
+          ),
+        );
+      }
+
+      it('holds the advance until the input closes', async () => {
+        await completeWhileComposing();
+        expect(stageState.setCurrentSceneId).not.toHaveBeenCalled();
+
+        setComposing(false);
+        expect(stageState.setCurrentSceneId).toHaveBeenCalledExactlyOnceWith(secondScene.id);
+      });
+
+      it('drops the held advance when the student asks a question instead', async () => {
+        await completeWhileComposing();
+        click('send');
+        expect(mocks.sendMessage).toHaveBeenCalledOnce();
+
+        setComposing(false);
+        expect(stageState.setCurrentSceneId).not.toHaveBeenCalled();
+      });
+
+      it('drops the held advance when playback moved on meanwhile', async () => {
+        await completeWhileComposing();
+        mocks.engineExhausted = false;
+
+        setComposing(false);
+        expect(stageState.setCurrentSceneId).not.toHaveBeenCalled();
+      });
+    });
   });
 });

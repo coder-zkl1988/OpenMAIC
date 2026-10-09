@@ -830,7 +830,11 @@
     "voiceInputDisabled": "Entrada de voz deshabilitada",
     "textInput": "Entrada de texto",
     "stopRecording": "Detener grabación",
-    "startRecording": "Iniciar grabación"
+    "startRecording": "Iniciar grabación",
+    "handRaisedQueued": "Mano levantada: el docente te responderá al terminar esta frase",
+    "handRaisedDelivered": "Tu pregunta se envió",
+    "cancelQueuedQuestion": "Cancelar",
+    "queuedQuestionNotSent": "Tu pregunta con la mano levantada no se envió"
   },
   "pbl": {
     "emptyProject": "El proyecto de ABP aún no se ha generado. Créalo desde la generación de cursos.",

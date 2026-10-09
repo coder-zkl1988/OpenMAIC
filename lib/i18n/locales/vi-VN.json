@@ -830,7 +830,11 @@
     "voiceInputDisabled": "Đã tắt nhập bằng giọng nói",
     "textInput": "Nhập bằng chữ",
     "stopRecording": "Dừng ghi âm",
-    "startRecording": "Bắt đầu ghi âm"
+    "startRecording": "Bắt đầu ghi âm",
+    "handRaisedQueued": "Đã giơ tay · Giảng viên sẽ trả lời sau câu này",
+    "handRaisedDelivered": "Đã gửi câu hỏi của bạn",
+    "cancelQueuedQuestion": "Rút lại",
+    "queuedQuestionNotSent": "Câu hỏi giơ tay chưa được gửi"
   },
   "pbl": {
     "emptyProject": "Chưa tạo dự án nào. Hãy tạo trong lúc soạn bài học.",

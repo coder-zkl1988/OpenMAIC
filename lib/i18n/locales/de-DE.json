@@ -830,7 +830,11 @@
     "voiceInputDisabled": "Spracheingabe deaktiviert",
     "textInput": "Texteingabe",
     "stopRecording": "Aufnahme beenden",
-    "startRecording": "Aufnahme starten"
+    "startRecording": "Aufnahme starten",
+    "handRaisedQueued": "Hand gehoben – die Lehrkraft antwortet nach diesem Satz",
+    "handRaisedDelivered": "Deine Frage wurde gesendet",
+    "cancelQueuedQuestion": "Zurückziehen",
+    "queuedQuestionNotSent": "Deine Frage mit gehobener Hand wurde nicht gesendet"
   },
   "pbl": {
     "emptyProject": "Das PBL-Projekt wurde noch nicht generiert. Erstelle es über die Kursgenerierung.",

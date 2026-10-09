@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useId } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Mic,
@@ -17,6 +17,7 @@ import {
   Volume2,
   Quote,
   X,
+  Hand,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AudioIndicatorState } from './audio-indicator';
@@ -43,6 +44,24 @@ export interface DiscussionRequest {
   agentId?: string; // Agent ID to initiate discussion (default: 'default-1')
 }
 
+/**
+ * A question sent mid-line that waits for the teacher to finish ("raised
+ * hand"). The owner moves it from queued to delivered or cancelled; a
+ * cancelled question's text goes back into the input.
+ */
+export interface QueuedQuestionState {
+  id: number;
+  text: string;
+  status: 'queued' | 'delivered' | 'cancelled';
+}
+
+/**
+ * Outcome of onMessageSend: 'queued' — the question waits for the current line
+ * (its bubble shows on delivery); 'blocked' — a question is already waiting, so
+ * the text stays in the input; otherwise it was sent.
+ */
+export type MessageSendResult = 'queued' | 'blocked' | void;
+
 interface RoundtableProps {
   readonly mode?: 'playback' | 'autonomous';
   readonly initialParticipants?: Participant[];
@@ -68,12 +87,13 @@ interface RoundtableProps {
   readonly softCloseDeadline?: number;
   readonly isTopicPending?: boolean;
   readonly canSendMessage?: () => boolean;
-  readonly onMessageSend?: (message: string) => void;
+  readonly onMessageSend?: (message: string) => MessageSendResult;
   readonly onDiscussionStart?: (request: DiscussionAction) => void;
   readonly onDiscussionSkip?: () => void;
   readonly onStopDiscussion?: () => void;
   readonly onContinueDiscussion?: () => void;
-  readonly onInputActivate?: () => void;
+  /** Which input opened: voice must pause narration (the mic would record it); text need not. */
+  readonly onInputActivate?: (kind: 'text' | 'voice') => void;
   readonly onUserInputActivity?: (
     kind: 'text_input' | 'composition_start' | 'recording_start',
   ) => void;
@@ -113,6 +133,8 @@ interface RoundtableProps {
     displaySummary: string;
   };
   readonly onClearElementReference?: () => void;
+  readonly queuedQuestion?: QueuedQuestionState | null;
+  readonly onCancelQueuedQuestion?: () => void;
 }
 
 // This must stay in sync with the non-presentation textarea's max-h-[100px] class.
@@ -210,6 +232,8 @@ export function Roundtable({
   onToggleElementPick,
   elementReferencePill,
   onClearElementReference,
+  queuedQuestion,
+  onCancelQueuedQuestion,
 }: RoundtableProps) {
   const { t } = useI18n();
   const ttsMuted = useSettingsStore((s) => s.ttsMuted);
@@ -373,6 +397,48 @@ export function Roundtable({
     prevStreamingRef.current = !!isStreaming;
   }, [isStreaming, isSendCooldown]);
 
+  // The raised-hand pill unmounts once its question goes out; focus on its
+  // Cancel would then fall to <body>. React detaches refs before removing
+  // nodes, so the detach still sees focus inside the pill.
+  const queuedQuestionStatusRef = useRef<HTMLSpanElement>(null);
+  const queuedQuestionPillNodeRef = useRef<HTMLDivElement | null>(null);
+  const queuedQuestionPillHadFocusRef = useRef(false);
+  const queuedQuestionPillRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) {
+      queuedQuestionPillHadFocusRef.current = !!queuedQuestionPillNodeRef.current?.contains(
+        document.activeElement,
+      );
+    }
+    queuedQuestionPillNodeRef.current = node;
+  }, []);
+
+  // Raised-hand outcome (owner-driven): a delivered question shows its bubble
+  // now; a cancelled one goes back into the input so nothing typed is lost.
+  // Keyed by id + status so each transition runs once (not replayed on mount).
+  const handledQueuedQuestionRef = useRef(
+    queuedQuestion ? `${queuedQuestion.id}:${queuedQuestion.status}` : null,
+  );
+  useEffect(() => {
+    if (!queuedQuestion) return;
+    const key = `${queuedQuestion.id}:${queuedQuestion.status}`;
+    if (handledQueuedQuestionRef.current === key) return;
+    handledQueuedQuestionRef.current = key;
+    const pillHadFocus = queuedQuestionPillHadFocusRef.current;
+    queuedQuestionPillHadFocusRef.current = false;
+    if (queuedQuestion.status === 'delivered') {
+      showLocalUserMessage(queuedQuestion.text);
+      // Keep a keyboard/screen-reader user's place: the status now announces
+      // the delivery (a cancelled question refocuses the reopened input)
+      if (pillHadFocus) queuedQuestionStatusRef.current?.focus();
+    } else if (queuedQuestion.status === 'cancelled') {
+      setIsSendCooldown(false);
+      isSendCooldownRef.current = false;
+      setInputValue(queuedQuestion.text);
+      setIsVoiceOpen(false);
+      setIsInputOpen(true);
+    }
+  }, [queuedQuestion, showLocalUserMessage]);
+
   // Separate participants by role (teacherParticipant & studentParticipants declared earlier for effect)
   const userParticipant = initialParticipants.find((p) => p.role === 'user');
 
@@ -400,8 +466,16 @@ export function Roundtable({
           setIsVoiceOpen(false);
           return;
         }
-        showLocalUserMessage(text);
-        onMessageSend?.(text);
+        const result = onMessageSend?.(text);
+        if (result === 'blocked') {
+          // Another question is already waiting — keep this one editable
+          setInputValue(text);
+          setIsInputOpen(true);
+          setIsVoiceOpen(false);
+          return;
+        }
+        // A queued question shows its bubble once it is delivered
+        if (result !== 'queued') showLocalUserMessage(text);
         setIsSendCooldown(true);
         isSendCooldownRef.current = true;
         setIsVoiceOpen(false);
@@ -415,8 +489,12 @@ export function Roundtable({
   const handleSendMessage = () => {
     if (!inputValue.trim() || isSendCooldown || canSendMessage?.() === false) return;
 
-    showLocalUserMessage(inputValue);
-    onMessageSend?.(inputValue);
+    const result = onMessageSend?.(inputValue);
+    // Another question is already waiting — keep this one in the input
+    if (result === 'blocked') return;
+    // A queued question shows its bubble once it is delivered (the teacher's
+    // current line stays visible meanwhile)
+    if (result !== 'queued') showLocalUserMessage(inputValue);
     setIsSendCooldown(true);
     isSendCooldownRef.current = true;
     setInputValue('');
@@ -426,7 +504,7 @@ export function Roundtable({
   const handleToggleInput = () => {
     if (isSendCooldown) return;
     if (!isInputOpen) {
-      onInputActivate?.();
+      onInputActivate?.('text');
     }
     setIsInputOpen(!isInputOpen);
     // Cancel any in-flight ASR to prevent ghost auto-sends
@@ -444,7 +522,7 @@ export function Roundtable({
       setIsVoiceOpen(false);
     } else {
       if (isSendCooldown || isProcessing) return;
-      onInputActivate?.();
+      onInputActivate?.('voice');
       onUserInputActivity?.('recording_start');
       setIsVoiceOpen(true);
       setIsInputOpen(false);
@@ -744,10 +822,73 @@ export function Roundtable({
       </button>
     </div>
   ) : null;
+  // Raised hand: a sent question waiting for the teacher to finish the line
+  const queuedStatusId = useId();
+  const isQuestionQueued = queuedQuestion?.status === 'queued';
+  // Always mounted: a live region that appears together with its text is
+  // often not announced. Also where focus lands if the pill unmounts under it.
+  const queuedQuestionLiveRegion = (
+    <span
+      ref={queuedQuestionStatusRef}
+      role="status"
+      aria-live="polite"
+      tabIndex={-1}
+      className="sr-only"
+    >
+      {isQuestionQueued
+        ? t('roundtable.handRaisedQueued')
+        : queuedQuestion?.status === 'delivered'
+          ? t('roundtable.handRaisedDelivered')
+          : ''}
+    </span>
+  );
+  // The pill never outgrows its container and only the texts truncate — the
+  // question gets what the status label leaves — so Cancel stays visible
+  // however long the translated label is.
+  const queuedQuestionIndicator = isQuestionQueued ? (
+    <div
+      ref={queuedQuestionPillRef}
+      data-testid="roundtable-queued-question"
+      className="pointer-events-auto flex max-w-[min(520px,calc(100vw-3rem),100%)] items-center gap-2 rounded-full border border-amber-300 bg-white/95 px-3 py-1.5 text-xs shadow-lg backdrop-blur dark:border-amber-600 dark:bg-gray-900/95"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <Hand
+        aria-hidden="true"
+        className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+      />
+      <span
+        id={queuedStatusId}
+        className="min-w-0 truncate font-semibold text-amber-700 dark:text-amber-300"
+        title={t('roundtable.handRaisedQueued')}
+      >
+        {t('roundtable.handRaisedQueued')}
+      </span>
+      <span
+        className="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300"
+        title={queuedQuestion.text}
+      >
+        {queuedQuestion.text}
+      </span>
+      <button
+        type="button"
+        aria-describedby={queuedStatusId}
+        onClick={onCancelQueuedQuestion}
+        onKeyDown={(event) => {
+          // Keep Space/Enter on this button: the window shortcut treats Space
+          // as play/pause, which would deliver the question instead
+          if (event.key === ' ' || event.key === 'Enter') event.stopPropagation();
+        }}
+        className="-mr-1 shrink-0 rounded-full px-2 py-0.5 font-semibold text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/30"
+      >
+        {t('roundtable.cancelQueuedQuestion')}
+      </button>
+    </div>
+  ) : null;
 
   if (isPresenting) {
     return (
       <div className="h-0 w-full relative z-10 overflow-visible">
+        {queuedQuestionLiveRegion}
         {/* Speech overlay — fills the full stage area via absolute positioning */}
         <PresentationSpeechOverlay
           playbackView={enrichedPlaybackView}
@@ -820,6 +961,7 @@ export function Roundtable({
           style={{ right: chatCollapsed === false ? (chatAreaWidth ?? 320) : 0 }}
         >
           {referencePill}
+          {queuedQuestionIndicator}
           {/* Input panel */}
           <AnimatePresence>
             {isInputOpen && (
@@ -1156,6 +1298,7 @@ export function Roundtable({
           : 'border-t border-gray-100 dark:border-gray-800 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md',
       )}
     >
+      {queuedQuestionLiveRegion}
       {/* ── Toolbar strip — merged from CanvasArea ── */}
       <div
         className={cn(
@@ -1334,6 +1477,12 @@ export function Roundtable({
           >
             {elementReferencePill && (
               <div className="absolute left-1/2 top-2 z-30 -translate-x-1/2">{referencePill}</div>
+            )}
+            {/* Raised hand — in the input panel's slot (the input is closed while it waits) */}
+            {queuedQuestionIndicator && (
+              <div className="pointer-events-none absolute inset-x-6 bottom-4 z-20 flex justify-end">
+                {queuedQuestionIndicator}
+              </div>
             )}
             {/* Text input box */}
             <AnimatePresence>

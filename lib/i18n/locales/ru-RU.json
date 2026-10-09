@@ -830,7 +830,11 @@
     "voiceInputDisabled": "Голосовой ввод отключён",
     "textInput": "Текстовый ввод",
     "stopRecording": "Остановить запись",
-    "startRecording": "Начать запись"
+    "startRecording": "Начать запись",
+    "handRaisedQueued": "Рука поднята — учитель ответит после этой фразы",
+    "handRaisedDelivered": "Ваш вопрос отправлен",
+    "cancelQueuedQuestion": "Отменить",
+    "queuedQuestionNotSent": "Вопрос с поднятой рукой не отправлен"
   },
   "pbl": {
     "emptyProject": "PBL-проект ещё не создан. Создайте его через генерацию курса.",

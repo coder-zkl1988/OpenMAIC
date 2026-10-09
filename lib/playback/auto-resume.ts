@@ -24,6 +24,12 @@ export interface AutoResumeArgs {
   engineMode: EngineMode;
   /** Whether the course has no more content to play. */
   isExhausted: boolean;
+  /**
+   * Whether the interrupted lecture played its last action before the Q&A
+   * (a raised hand answered at the final boundary): resuming then only runs
+   * the completion, so exhaustion must not block it.
+   */
+  lectureCompletionPending?: boolean;
   /** Whether playback already reached completion. */
   playbackCompleted: boolean;
 }
@@ -32,13 +38,14 @@ export interface AutoResumeArgs {
  * Decide whether an ended Q&A/discussion should auto-resume the lecture it
  * interrupted. Pure and conservative: it only returns true for the narrow
  * "completed soft close after a satisfied/back-to-lesson Q&A" case, and
- * requires the engine to be idle with content still remaining.
+ * requires the engine to be idle with content still remaining (or with only
+ * the completion of a lecture whose last line already played).
  */
 export function shouldAutoResumeLecture(args: AutoResumeArgs): boolean {
   if (args.source !== 'soft_close_confirmed' && args.source !== 'soft_close_timeout') return false;
   if (!args.hadLectureInterruption) return false;
   if (args.endReason !== 'user_done' && args.endReason !== 'back_to_lesson') return false;
   if (args.engineMode !== 'idle') return false;
-  if (args.isExhausted || args.playbackCompleted) return false;
+  if ((args.isExhausted && !args.lectureCompletionPending) || args.playbackCompleted) return false;
   return true;
 }

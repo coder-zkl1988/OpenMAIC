@@ -21,7 +21,11 @@ import { useI18n } from '@/lib/hooks/use-i18n';
 import { SceneSidebar } from '@/components/stage/scene-sidebar';
 import { Header } from '@/components/header';
 import { CanvasArea } from '@/components/canvas/canvas-area';
-import { Roundtable } from '@/components/roundtable';
+import {
+  Roundtable,
+  type MessageSendResult,
+  type QueuedQuestionState,
+} from '@/components/roundtable';
 import { PlaybackEngine, computePlaybackView, shouldAutoResumeLecture } from '@/lib/playback';
 import type { EngineMode, TriggerEvent, Effect } from '@/lib/playback';
 import {
@@ -172,6 +176,15 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const pendingInterruptElementReferenceRef = useRef<ElementReferenceSendSnapshot | undefined>(
       undefined,
     );
+    // Raised hand: a question sent mid-line waits in the engine until the
+    // current action finishes; the owner keeps what is sent with it.
+    const queuedQuestionRef = useRef<{
+      id: number;
+      text: string;
+      elementReference?: ElementReferenceSendSnapshot;
+    } | null>(null);
+    const queuedQuestionIdRef = useRef(0);
+    const [queuedQuestion, setQueuedQuestion] = useState<QueuedQuestionState | null>(null);
     const interactivePickHandlerRef = useRef<(pick: PlaybackInteractiveComponentPick) => boolean>(
       () => false,
     );
@@ -237,6 +250,11 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const [isPresenting, setIsPresenting] = useState(false);
     const [controlsVisible, setControlsVisible] = useState(true);
     const [isPresentationInteractionActive, setIsPresentationInteractionActive] = useState(false);
+    // Roundtable reports its text/voice input as open in every layout
+    const studentComposingRef = useRef(false);
+    useEffect(() => {
+      studentComposingRef.current = isPresentationInteractionActive;
+    }, [isPresentationInteractionActive]);
 
     // Whiteboard state (from canvas store so AI tools can open it)
     const whiteboardOpen = useCanvasStore.use.whiteboardOpen();
@@ -311,6 +329,22 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const stageRef = useRef<HTMLDivElement>(null);
     // Guard to prevent double flash when manual stop triggers onDiscussionEnd
     const manualStopRef = useRef(false);
+    // Auto-play's scene advance, held while the student composes (typing no
+    // longer pauses the lecture, so it can complete under an open input)
+    const heldAutoAdvanceRef = useRef<{ engine: PlaybackEngine; advance: () => void } | null>(null);
+    // Run a held advance once the input closes — unless the student asked a
+    // question instead (that Q&A now owns the slide) or playback moved on.
+    useEffect(() => {
+      if (isPresentationInteractionActive) return;
+      const held = heldAutoAdvanceRef.current;
+      heldAutoAdvanceRef.current = null;
+      if (!held || chatSessionType) return;
+      const { engine, advance } = held;
+      if (engineRef.current !== engine || engine.getMode() !== 'idle' || !engine.isExhausted()) {
+        return;
+      }
+      advance();
+    }, [chatSessionType, isPresentationInteractionActive]);
 
     const sendMessageWithElementReference = useCallback(
       (text: string, snapshot?: ElementReferenceSendSnapshot) => {
@@ -337,6 +371,59 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         );
       },
       [setDraftElementReference],
+    );
+
+    /** UI side effects of a question going out, immediately or from a raised hand. */
+    const markQuestionSent = useCallback(() => {
+      // Auto-switch to chat tab when user sends a message
+      chatAreaRef.current?.switchToTab('chat');
+      setIsCueUser(false);
+      // Immediately mark streaming for synchronized stop button
+      setChatIsStreaming(true);
+      setChatSessionType((prev) => prev || 'qa');
+      // Optimistic thinking: show thinking dots immediately so there's
+      // no blank gap between userMessage expiry and the SSE thinking event.
+      // The real SSE event will overwrite this with the same or updated value.
+      setThinkingState({ stage: 'director' });
+    }, []);
+
+    /**
+     * Drop a raised hand (user cancel, navigation, teardown). Roundtable puts
+     * its text back into the input; returns the dropped text.
+     */
+    const cancelQueuedQuestion = useCallback((): string | null => {
+      const queued = queuedQuestionRef.current;
+      if (!queued) return null;
+      queuedQuestionRef.current = null;
+      engineRef.current?.cancelQueuedInterrupt();
+      setQueuedQuestion({ id: queued.id, text: queued.text, status: 'cancelled' });
+      return queued.text;
+    }, []);
+
+    /**
+     * While the lecture plays, a question raises a hand: the engine holds it
+     * until the current action finishes, and the element reference frozen now
+     * travels with it. Returns undefined when it must be sent right away.
+     */
+    const raiseHand = useCallback(
+      (text: string, elementReference?: ElementReferenceSendSnapshot): MessageSendResult => {
+        const engine = engineRef.current;
+        if (queuedQuestionRef.current) {
+          // One raised hand at a time (Roundtable's send cooldown normally
+          // keeps a second send from getting here)
+          if (engine?.hasQueuedInterrupt()) return 'blocked';
+          // Stale: the engine already dropped it (unreachable while every
+          // engine-side drop goes through an owner cancel) — release it so it
+          // can't block every later send
+          cancelQueuedQuestion();
+        }
+        if (!engine?.queueUserInterrupt(text)) return undefined;
+        const id = ++queuedQuestionIdRef.current;
+        queuedQuestionRef.current = { id, text, elementReference };
+        setQueuedQuestion({ id, text, status: 'queued' });
+        return 'queued';
+      },
+      [cancelQueuedQuestion],
     );
 
     const updateCurrentPlaybackActionIndex = useCallback((actionIndex: number | null) => {
@@ -533,6 +620,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           hadLectureInterruption,
           engineMode: engine.getMode(),
           isExhausted: engine.isExhausted(),
+          lectureCompletionPending: engine.hasPendingLectureCompletion(),
           playbackCompleted,
         });
         if (!eligible) return;
@@ -572,6 +660,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       ref,
       () => ({
         teardown: async () => {
+          // Leaving playback unmounts the input, so surface a waiting raised
+          // hand's text instead of silently dropping it.
+          const droppedQuestion = cancelQueuedQuestion();
+          if (droppedQuestion) {
+            toast.info(t('roundtable.queuedQuestionNotSent'), { description: droppedQuestion });
+          }
           await chatAreaRef.current?.endActiveSession();
           if (discussionAbortRef.current) {
             discussionAbortRef.current.abort();
@@ -584,7 +678,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         acceptInteractivePick: (pick) => interactivePickHandlerRef.current(pick),
         cancelElementPick: () => setElementPickActive(false),
       }),
-      [discussionTTS, resetSceneState, setElementPickActive],
+      [cancelQueuedQuestion, discussionTTS, resetSceneState, setElementPickActive, t],
     );
 
     const clearPresentationIdleTimer = useCallback(() => {
@@ -687,6 +781,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     useEffect(() => {
       let cancelled = false;
       const initializeScene = async () => {
+        // A raised hand belongs to the scene it was asked in: give its text
+        // back rather than answer it elsewhere (catch-all for scene changes
+        // that bypass the gated switch).
+        cancelQueuedQuestion();
         const previousEngine = engineRef.current;
         engineRef.current = null;
         previousEngine?.stop();
@@ -882,12 +980,42 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               setTimeout(() => setShowEndFlash(false), 1800);
             }
             // If all actions are exhausted (discussion was the last action), mark
-            // playback as completed so the bubble shows reset instead of play.
-            if (engineRef.current?.isExhausted()) {
+            // playback as completed so the bubble shows reset instead of play —
+            // unless a raised hand preempted the completion after the last line:
+            // Play then continues into it (onComplete) instead of restarting.
+            if (
+              engineRef.current?.isExhausted() &&
+              !engineRef.current.hasPendingLectureCompletion()
+            ) {
               setPlaybackCompleted(true);
             }
           },
           onUserInterrupt: (text) => {
+            const queued = queuedQuestionRef.current;
+            if (queued) {
+              queuedQuestionRef.current = null;
+              const isRaisedHand = text === queued.text;
+              if (
+                isRaisedHand &&
+                engineRef.current === engine &&
+                useStageStore.getState().currentSceneId === currentScene.id
+              ) {
+                // The raised hand reached its boundary (or pause flushed it):
+                // send it with the element reference frozen when it was asked
+                setQueuedQuestion({ id: queued.id, text: queued.text, status: 'delivered' });
+                void sendMessageWithElementReference(text, queued.elementReference);
+                markQuestionSent();
+                return;
+              }
+              // Never answer it in another scene, nor drop it silently for a
+              // different message: give its text back instead
+              setQueuedQuestion({ id: queued.id, text: queued.text, status: 'cancelled' });
+              if (isRaisedHand) {
+                // The scene changed before the scene-init effect cancelled it
+                engine.stop();
+                return;
+              }
+            }
             // User interrupted → start a discussion via chat
             const snapshot = pendingInterruptElementReferenceRef.current;
             pendingInterruptElementReferenceRef.current = undefined;
@@ -914,7 +1042,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             // Auto-play: advance to next scene after a short pause
             const { autoPlayLecture } = useSettingsStore.getState();
             if (autoPlayLecture) {
-              setTimeout(() => {
+              const advance = () => {
                 const stageState = useStageStore.getState();
                 if (!useSettingsStore.getState().autoPlayLecture) return;
                 const allScenes = stageState.scenes;
@@ -947,6 +1075,16 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   autoStartRef.current = true;
                   stageState.setCurrentSceneId(PENDING_SCENE_ID);
                 }
+              };
+              setTimeout(() => {
+                // Typing no longer pauses the lecture: don't move the slide out
+                // from under a question the student is still composing — hold
+                // the advance until the input closes
+                if (studentComposingRef.current) {
+                  heldAutoAdvanceRef.current = { engine, advance };
+                  return;
+                }
+                advance();
               }, 1500);
             }
           },
@@ -1128,17 +1266,21 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           setPendingSceneId(targetSceneId);
           return false;
         }
+        // Before awaiting: a boundary during the await must not answer the
+        // raised hand in the scene being left
+        cancelQueuedQuestion();
         await chatAreaRef.current?.endActiveSession({ source: 'scene_switch' });
         if (requestId !== sceneSwitchRequestRef.current) return false;
         setCurrentSceneId(targetSceneId);
         return true;
       },
-      [currentSceneId, isTopicActive, setCurrentSceneId],
+      [cancelQueuedQuestion, currentSceneId, isTopicActive, setCurrentSceneId],
     );
 
     /** User confirmed scene switch via AlertDialog */
     const confirmSceneSwitch = useCallback(async () => {
       if (!pendingSceneId) return;
+      cancelQueuedQuestion();
       const targetSceneId = pendingSceneId;
       const requestId = ++sceneSwitchRequestRef.current;
       sceneSwitchConfirmingRef.current = true;
@@ -1151,7 +1293,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       } finally {
         sceneSwitchConfirmingRef.current = false;
       }
-    }, [pendingSceneId, setCurrentSceneId, doSessionCleanup]);
+    }, [cancelQueuedQuestion, pendingSceneId, setCurrentSceneId, doSessionCleanup]);
 
     /** User cancelled scene switch via AlertDialog */
     const cancelSceneSwitch = useCallback(() => {
@@ -1165,6 +1307,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       if (!engine) return;
 
       const mode = engine.getMode();
+      // Pausing with a raised hand means "answer me now": the question goes out
+      // immediately (the cut line replays when the lecture resumes).
+      if (mode === 'playing' && engine.flushQueuedInterrupt()) return;
       if (mode === 'playing' || mode === 'live') {
         saveSceneResumePosition(currentScene?.id, currentPlaybackActionIndexRef.current);
         engine.pause();
@@ -1510,6 +1655,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         const engine = engineRef.current;
         if (!engine || sceneId !== currentSceneId || !currentScene) return;
         const autoplay = engine.getMode() === 'playing';
+        // A jump drops a raised hand (the engine clears it): give its text back
+        if (engine.canJumpToAction(actionIndex)) cancelQueuedQuestion();
         const jumped = await engine.jumpToAction(actionIndex, { autoplay });
         if (!jumped) return;
         setPlaybackCompleted(false);
@@ -1519,7 +1666,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           setLectureSpeech(action.text);
         }
       },
-      [currentScene, currentSceneId, updateCurrentPlaybackActionIndex],
+      [cancelQueuedQuestion, currentScene, currentSceneId, updateCurrentPlaybackActionIndex],
     );
 
     // whiteboard toggle
@@ -1829,7 +1976,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 softCloseDeadline={softCloseDeadline}
                 isTopicPending={isTopicPending}
                 canSendMessage={canSendReferencedMessage}
-                onMessageSend={async (msg) => {
+                onMessageSend={(msg) => {
                   const draft = showElementReference ? draftElementReferenceRef.current : null;
                   const elementReferenceSnapshot: ElementReferenceSendSnapshot | undefined = draft
                     ? {
@@ -1837,6 +1984,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                         selectionVersion: draft.selectionVersion,
                       }
                     : undefined;
+                  // While the lecture plays, the question raises a hand: the
+                  // teacher finishes the current line, then answers it.
+                  const raised = raiseHand(msg, elementReferenceSnapshot);
+                  if (raised) return raised;
                   // Always clear Level-1 pause state — the closure may hold a stale
                   // isDiscussionPaused value (e.g. voice input's onTranscription callback
                   // captures onMessageSend before React re-renders with the updated state).
@@ -1874,16 +2025,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   } else {
                     void sendMessageWithElementReference(msg, elementReferenceSnapshot);
                   }
-                  // Auto-switch to chat tab when user sends a message
-                  chatAreaRef.current?.switchToTab('chat');
-                  setIsCueUser(false);
-                  // Immediately mark streaming for synchronized stop button
-                  setChatIsStreaming(true);
-                  setChatSessionType(chatSessionType || 'qa');
-                  // Optimistic thinking: show thinking dots immediately so there's
-                  // no blank gap between userMessage expiry and the SSE thinking event.
-                  // The real SSE event will overwrite this with the same or updated value.
-                  setThinkingState({ stage: 'director' });
+                  markQuestionSent();
                 }}
                 onDiscussionStart={() => {
                   // User clicks "Join" on ProactiveCard
@@ -1898,7 +2040,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 onUserInputActivity={() => {
                   handleContinueDiscussion();
                 }}
-                onInputActivate={() => {
+                onInputActivate={(kind) => {
                   // Level-1 pause: freeze buffer tick + TTS audio while SSE keeps buffering.
                   // User resumes manually via Space / pause button after closing the input.
                   // No isDiscussionPaused guard — always attempt to pause the buffer.
@@ -1910,9 +2052,13 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                       setIsDiscussionPaused(true);
                     }
                   }
-                  // Also pause playback engine
-                  if (engineRef.current && (engineMode === 'playing' || engineMode === 'live')) {
-                    engineRef.current.pause();
+                  // Also pause playback engine — except typing during the lecture:
+                  // a text question raises a hand and waits for the line, while
+                  // voice must pause so the microphone doesn't record the teacher.
+                  const engine = engineRef.current;
+                  const mode = engine?.getMode();
+                  if (engine && (mode === 'live' || (mode === 'playing' && kind === 'voice'))) {
+                    engine.pause();
                   }
                 }}
                 onResumeTopic={doResumeTopic}
@@ -1969,6 +2115,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                     : undefined
                 }
                 onClearElementReference={() => setDraftElementReference(null)}
+                queuedQuestion={queuedQuestion}
+                onCancelQueuedQuestion={cancelQueuedQuestion}
               />
             </div>
           )}

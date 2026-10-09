@@ -830,7 +830,11 @@
     "voiceInputDisabled": "音声入力無効",
     "textInput": "テキスト入力",
     "stopRecording": "録音を停止",
-    "startRecording": "録音を開始"
+    "startRecording": "録音を開始",
+    "handRaisedQueued": "挙手しました · この一文が終わったら先生が答えます",
+    "handRaisedDelivered": "質問を送信しました",
+    "cancelQueuedQuestion": "取り消す",
+    "queuedQuestionNotSent": "挙手した質問は送信されませんでした"
   },
   "pbl": {
     "emptyProject": "PBLプロジェクトがまだ生成されていません。コース生成から作成してください。",

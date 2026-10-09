@@ -815,7 +815,11 @@
     "voiceInputDisabled": "語音輸入已停用",
     "textInput": "文字輸入",
     "stopRecording": "停止錄音",
-    "startRecording": "開始錄音"
+    "startRecording": "開始錄音",
+    "handRaisedQueued": "已舉手 · 老師講完這句就回答你",
+    "handRaisedDelivered": "你的問題已送出",
+    "cancelQueuedQuestion": "撤回",
+    "queuedQuestionNotSent": "舉手提問未送出"
   },
   "pbl": {
     "emptyProject": "PBL專案尚未生成，請透過課程生成建立",
