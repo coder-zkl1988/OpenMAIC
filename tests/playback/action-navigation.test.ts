@@ -13,6 +13,7 @@ import {
   createActionResumePosition,
   getActionResumeRestoreCursor,
   getValidActionResumePosition,
+  isActionBoundaryResumePositionAt,
   readActionResumeState,
   saveActionResumePosition,
 } from '@/lib/playback/action-resume';
@@ -223,6 +224,104 @@ describe('action resume storage', () => {
       actionIndex: 3,
       actionId: 'speech-2',
       actionType: 'speech',
+    });
+  });
+
+  describe('raised-hand boundaries', () => {
+    const spotlight = { id: 'spot', type: 'spotlight', elementId: 'box' } as Action;
+    const discussion = { id: 'disc', type: 'discussion', topic: 'Why?' } as Action;
+
+    it('makes any action a resume position when a raised hand was answered before it', () => {
+      const actions = [speech('a'), spotlight, speech('b')];
+      expect(createActionResumePosition(actions, 1)).toBeNull();
+      expect(createActionResumePosition(actions, 1, { atBoundary: true })).toEqual({
+        actionIndex: 1,
+        actionId: 'spot',
+        actionType: 'spotlight',
+        atBoundary: true,
+      });
+      // A speech line is a plain position either way
+      expect(createActionResumePosition(actions, 2, { atBoundary: true })).toEqual({
+        actionIndex: 2,
+        actionId: 'b',
+        actionType: 'speech',
+      });
+    });
+
+    it.each([
+      ['a spotlight', [speech('a'), spotlight, speech('b')]],
+      ['a discussion', [speech('a'), discussion]],
+    ])('restores a boundary at %s when the prefix can be rebuilt', (_label, actions) => {
+      const storage = createMemoryStorage();
+      const position = createActionResumePosition(actions, 1, { atBoundary: true })!;
+      saveActionResumePosition(storage, 'key', 'scene-1', position);
+
+      expect(
+        getActionResumeRestoreCursor(readActionResumeState(storage, 'key'), 'scene-1', actions),
+      ).toEqual({ actionIndex: 1, position });
+    });
+
+    it.each([
+      ['a video', { id: 'video', type: 'play_video', elementId: 'v' } as Action],
+      ['a widget', { id: 'widget', type: 'widget_setState', state: {} } as Action],
+    ])('drops a boundary behind %s', (_label, unsafe) => {
+      const storage = createMemoryStorage();
+      const actions = [speech('a'), unsafe, spotlight, speech('b')];
+      saveActionResumePosition(
+        storage,
+        'key',
+        'scene-1',
+        createActionResumePosition(actions, 2, { atBoundary: true })!,
+      );
+
+      expect(
+        getActionResumeRestoreCursor(readActionResumeState(storage, 'key'), 'scene-1', actions),
+      ).toEqual({ actionIndex: 0, position: null });
+    });
+
+    it('drops a boundary whose action changed', () => {
+      const storage = createMemoryStorage();
+      const actions = [speech('a'), spotlight, speech('b')];
+      saveActionResumePosition(
+        storage,
+        'key',
+        'scene-1',
+        createActionResumePosition(actions, 1, { atBoundary: true })!,
+      );
+
+      const edited = [speech('a'), { ...spotlight, id: 'other-spot' } as Action, speech('b')];
+      expect(
+        getActionResumeRestoreCursor(readActionResumeState(storage, 'key'), 'scene-1', edited),
+      ).toEqual({ actionIndex: 0, position: null });
+    });
+
+    it('tells a boundary at exactly one action apart', () => {
+      const storage = createMemoryStorage();
+      const actions = [speech('a'), spotlight, speech('b')];
+      saveActionResumePosition(
+        storage,
+        'key',
+        'scene-1',
+        createActionResumePosition(actions, 1, { atBoundary: true })!,
+      );
+      expect(isActionBoundaryResumePositionAt(storage, 'key', 'scene-1', 1)).toBe(true);
+      expect(isActionBoundaryResumePositionAt(storage, 'key', 'scene-1', 2)).toBe(false);
+      expect(isActionBoundaryResumePositionAt(storage, 'key', 'scene-2', 1)).toBe(false);
+
+      saveActionResumePosition(storage, 'key', 'scene-1', createActionResumePosition(actions, 2)!);
+      expect(isActionBoundaryResumePositionAt(storage, 'key', 'scene-1', 2)).toBe(false);
+    });
+
+    it('rejects a malformed boundary flag', () => {
+      const storage = createMemoryStorage({
+        key: JSON.stringify({
+          version: 1,
+          scenes: {
+            'scene-1': { actionIndex: 1, actionId: 'spot', actionType: 'spotlight', atBoundary: 1 },
+          },
+        }),
+      });
+      expect(readActionResumeState(storage, 'key')).toEqual({ version: 1, scenes: {} });
     });
   });
 

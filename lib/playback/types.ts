@@ -52,8 +52,13 @@ export interface PlaybackEngineCallbacks {
   onTopicAppend?: (role: string, text: string) => void;
   onTopicEnd?: () => void;
 
-  // Progress tracking (for persistence)
-  onProgress?: (snapshot: PlaybackSnapshot) => void;
+  /**
+   * Progress tracking (for persistence). `atBoundary`: the snapshot points at
+   * an action that has not started while the previous one finished naturally
+   * (a raised hand answered between actions), so resume exactly there,
+   * whatever its type.
+   */
+  onProgress?: (snapshot: PlaybackSnapshot, progress?: { atBoundary?: boolean }) => void;
 
   /** Check if a given agent is in the user's selected list (for skipping discussion actions) */
   isAgentSelected?: (agentId: string) => boolean;

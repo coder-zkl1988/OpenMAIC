@@ -832,9 +832,11 @@
     "stopRecording": "Dừng ghi âm",
     "startRecording": "Bắt đầu ghi âm",
     "handRaisedQueued": "Đã giơ tay · Giảng viên sẽ trả lời sau câu này",
+    "handRaisedQueuedStep": "Đã giơ tay · Giảng viên sẽ trả lời sau bước này",
     "handRaisedDelivered": "Đã gửi câu hỏi của bạn",
     "cancelQueuedQuestion": "Rút lại",
-    "queuedQuestionNotSent": "Câu hỏi giơ tay chưa được gửi"
+    "queuedQuestionNotSent": "Câu hỏi giơ tay chưa được gửi",
+    "queuedQuestionRestored": "Đã khôi phục câu hỏi chưa gửi của bạn"
   },
   "pbl": {
     "emptyProject": "Chưa tạo dự án nào. Hãy tạo trong lúc soạn bài học.",

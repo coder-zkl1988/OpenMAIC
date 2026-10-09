@@ -21,7 +21,10 @@ const mocks = vi.hoisted(() => ({
   engineOptions: undefined as
     | {
         onModeChange?: (mode: 'idle' | 'playing' | 'paused' | 'live') => void;
-        onProgress?: (snapshot: { actionIndex: number; sceneId: string }) => void;
+        onProgress?: (
+          snapshot: { actionIndex: number; sceneId: string },
+          progress?: { atBoundary?: boolean },
+        ) => void;
         onUserInterrupt?: (text: string) => void;
         onComplete?: () => void;
         onDiscussionEnd?: () => void;
@@ -43,6 +46,12 @@ const mocks = vi.hoisted(() => ({
   enginePause: vi.fn(),
   lectureCompletionPending: false,
   engineExhausted: false,
+  // Whether a spoken line is in flight when a hand is raised
+  speechInFlight: true,
+  engineCanJumpToAction: vi.fn((_actionIndex: number, _options?: unknown) => false),
+  engineJumpToAction: vi.fn(async (_actionIndex: number, _options?: unknown) => false),
+  // Run the real action-resume / action-navigation helpers on jsdom sessionStorage
+  realActionResume: false,
   shouldAutoResume: vi.fn((_args: unknown) => false),
   lastSendResult: undefined as unknown,
   chatAreaProps: undefined as Record<string, unknown> | undefined,
@@ -359,11 +368,14 @@ vi.mock('@/lib/playback', () => ({
     isExhausted() {
       return mocks.engineExhausted;
     }
-    canJumpToAction() {
-      return false;
+    isSpeechInFlight() {
+      return mocks.speechInFlight;
     }
-    jumpToAction() {
-      return Promise.resolve(false);
+    canJumpToAction(actionIndex: number, options?: unknown) {
+      return mocks.engineCanJumpToAction(actionIndex, options);
+    }
+    jumpToAction(actionIndex: number, options?: unknown) {
+      return mocks.engineJumpToAction(actionIndex, options);
     }
     handleUserInterrupt(text: string) {
       mocks.queuedText = null;
@@ -385,18 +397,43 @@ vi.mock('@/lib/playback', () => ({
   computePlaybackView: () => ({ kind: 'idle', isTopicActive: mocks.topicActive }),
   shouldAutoResumeLecture: (args: unknown) => mocks.shouldAutoResume(args),
 }));
-vi.mock('@/lib/playback/action-navigation', () => ({
-  canJumpWithinReconstructablePrefix: () => false,
-  isUnsafePlaybackNavigationAction: () => false,
-}));
-vi.mock('@/lib/playback/action-resume', () => ({
-  getActionResumeRestoreCursor: () => ({ actionIndex: 0, position: null }),
-  clearActionResumePosition: vi.fn(),
-  createActionResumePosition: vi.fn(),
-  getActionResumeStorageKey: () => 'resume-key',
-  readActionResumeState: () => null,
-  saveActionResumePosition: vi.fn(),
-}));
+vi.mock('@/lib/playback/action-navigation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/playback/action-navigation')>();
+  return {
+    canJumpWithinReconstructablePrefix: (
+      ...args: Parameters<typeof actual.canJumpWithinReconstructablePrefix>
+    ) => mocks.realActionResume && actual.canJumpWithinReconstructablePrefix(...args),
+    isUnsafePlaybackNavigationAction: (
+      ...args: Parameters<typeof actual.isUnsafePlaybackNavigationAction>
+    ) => mocks.realActionResume && actual.isUnsafePlaybackNavigationAction(...args),
+  };
+});
+vi.mock('@/lib/playback/action-resume', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/playback/action-resume')>();
+  return {
+    getActionResumeRestoreCursor: (
+      ...args: Parameters<typeof actual.getActionResumeRestoreCursor>
+    ) =>
+      mocks.realActionResume
+        ? actual.getActionResumeRestoreCursor(...args)
+        : { actionIndex: 0, position: null },
+    clearActionResumePosition: (...args: Parameters<typeof actual.clearActionResumePosition>) => {
+      if (mocks.realActionResume) actual.clearActionResumePosition(...args);
+    },
+    createActionResumePosition: (...args: Parameters<typeof actual.createActionResumePosition>) =>
+      mocks.realActionResume ? actual.createActionResumePosition(...args) : null,
+    getActionResumeStorageKey: (...args: Parameters<typeof actual.getActionResumeStorageKey>) =>
+      mocks.realActionResume ? actual.getActionResumeStorageKey(...args) : 'resume-key',
+    isActionBoundaryResumePositionAt: (
+      ...args: Parameters<typeof actual.isActionBoundaryResumePositionAt>
+    ) => mocks.realActionResume && actual.isActionBoundaryResumePositionAt(...args),
+    readActionResumeState: (...args: Parameters<typeof actual.readActionResumeState>) =>
+      mocks.realActionResume ? actual.readActionResumeState(...args) : null,
+    saveActionResumePosition: (...args: Parameters<typeof actual.saveActionResumePosition>) => {
+      if (mocks.realActionResume) actual.saveActionResumePosition(...args);
+    },
+  };
+});
 vi.mock('@/lib/playback/cursor', () => ({
   loadCursor: vi.fn().mockResolvedValue(null),
   saveCursor: vi.fn().mockResolvedValue(undefined),
@@ -474,6 +511,14 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.enginePause.mockReset();
     mocks.lectureCompletionPending = false;
     mocks.engineExhausted = false;
+    mocks.speechInFlight = true;
+    mocks.engineCanJumpToAction.mockReset();
+    mocks.engineCanJumpToAction.mockReturnValue(false);
+    mocks.engineJumpToAction.mockReset();
+    mocks.engineJumpToAction.mockResolvedValue(false);
+    mocks.realActionResume = false;
+    window.sessionStorage.clear();
+    stageState.mode = 'playback';
     mocks.shouldAutoResume.mockReset();
     mocks.shouldAutoResume.mockReturnValue(false);
     mocks.lastSendResult = undefined;
@@ -490,6 +535,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    window.sessionStorage.clear();
     vi.unstubAllGlobals();
   });
 
@@ -515,6 +561,13 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+  }
+
+  /** Leave the page in-app (route change, Pro mode), then come back. */
+  async function remountOwner(props: Record<string, unknown> = {}) {
+    act(() => root.unmount());
+    root = createRoot(container);
+    await renderOwner(props);
   }
 
   it('selects the stage snapshot whiteboard and sends an identity-only reference', async () => {
@@ -1341,6 +1394,240 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       },
     );
 
+    it.each([
+      ['a spoken line', true, 'sentence'],
+      ['another step', false, 'step'],
+    ] as const)(
+      'words the raised hand by what is in flight: %s',
+      async (_label, inFlight, waitsFor) => {
+        mocks.speechInFlight = inFlight;
+        mocks.engineMode = 'playing';
+        await renderOwner();
+        click('send');
+
+        expect(queuedQuestion()).toMatchObject({ status: 'queued', waitsFor });
+      },
+    );
+
+    describe('an unsent raised hand outlives the page', () => {
+      const draftKey = 'openmaic:raised-hand-draft:stage-1';
+      let toastInfo: ReturnType<typeof vi.spyOn>;
+
+      beforeEach(() => {
+        toastInfo = vi.spyOn(toast, 'info');
+      });
+      afterEach(() => {
+        toastInfo.mockRestore();
+      });
+
+      function storedDraft() {
+        const raw = window.sessionStorage.getItem(draftKey);
+        return raw ? (JSON.parse(raw) as { text: string }).text : null;
+      }
+
+      async function raiseHand() {
+        mocks.engineMode = 'playing';
+        await renderOwner();
+        click('send');
+        expect(queuedQuestion()?.status).toBe('queued');
+      }
+
+      function pageHide() {
+        act(() => {
+          window.dispatchEvent(new Event('pagehide'));
+        });
+      }
+
+      it('keeps it as a draft when the classroom unmounts, without sending it', async () => {
+        await raiseHand();
+        act(() => root.unmount());
+
+        expect(storedDraft()).toBe('Explain this');
+        expect(mocks.sendMessage).not.toHaveBeenCalled();
+        expect(toastInfo).not.toHaveBeenCalled();
+      });
+
+      it('writes the draft synchronously on pagehide, never asking to stay', async () => {
+        await renderOwner();
+        pageHide();
+        expect(storedDraft()).toBeNull();
+
+        await raiseHand();
+        const beforeUnload = new Event('beforeunload', { cancelable: true });
+        act(() => {
+          window.dispatchEvent(beforeUnload);
+        });
+        pageHide();
+        expect(beforeUnload.defaultPrevented).toBe(false);
+        expect(storedDraft()).toBe('Explain this');
+
+        // Still on the page (back/forward cache): the waiting hand is not
+        // restored over itself, and once answered it leaves no draft
+        await rerenderOwner();
+        expect(queuedQuestion()?.status).toBe('queued');
+        expect(toastInfo).not.toHaveBeenCalled();
+        deliverAtBoundary('Explain this');
+        await act(async () => {
+          await Promise.resolve();
+        });
+        expect(storedDraft()).toBeNull();
+      });
+
+      it('leaves no draft once the question is cancelled', async () => {
+        await raiseHand();
+        pageHide();
+        act(() => (mocks.roundtableProps?.onCancelQueuedQuestion as () => void)());
+        expect(storedDraft()).toBeNull();
+
+        act(() => root.unmount());
+        expect(storedDraft()).toBeNull();
+      });
+
+      it('keeps a delivered question until the server accepts it', async () => {
+        await raiseHand();
+        // The request is still going out when the page goes away (a reload
+        // started before the line ended)
+        mocks.sendMessage.mockReturnValueOnce(new Promise(() => {}));
+        deliverAtBoundary('Explain this');
+        pageHide();
+        expect(storedDraft()).toBe('Explain this');
+
+        const [, options] = mocks.sendMessage.mock.calls[0] as [
+          string,
+          { onResponseAccepted: (response: Response) => void },
+        ];
+        act(() => options.onResponseAccepted(new Response('')));
+        expect(storedDraft()).toBeNull();
+        act(() => root.unmount());
+        expect(storedDraft()).toBeNull();
+      });
+
+      /** A delivered request that settles later, unaccepted (as an abort does). */
+      function deliverWithPendingRequest() {
+        let settle!: () => void;
+        mocks.sendMessage.mockReturnValueOnce(new Promise<void>((resolve) => (settle = resolve)));
+        deliverAtBoundary('Explain this');
+        return async () => {
+          await act(async () => {
+            settle();
+            await Promise.resolve();
+            await Promise.resolve();
+          });
+        };
+      }
+
+      it('keeps the draft when leaving aborts the delivered request', async () => {
+        await raiseHand();
+        const settleRequest = deliverWithPendingRequest();
+
+        // A route change: ChatArea's unmount aborts the request, which settles
+        // the send without the server ever accepting it
+        act(() => root.unmount());
+        await settleRequest();
+        expect(storedDraft()).toBe('Explain this');
+
+        root = createRoot(container);
+        await renderOwner();
+        expect(queuedQuestion()).toMatchObject({ text: 'Explain this', status: 'restored' });
+      });
+
+      it('Pro mode keeps a delivered question whose request it aborts', async () => {
+        const ownerRef = createRef<PlaybackChromeRootHandle>();
+        mocks.engineMode = 'playing';
+        await renderOwner({ ref: ownerRef });
+        click('send');
+        const settleRequest = deliverWithPendingRequest();
+
+        // Ending the session aborts the request before playback unmounts
+        await act(async () => {
+          await ownerRef.current?.teardown();
+        });
+        await settleRequest();
+        expect(storedDraft()).toBeNull();
+
+        mocks.engineMode = 'idle';
+        await remountOwner();
+        expect(queuedQuestion()).toMatchObject({ text: 'Explain this', status: 'restored' });
+      });
+
+      it('Pro mode still reports it, and the next visit puts it back', async () => {
+        const ownerRef = createRef<PlaybackChromeRootHandle>();
+        mocks.engineMode = 'playing';
+        await renderOwner({ ref: ownerRef });
+        click('send');
+
+        await act(async () => {
+          await ownerRef.current?.teardown();
+        });
+        expect(toastInfo).toHaveBeenCalledWith('roundtable.queuedQuestionNotSent', {
+          description: 'Explain this',
+        });
+        // Written only if playback really unmounts (a failed edit-mode entry stays)
+        await rerenderOwner();
+        expect(storedDraft()).toBeNull();
+        expect(toastInfo).not.toHaveBeenCalledWith('roundtable.queuedQuestionRestored');
+
+        mocks.engineMode = 'idle';
+        await remountOwner();
+        expect(queuedQuestion()).toMatchObject({ text: 'Explain this', status: 'restored' });
+        expect(toastInfo).toHaveBeenCalledWith('roundtable.queuedQuestionRestored');
+        expect(storedDraft()).toBeNull();
+      });
+
+      it('drops what Pro mode gave back once something else is sent', async () => {
+        const ownerRef = createRef<PlaybackChromeRootHandle>();
+        mocks.engineMode = 'playing';
+        await renderOwner({ ref: ownerRef });
+        click('send');
+        await act(async () => {
+          await ownerRef.current?.teardown();
+        });
+
+        mocks.engineMode = 'idle';
+        click('send');
+        expect(mocks.sendMessage).toHaveBeenCalledOnce();
+        act(() => root.unmount());
+        expect(storedDraft()).toBeNull();
+      });
+
+      it('puts a draft back into the input on mount, once, and never sends it', async () => {
+        window.sessionStorage.setItem(
+          draftKey,
+          JSON.stringify({ version: 1, text: 'Left behind' }),
+        );
+        const otherKey = 'openmaic:raised-hand-draft:stage-2';
+        window.sessionStorage.setItem(otherKey, JSON.stringify({ version: 1, text: 'Elsewhere' }));
+        mocks.engineMode = 'playing';
+        await renderOwner();
+
+        expect(queuedQuestion()).toMatchObject({ text: 'Left behind', status: 'restored' });
+        expect(toastInfo).toHaveBeenCalledExactlyOnceWith('roundtable.queuedQuestionRestored');
+        expect(storedDraft()).toBeNull();
+        expect(window.sessionStorage.getItem(otherKey)).not.toBeNull();
+        expect(mocks.queueUserInterrupt).not.toHaveBeenCalled();
+        expect(mocks.handleUserInterrupt).not.toHaveBeenCalled();
+        expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+        await rerenderOwner();
+        expect(toastInfo).toHaveBeenCalledOnce();
+      });
+
+      it('waits for playback mode, where the input is, to restore a draft', async () => {
+        window.sessionStorage.setItem(
+          draftKey,
+          JSON.stringify({ version: 1, text: 'Left behind' }),
+        );
+        stageState.mode = 'autonomous';
+        await renderOwner();
+        expect(mocks.roundtableProps).toBeUndefined();
+        expect(storedDraft()).toBe('Left behind');
+
+        stageState.mode = 'playback';
+        await rerenderOwner();
+        expect(queuedQuestion()).toMatchObject({ text: 'Left behind', status: 'restored' });
+      });
+    });
+
     describe('scene auto-advance while the student is composing', () => {
       beforeEach(() => {
         vi.useFakeTimers();
@@ -1392,6 +1679,134 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
         setComposing(false);
         expect(stageState.setCurrentSceneId).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('resume position after a raised hand is answered', () => {
+    const resumeKey = 'openmaic:playback-action-resume:stage-1';
+    const line = (id: string, text: string) => ({ id, type: 'speech', text });
+
+    function storedPosition() {
+      const raw = window.sessionStorage.getItem(resumeKey);
+      return raw ? JSON.parse(raw).scenes['scene-1'] : undefined;
+    }
+
+    function progress(actionIndex: number, atBoundary?: boolean) {
+      act(() =>
+        mocks.engineOptions?.onProgress?.(
+          { actionIndex, sceneId: scene.id },
+          atBoundary ? { atBoundary } : undefined,
+        ),
+      );
+    }
+
+    async function pauseLiveQA() {
+      mocks.engineMode = 'live';
+      await act(async () => {
+        await (mocks.roundtableProps?.onPlayPause as () => Promise<void>)();
+      });
+    }
+
+    async function withActions(actions: unknown[]) {
+      mocks.realActionResume = true;
+      stageState.scenes = [{ ...scene, actions } as typeof scene, secondScene];
+      await renderOwner();
+    }
+
+    it('keeps the boundary before an unsafe action through the Q&A, unmount and reload', async () => {
+      const discussion = { id: 'disc', type: 'discussion', topic: 'Why?' };
+      await withActions([line('s1', 'First line'), discussion]);
+      progress(0);
+      expect(storedPosition()).toEqual({ actionIndex: 0, actionId: 's1', actionType: 'speech' });
+
+      const boundary = {
+        actionIndex: 1,
+        actionId: 'disc',
+        actionType: 'discussion',
+        atBoundary: true,
+      };
+      progress(1, true);
+      expect(storedPosition()).toEqual(boundary);
+      // The auto-resume / restore jump publishes the same cursor unflagged
+      progress(1);
+      await pauseLiveQA();
+      expect(mocks.enginePause).toHaveBeenCalledOnce();
+      act(() => root.unmount());
+      expect(storedPosition()).toEqual(boundary);
+
+      mocks.engineMode = 'idle';
+      mocks.engineCanJumpToAction.mockReturnValue(true);
+      mocks.engineJumpToAction.mockResolvedValue(true);
+      root = createRoot(container);
+      await renderOwner();
+      expect(mocks.engineCanJumpToAction).toHaveBeenCalledWith(1, { atBoundary: true });
+      expect(mocks.engineJumpToAction).toHaveBeenCalledWith(1, {
+        autoplay: false,
+        atBoundary: true,
+      });
+      // The line that finished stays on screen, matching the line counter
+      expect(mocks.roundtableProps?.currentActionIndex).toBe(1);
+      expect(mocks.roundtableProps?.lectureSpeech).toBe('First line');
+    });
+
+    it('stores a boundary before a visual cue instead of the finished line', async () => {
+      const cue = { id: 'sp1', type: 'spotlight', elementId: 'text-1' };
+      await withActions([line('s1', 'First line'), cue, line('s2', 'Second line')]);
+      progress(0);
+      progress(1, true);
+      expect(storedPosition()).toEqual({
+        actionIndex: 1,
+        actionId: 'sp1',
+        actionType: 'spotlight',
+        atBoundary: true,
+      });
+
+      // Once the lecture moves on, the next line replaces it
+      progress(1);
+      progress(2);
+      expect(storedPosition()).toEqual({ actionIndex: 2, actionId: 's2', actionType: 'speech' });
+    });
+
+    it('still clears an unflagged unsafe cursor, so a cut line is not skipped over', async () => {
+      const discussion = { id: 'disc', type: 'discussion', topic: 'Why?' };
+      await withActions([line('s1', 'First line'), discussion]);
+      progress(0);
+      progress(1);
+      expect(storedPosition()).toBeUndefined();
+    });
+
+    it('keeps the last line after a raised hand answered at the end, until completion', async () => {
+      await withActions([line('s1', 'Only line')]);
+      progress(0);
+      mocks.lectureCompletionPending = true;
+      progress(1, true);
+      await pauseLiveQA();
+      act(() => root.unmount());
+      expect(storedPosition()).toEqual({ actionIndex: 0, actionId: 's1', actionType: 'speech' });
+    });
+
+    it('restores a plain speech position as an ordinary jump', async () => {
+      mocks.realActionResume = true;
+      stageState.scenes = [
+        { ...scene, actions: [line('s1', 'First'), line('s2', 'Second')] } as typeof scene,
+        secondScene,
+      ];
+      window.sessionStorage.setItem(
+        resumeKey,
+        JSON.stringify({
+          version: 1,
+          scenes: { 'scene-1': { actionIndex: 1, actionId: 's2', actionType: 'speech' } },
+        }),
+      );
+      mocks.engineCanJumpToAction.mockReturnValue(true);
+      mocks.engineJumpToAction.mockResolvedValue(true);
+      await renderOwner();
+
+      expect(mocks.engineJumpToAction).toHaveBeenCalledWith(1, {
+        autoplay: false,
+        atBoundary: false,
+      });
+      expect(mocks.roundtableProps?.lectureSpeech).toBe('Second');
     });
   });
 });

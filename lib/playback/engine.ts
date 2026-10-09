@@ -165,6 +165,18 @@ export class PlaybackEngine {
     return this.queuedInterrupt !== null;
   }
 
+  /**
+   * Whether the action now playing is a spoken line: a raised hand then waits
+   * for "this sentence" rather than another step (a video, a drawing, a widget,
+   * a blank slide's dwell). processNext advances the cursor as an action
+   * starts, so the one in flight sits just before it.
+   */
+  isSpeechInFlight(): boolean {
+    if (this.mode !== 'playing') return false;
+    const action = this.scenes[this.sceneIndex]?.actions?.[this.actionIndex - 1];
+    return action?.type === 'speech' && !!action.text.trim();
+  }
+
   /** Drop the waiting question; returns its text (null when none was queued) */
   cancelQueuedInterrupt(): string | null {
     const text = this.queuedInterrupt;
@@ -235,17 +247,24 @@ export class PlaybackEngine {
     this.processNext();
   }
 
-  canJumpToAction(actionIndex: number): boolean {
+  /**
+   * Jumps target speech lines; `atBoundary` also accepts an action a raised
+   * hand was answered just before (restoring that resume position).
+   */
+  canJumpToAction(actionIndex: number, options: { atBoundary?: boolean } = {}): boolean {
     const actions = this.scenes[0]?.actions ?? [];
     return (
       this.mode !== 'live' &&
-      canJumpWithinReconstructablePrefix(actions, this.actionIndex, actionIndex)
+      canJumpWithinReconstructablePrefix(actions, this.actionIndex, actionIndex, options)
     );
   }
 
-  async jumpToAction(actionIndex: number, options: { autoplay?: boolean } = {}): Promise<boolean> {
+  async jumpToAction(
+    actionIndex: number,
+    options: { autoplay?: boolean; atBoundary?: boolean } = {},
+  ): Promise<boolean> {
     const actions = this.scenes[0]?.actions ?? [];
-    if (!this.canJumpToAction(actionIndex)) return false;
+    if (!this.canJumpToAction(actionIndex, { atBoundary: options.atBoundary })) return false;
 
     const autoplay = options.autoplay ?? this.mode === 'playing';
     const generation = this.invalidatePlaybackGeneration();
@@ -630,8 +649,11 @@ export class PlaybackEngine {
       this.lectureCompletionPending = this.isExhausted();
     }
     // Publish the boundary so the UI cursor and persisted progress already
-    // point past the finished action while the question is answered.
-    this.callbacks.onProgress?.(this.getSnapshot());
+    // point past the finished action while the question is answered. Flagged
+    // so that a reload resumes at the next action whatever its type, rather
+    // than replaying the last speech line (handleUserInterrupt publishes
+    // nothing: the line it cuts off must replay).
+    this.callbacks.onProgress?.(this.getSnapshot(), { atBoundary: true });
 
     // Mode BEFORE stopping audio, mirroring handleUserInterrupt (both are
     // no-ops at a boundary, but must never re-enter processNext).

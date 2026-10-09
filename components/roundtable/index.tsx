@@ -47,12 +47,15 @@ export interface DiscussionRequest {
 /**
  * A question sent mid-line that waits for the teacher to finish ("raised
  * hand"). The owner moves it from queued to delivered or cancelled; a
- * cancelled question's text goes back into the input.
+ * cancelled question's text goes back into the input, and so does a restored
+ * one (left unsent by an earlier visit).
  */
 export interface QueuedQuestionState {
   id: number;
   text: string;
-  status: 'queued' | 'delivered' | 'cancelled';
+  status: 'queued' | 'delivered' | 'cancelled' | 'restored';
+  /** What the teacher finishes before answering: the line (default) or another step. */
+  waitsFor?: 'sentence' | 'step';
 }
 
 /**
@@ -411,6 +414,11 @@ export function Roundtable({
     }
     queuedQuestionPillNodeRef.current = node;
   }, []);
+  // The text-input toggle (either layout), where a delivered question hands a
+  // keyboard user so they can follow up
+  const textInputToggleRef = useRef<HTMLButtonElement>(null);
+  // Set while the send cooldown hides that toggle at delivery
+  const focusTextToggleWhenShownRef = useRef(false);
 
   // Raised-hand outcome (owner-driven): a delivered question shows its bubble
   // now; a cancelled one goes back into the input so nothing typed is lost.
@@ -425,12 +433,23 @@ export function Roundtable({
     handledQueuedQuestionRef.current = key;
     const pillHadFocus = queuedQuestionPillHadFocusRef.current;
     queuedQuestionPillHadFocusRef.current = false;
+    focusTextToggleWhenShownRef.current = false;
     if (queuedQuestion.status === 'delivered') {
       showLocalUserMessage(queuedQuestion.text);
-      // Keep a keyboard/screen-reader user's place: the status now announces
-      // the delivery (a cancelled question refocuses the reopened input)
-      if (pillHadFocus) queuedQuestionStatusRef.current?.focus();
-    } else if (queuedQuestion.status === 'cancelled') {
+      // Keep a keyboard user's place on Cancel: hand them to the text-input
+      // toggle to follow up — never opening the input, which would pause the
+      // live answer. The send cooldown hides it until the answer starts; the
+      // status, announcing the delivery, holds focus until then.
+      if (pillHadFocus) {
+        if (textInputToggleRef.current) {
+          textInputToggleRef.current.focus();
+        } else {
+          focusTextToggleWhenShownRef.current = isSendCooldownRef.current;
+          queuedQuestionStatusRef.current?.focus();
+        }
+      }
+    } else if (queuedQuestion.status === 'cancelled' || queuedQuestion.status === 'restored') {
+      // Back into the (reopened) input, which takes focus
       setIsSendCooldown(false);
       isSendCooldownRef.current = false;
       setInputValue(queuedQuestion.text);
@@ -438,6 +457,16 @@ export function Roundtable({
       setIsInputOpen(true);
     }
   }, [queuedQuestion, showLocalUserMessage]);
+
+  // The cooldown ended: finish handing focus to the text-input toggle, unless
+  // the user has moved on meanwhile
+  useEffect(() => {
+    if (isSendCooldown || !focusTextToggleWhenShownRef.current) return;
+    focusTextToggleWhenShownRef.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== queuedQuestionStatusRef.current) return;
+    textInputToggleRef.current?.focus();
+  }, [isSendCooldown]);
 
   // Separate participants by role (teacherParticipant & studentParticipants declared earlier for effect)
   const userParticipant = initialParticipants.find((p) => p.role === 'user');
@@ -823,8 +852,14 @@ export function Roundtable({
     </div>
   ) : null;
   // Raised hand: a sent question waiting for the teacher to finish the line
+  // (or, when no line is playing, the current step)
   const queuedStatusId = useId();
   const isQuestionQueued = queuedQuestion?.status === 'queued';
+  const queuedLabel = t(
+    queuedQuestion?.waitsFor === 'step'
+      ? 'roundtable.handRaisedQueuedStep'
+      : 'roundtable.handRaisedQueued',
+  );
   // Always mounted: a live region that appears together with its text is
   // often not announced. Also where focus lands if the pill unmounts under it.
   const queuedQuestionLiveRegion = (
@@ -836,7 +871,7 @@ export function Roundtable({
       className="sr-only"
     >
       {isQuestionQueued
-        ? t('roundtable.handRaisedQueued')
+        ? queuedLabel
         : queuedQuestion?.status === 'delivered'
           ? t('roundtable.handRaisedDelivered')
           : ''}
@@ -859,9 +894,9 @@ export function Roundtable({
       <span
         id={queuedStatusId}
         className="min-w-0 truncate font-semibold text-amber-700 dark:text-amber-300"
-        title={t('roundtable.handRaisedQueued')}
+        title={queuedLabel}
       >
-        {t('roundtable.handRaisedQueued')}
+        {queuedLabel}
       </span>
       <span
         className="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300"
@@ -1207,6 +1242,7 @@ export function Roundtable({
                         {asrEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
                       </button>
                       <button
+                        ref={textInputToggleRef}
                         aria-label={t('roundtable.textInput')}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -2270,6 +2306,8 @@ export function Roundtable({
                     )}
                   </button>
                   <button
+                    ref={textInputToggleRef}
+                    aria-label={t('roundtable.textInput')}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleToggleInput();

@@ -832,9 +832,11 @@
     "stopRecording": "إيقاف التسجيل",
     "startRecording": "بدء التسجيل",
     "handRaisedQueued": "رفعت يدك — سيجيبك المعلم بعد انتهاء هذه الجملة",
+    "handRaisedQueuedStep": "رفعت يدك — سيجيبك المعلم بعد انتهاء هذه الخطوة",
     "handRaisedDelivered": "تم إرسال سؤالك",
     "cancelQueuedQuestion": "إلغاء",
-    "queuedQuestionNotSent": "لم يتم إرسال سؤالك برفع اليد"
+    "queuedQuestionNotSent": "لم يتم إرسال سؤالك برفع اليد",
+    "queuedQuestionRestored": "تمت استعادة سؤالك غير المرسل"
   },
   "pbl": {
     "emptyProject": "لم يتم توليد مشروع التعلم القائم على المشاريع بعد. يرجى إنشاؤه عبر توليد المقرر.",

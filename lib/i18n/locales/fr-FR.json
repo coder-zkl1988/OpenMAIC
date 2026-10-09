@@ -832,9 +832,11 @@
     "stopRecording": "Arrêter l’enregistrement",
     "startRecording": "Démarrer l’enregistrement",
     "handRaisedQueued": "Main levée — le professeur vous répondra après cette phrase",
+    "handRaisedQueuedStep": "Main levée — le professeur vous répondra après cette étape",
     "handRaisedDelivered": "Votre question a été envoyée",
     "cancelQueuedQuestion": "Annuler",
-    "queuedQuestionNotSent": "Votre question à main levée n’a pas été envoyée"
+    "queuedQuestionNotSent": "Votre question à main levée n’a pas été envoyée",
+    "queuedQuestionRestored": "Votre question non envoyée a été restaurée"
   },
   "pbl": {
     "emptyProject": "Le projet n’a pas encore été généré. Veuillez le créer via la génération de cours.",

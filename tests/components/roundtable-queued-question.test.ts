@@ -57,8 +57,34 @@ describe('Roundtable raised hand (queued question)', () => {
     await act(async () => root.render(createElement(Roundtable, props)));
   }
 
-  function setQueued(status: QueuedQuestionState['status'], text = QUESTION) {
-    return render({ queuedQuestion: { id: 1, text, status } satisfies QueuedQuestionState });
+  function setQueued(
+    status: QueuedQuestionState['status'],
+    text = QUESTION,
+    extra: Partial<QueuedQuestionState> = {},
+  ) {
+    return render({
+      queuedQuestion: { id: 1, text, status, ...extra } satisfies QueuedQuestionState,
+    });
+  }
+
+  function cancelButton() {
+    return [...indicator()!.querySelectorAll('button')].find(
+      (button) => button.textContent === 'roundtable.cancelQueuedQuestion',
+    )!;
+  }
+
+  function textInputToggle() {
+    return container.querySelector('button[aria-label="roundtable.textInput"]') as HTMLElement;
+  }
+
+  /** Open the input, send a question that raises a hand (starts the send cooldown), focus Cancel. */
+  async function raiseHandAndFocusCancel() {
+    await render();
+    act(() => iconButton('message-square').click());
+    typeAndSend(QUESTION);
+    await setQueued('queued');
+    act(() => cancelButton().focus());
+    expect(document.activeElement).toBe(cancelButton());
   }
 
   function iconButton(icon: string) {
@@ -186,18 +212,92 @@ describe('Roundtable raised hand (queued question)', () => {
     expect(container.querySelector('textarea')?.value ?? '').toBe('');
   });
 
-  it('keeps the place of a user on Cancel when the question is delivered', async () => {
+  it('hands a user on Cancel to the text-input toggle when the question is delivered', async () => {
     await setQueued('queued');
-    const cancel = [...indicator()!.querySelectorAll('button')].find(
-      (button) => button.textContent === 'roundtable.cancelQueuedQuestion',
-    )!;
-    act(() => cancel.focus());
-    expect(document.activeElement).toBe(cancel);
+    act(() => cancelButton().focus());
+
+    await setQueued('delivered');
+    // Ready to follow up, but the input stays closed (opening it would pause the answer)
+    expect(document.activeElement).toBe(textInputToggle());
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(props.onInputActivate).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      'roundtable.handRaisedDelivered',
+    );
+  });
+
+  it('parks focus on the announcement until the send cooldown shows the toggle again', async () => {
+    await raiseHandAndFocusCancel();
 
     await setQueued('delivered');
     const status = container.querySelector('[role="status"]');
     expect(document.activeElement).toBe(status);
     expect(status?.textContent).toBe('roundtable.handRaisedDelivered');
+
+    // The answer starts: the cooldown ends and the toggle is back
+    await render({ speakingAgentId: 'agent-1' });
+    expect(document.activeElement).toBe(textInputToggle());
+    expect(textInputToggle().className).not.toContain('bg-purple-600');
+    expect(props.onInputActivate).toHaveBeenCalledOnce();
+  });
+
+  it('does not take focus back from a user who moved on during the cooldown', async () => {
+    await raiseHandAndFocusCancel();
+    await setQueued('delivered');
+    const elsewhere = document.createElement('button');
+    document.body.appendChild(elsewhere);
+    try {
+      act(() => elsewhere.focus());
+      await render({ speakingAgentId: 'agent-1' });
+      expect(document.activeElement).toBe(elsewhere);
+    } finally {
+      elsewhere.remove();
+    }
+  });
+
+  it('does not move focus on a later send when no cooldown hid the toggle', async () => {
+    // Presenting with the dock hidden: no toggle to hand focus to
+    await render({ isPresenting: true, controlsVisible: false });
+    await setQueued('queued');
+    act(() => cancelButton().focus());
+    await setQueued('delivered');
+    const status = container.querySelector('[role="status"]');
+    expect(document.activeElement).toBe(status);
+
+    // A later, unrelated send/cooldown cycle
+    await render({ controlsVisible: true, onMessageSend: vi.fn() });
+    act(() => audio.onTranscription?.('A follow-up'));
+    await render({ speakingAgentId: 'agent-1' });
+    expect(textInputToggle()).not.toBeNull();
+    expect(document.activeElement).toBe(status);
+  });
+
+  it('says "after this step" when no spoken line was playing', async () => {
+    await setQueued('queued', QUESTION, { waitsFor: 'step' });
+    const status = container.querySelector('[role="status"]');
+    expect(status?.textContent).toBe('roundtable.handRaisedQueuedStep');
+    const label = indicator()!.querySelector('span[id]')!;
+    expect(label.textContent).toBe('roundtable.handRaisedQueuedStep');
+    expect(label.getAttribute('title')).toBe('roundtable.handRaisedQueuedStep');
+    expect(document.getElementById(cancelButton().getAttribute('aria-describedby')!)).toBe(label);
+
+    await setQueued('queued', QUESTION, { id: 2, waitsFor: 'sentence' });
+    expect(status?.textContent).toBe('roundtable.handRaisedQueued');
+    expect(indicator()!.querySelector('span[id]')?.textContent).toBe('roundtable.handRaisedQueued');
+  });
+
+  it('puts a restored question into the opened input without pausing or sending', async () => {
+    // The owner restores after mount (a state passed on mount is not replayed)
+    await render({ queuedQuestion: null });
+    await setQueued('restored', 'Left behind');
+
+    const input = container.querySelector('textarea');
+    expect(input?.value).toBe('Left behind');
+    expect(document.activeElement).toBe(input);
+    expect(props.onInputActivate).not.toHaveBeenCalled();
+    expect(props.onMessageSend).not.toHaveBeenCalled();
+    expect(indicator()).toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('');
   });
 
   it('leaves focus alone when the delivered pill did not have it', async () => {

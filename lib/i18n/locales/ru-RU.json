@@ -832,9 +832,11 @@
     "stopRecording": "Остановить запись",
     "startRecording": "Начать запись",
     "handRaisedQueued": "Рука поднята — учитель ответит после этой фразы",
+    "handRaisedQueuedStep": "Рука поднята — учитель ответит после этого шага",
     "handRaisedDelivered": "Ваш вопрос отправлен",
     "cancelQueuedQuestion": "Отменить",
-    "queuedQuestionNotSent": "Вопрос с поднятой рукой не отправлен"
+    "queuedQuestionNotSent": "Вопрос с поднятой рукой не отправлен",
+    "queuedQuestionRestored": "Неотправленный вопрос восстановлен"
   },
   "pbl": {
     "emptyProject": "PBL-проект ещё не создан. Создайте его через генерацию курса.",

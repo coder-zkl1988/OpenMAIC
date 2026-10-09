@@ -535,4 +535,157 @@ describe('PlaybackEngine raised hand (queued interrupt)', () => {
     expect(callbacks.onUserInterrupt.mock.calls).toEqual([['direct']]);
     expect(engine.hasQueuedInterrupt()).toBe(false);
   });
+
+  describe('resume position after a boundary delivery', () => {
+    const spotlight = (id: string) => ({ id, type: 'spotlight', elementId: 'el' }) as Action;
+
+    it('flags the boundary progress, whatever the next action is', async () => {
+      const { engine, fireEnded, callbacks } = setup([speech('a'), spotlight('s'), speech('b')]);
+      engine.start();
+      await flushPromises();
+      engine.queueUserInterrupt('Q');
+      fireEnded();
+      await flushPromises();
+
+      expect(callbacks.onProgress.mock.calls.at(-1)).toEqual([
+        expect.objectContaining({ actionIndex: 1 }),
+        { atBoundary: true },
+      ]);
+      // Ordinary progress carries no flag
+      expect(callbacks.onProgress.mock.calls[0]).toHaveLength(1);
+    });
+
+    it.each([
+      ['a pause flush', (engine: PlaybackEngine) => engine.flushQueuedInterrupt()],
+      ['a direct interrupt', (engine: PlaybackEngine) => engine.handleUserInterrupt('direct')],
+    ])('publishes no boundary for %s, so the cut line replays', async (_label, interrupt) => {
+      const { engine, callbacks } = setup([speech('a'), spotlight('s'), speech('b')]);
+      engine.start();
+      await flushPromises();
+      engine.queueUserInterrupt('Q');
+
+      interrupt(engine);
+      expect(callbacks.onUserInterrupt).toHaveBeenCalledOnce();
+      expect(callbacks.onProgress.mock.calls.some((call) => call.length > 1)).toBe(false);
+      engine.handleEndDiscussion();
+      expect(engine.getSnapshot().actionIndex).toBe(0);
+    });
+
+    it('jumps to a non-speech action only as a boundary with a reconstructable prefix', async () => {
+      const cue = setup([speech('a'), spotlight('s'), speech('b')]).engine;
+      expect(cue.canJumpToAction(1)).toBe(false);
+      expect(cue.canJumpToAction(1, { atBoundary: true })).toBe(true);
+
+      const video = setup([
+        speech('a'),
+        { id: 'v', type: 'play_video', elementId: 'vid' } as Action,
+        { id: 'w', type: 'wb_draw_text', content: 'x', x: 0, y: 0 } as Action,
+        speech('b'),
+      ]).engine;
+      // The video itself has not run: it plays fresh. Past it, the prefix
+      // cannot be rebuilt.
+      expect(video.canJumpToAction(1, { atBoundary: true })).toBe(true);
+      expect(video.canJumpToAction(2, { atBoundary: true })).toBe(false);
+
+      const { engine: live, fireEnded } = setup([speech('a'), spotlight('s'), speech('b')]);
+      live.start();
+      await flushPromises();
+      live.queueUserInterrupt('Q');
+      fireEnded();
+      await flushPromises();
+      expect(live.getMode()).toBe('live');
+      expect(live.canJumpToAction(1, { atBoundary: true })).toBe(false);
+    });
+
+    it('restores at the boundary and resumes with that action, not the finished line', async () => {
+      const { engine, callbacks, actionEngine } = setup([speech('a'), spotlight('s'), speech('b')]);
+      expect(await engine.jumpToAction(1, { autoplay: false, atBoundary: true })).toBe(true);
+      expect(engine.getMode()).toBe('idle');
+      expect(engine.getSnapshot().actionIndex).toBe(1);
+
+      engine.continuePlayback();
+      await flushPromises();
+      expect(vi.mocked(actionEngine.execute).mock.calls.map(([action]) => action.id)).toEqual([
+        's',
+      ]);
+      expect(callbacks.onSpeechStart.mock.calls).toEqual([['b']]);
+      engine.stop();
+    });
+
+    it('rebuilds a whiteboard prefix silently before a boundary', async () => {
+      const draw = { id: 'w', type: 'wb_draw_text', content: 'x', x: 0, y: 0 } as Action;
+      const { engine, actionEngine } = setup([speech('a'), draw, spotlight('s'), speech('b')]);
+
+      expect(await engine.jumpToAction(2, { autoplay: false, atBoundary: true })).toBe(true);
+      expect(actionEngine.execute).toHaveBeenCalledExactlyOnceWith(draw, { silent: true });
+    });
+
+    it('offers a discussion it was restored at', async () => {
+      vi.useFakeTimers();
+      const { engine, callbacks } = setup([speech('a'), discussion('d')]);
+      expect(await engine.jumpToAction(1, { autoplay: false, atBoundary: true })).toBe(true);
+
+      engine.continuePlayback();
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(callbacks.onProactiveShow).toHaveBeenCalledOnce();
+      expect(callbacks.onProactiveShow.mock.calls[0][0].id).toBe('d');
+      expect(callbacks.onSpeechStart).not.toHaveBeenCalled();
+      engine.stop();
+    });
+  });
+
+  describe('what the raised hand waits for', () => {
+    it('is a spoken line while one plays (audio or reading timer)', async () => {
+      vi.useFakeTimers();
+      for (const audio of [true, false]) {
+        const { engine } = setup([speech('a', 'A spoken line.'), speech('b')], { audio });
+        expect(engine.isSpeechInFlight()).toBe(false);
+        engine.start();
+        await flushPromises();
+        expect(engine.isSpeechInFlight()).toBe(true);
+
+        engine.pause();
+        expect(engine.isSpeechInFlight()).toBe(false);
+        engine.stop();
+      }
+    });
+
+    it.each([
+      ['a drawing', { id: 'w', type: 'wb_draw_text', content: 'x', x: 0, y: 0 } as Action],
+      ['a video', { id: 'v', type: 'play_video', elementId: 'vid' } as Action],
+    ])('is another step while %s runs', async (_label, step) => {
+      const actionEngine = createActionEngine();
+      const running = deferred<void>();
+      vi.mocked(actionEngine.execute).mockImplementationOnce(() => running.promise);
+      const { engine } = setup([step, speech('b')], { actionEngine });
+      engine.start();
+      await flushPromises();
+
+      expect(engine.getMode()).toBe('playing');
+      expect(engine.isSpeechInFlight()).toBe(false);
+      running.resolve();
+      await flushPromises();
+      expect(engine.isSpeechInFlight()).toBe(true);
+      engine.stop();
+    });
+
+    it('is another step for a blank line, and nothing in live Q&A', async () => {
+      vi.useFakeTimers();
+      const { engine } = setup([speech('blank', '  '), speech('b')], { audio: false });
+      engine.start();
+      await flushPromises();
+      expect(engine.getMode()).toBe('playing');
+      expect(engine.isSpeechInFlight()).toBe(false);
+      engine.stop();
+
+      const live = setup([speech('a'), speech('b')]);
+      live.engine.start();
+      await flushPromises();
+      live.engine.queueUserInterrupt('Q');
+      live.fireEnded();
+      await flushPromises();
+      expect(live.engine.getMode()).toBe('live');
+      expect(live.engine.isSpeechInFlight()).toBe(false);
+    });
+  });
 });

@@ -832,9 +832,11 @@
     "stopRecording": "録音を停止",
     "startRecording": "録音を開始",
     "handRaisedQueued": "挙手しました · この一文が終わったら先生が答えます",
+    "handRaisedQueuedStep": "挙手しました · この手順が終わったら先生が答えます",
     "handRaisedDelivered": "質問を送信しました",
     "cancelQueuedQuestion": "取り消す",
-    "queuedQuestionNotSent": "挙手した質問は送信されませんでした"
+    "queuedQuestionNotSent": "挙手した質問は送信されませんでした",
+    "queuedQuestionRestored": "未送信の質問を復元しました"
   },
   "pbl": {
     "emptyProject": "PBLプロジェクトがまだ生成されていません。コース生成から作成してください。",

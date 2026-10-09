@@ -832,9 +832,11 @@
     "stopRecording": "Stop recording",
     "startRecording": "Start recording",
     "handRaisedQueued": "Hand raised — the teacher will answer after this sentence",
+    "handRaisedQueuedStep": "Hand raised — the teacher will answer after this step",
     "handRaisedDelivered": "Your question has been sent",
     "cancelQueuedQuestion": "Cancel",
-    "queuedQuestionNotSent": "Your raised-hand question wasn't sent"
+    "queuedQuestionNotSent": "Your raised-hand question wasn't sent",
+    "queuedQuestionRestored": "Restored your unsent question"
   },
   "pbl": {
     "emptyProject": "PBL project has not been generated yet. Please create via course generation.",

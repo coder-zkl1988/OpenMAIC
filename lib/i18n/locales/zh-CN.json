@@ -832,9 +832,11 @@
     "stopRecording": "停止录音",
     "startRecording": "开始录音",
     "handRaisedQueued": "已举手 · 老师讲完这句就回答你",
+    "handRaisedQueuedStep": "已举手 · 老师完成当前步骤就回答你",
     "handRaisedDelivered": "你的问题已发送",
     "cancelQueuedQuestion": "撤回",
-    "queuedQuestionNotSent": "举手提问未发送"
+    "queuedQuestionNotSent": "举手提问未发送",
+    "queuedQuestionRestored": "已恢复你未发送的提问"
   },
   "pbl": {
     "emptyProject": "PBL项目尚未生成，请通过课程生成创建",

@@ -832,9 +832,11 @@
     "stopRecording": "Aufnahme beenden",
     "startRecording": "Aufnahme starten",
     "handRaisedQueued": "Hand gehoben – die Lehrkraft antwortet nach diesem Satz",
+    "handRaisedQueuedStep": "Hand gehoben – die Lehrkraft antwortet nach diesem Schritt",
     "handRaisedDelivered": "Deine Frage wurde gesendet",
     "cancelQueuedQuestion": "Zurückziehen",
-    "queuedQuestionNotSent": "Deine Frage mit gehobener Hand wurde nicht gesendet"
+    "queuedQuestionNotSent": "Deine Frage mit gehobener Hand wurde nicht gesendet",
+    "queuedQuestionRestored": "Deine nicht gesendete Frage wurde wiederhergestellt"
   },
   "pbl": {
     "emptyProject": "Das PBL-Projekt wurde noch nicht generiert. Erstelle es über die Kursgenerierung.",
