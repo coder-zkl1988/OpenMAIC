@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { Play, Pause, X } from 'lucide-react';
 import { useI18n } from '@/lib/hooks/use-i18n';
-import { DISCUSSION_AUTO_SKIP_MS } from '@/lib/choreography';
 import type { DiscussionAction } from '@/lib/types/action';
+import { useProactiveCountdown } from './use-proactive-countdown';
 
 interface ProactiveCardProps {
   action: DiscussionAction;
@@ -49,9 +49,7 @@ export const ProactiveCard = ({
   onTogglePause,
 }: ProactiveCardProps) => {
   const { t } = useI18n();
-  const [progress, setProgress] = useState(100);
-  const skippedRef = useRef(false);
-  const isPaused = mode === 'paused';
+  const { progress, remainingSeconds, isPaused } = useProactiveCountdown({ mode, onSkip });
 
   // Computed position state
   const [pos, setPos] = useState<{
@@ -89,34 +87,6 @@ export const ProactiveCard = ({
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
   }, [updatePosition]);
-
-  useEffect(() => {
-    if (mode !== 'playback') return;
-
-    const duration = DISCUSSION_AUTO_SKIP_MS;
-    const interval = 50;
-    const step = (interval / duration) * 100;
-
-    const timer = setInterval(() => {
-      setProgress((prev) => {
-        const newProgress = prev - step;
-        if (newProgress <= 0) {
-          clearInterval(timer);
-          return 0;
-        }
-        return newProgress;
-      });
-    }, interval);
-
-    return () => clearInterval(timer);
-  }, [mode]);
-
-  useEffect(() => {
-    if (progress <= 0 && !skippedRef.current && mode === 'playback') {
-      skippedRef.current = true;
-      onSkip();
-    }
-  }, [progress, onSkip, mode]);
 
   if (!pos) return null;
 
@@ -202,7 +172,7 @@ export const ProactiveCard = ({
                 isPaused ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'
               }`}
             >
-              {Math.max(0, Math.ceil((progress / 100) * (DISCUSSION_AUTO_SKIP_MS / 1000)))}s
+              {remainingSeconds}s
             </span>
           </div>
 

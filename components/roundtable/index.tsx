@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useId } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Mic,
@@ -22,48 +22,37 @@ import {
 import { cn } from '@/lib/utils';
 import type { AudioIndicatorState } from './audio-indicator';
 import { CanvasToolbar } from '@/components/canvas/canvas-toolbar';
-import { useAudioRecorder } from '@/lib/hooks/use-audio-recorder';
+import { usePlaybackControls } from '@/components/canvas/use-playback-controls';
 import { useI18n } from '@/lib/hooks/use-i18n';
-import { toast } from 'sonner';
-import { useSettingsStore, PLAYBACK_SPEEDS } from '@/lib/store/settings';
-import { useModelCapabilities } from '@/lib/model-settings/use-model-settings';
-import { useASRAvailable } from '@/lib/hooks/use-asr-available';
+import { useSettingsStore } from '@/lib/store/settings';
 import { ProactiveCard } from '@/components/chat/proactive-card';
 import { PresentationSpeechOverlay } from '@/components/roundtable/presentation-speech-overlay';
 import { AvatarDisplay } from '@/components/ui/avatar-display';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
 import { DEFAULT_TEACHER_AVATAR, DEFAULT_USER_AVATAR } from '@/components/roundtable/constants';
+import {
+  useComposerController,
+  useUserMessageOverlay,
+  type MessageSendResult,
+} from '@/components/classroom/interaction/use-composer-controller';
+import {
+  useQueuedQuestionEffects,
+  type QueuedQuestionState,
+} from '@/components/classroom/interaction/use-queued-question-effects';
+import { useClassroomShortcuts } from '@/components/classroom/interaction/use-classroom-shortcuts';
+import { buildCaptionModel } from '@/lib/playback/caption-model';
 import type { DiscussionAction } from '@/lib/types/action';
 import type { EngineMode, PlaybackView } from '@/lib/playback';
 import type { Participant } from '@/lib/types/roundtable';
+
+export type { MessageSendResult, QueuedQuestionState };
 
 export interface DiscussionRequest {
   topic: string;
   prompt?: string;
   agentId?: string; // Agent ID to initiate discussion (default: 'default-1')
 }
-
-/**
- * A question sent mid-line that waits for the teacher to finish ("raised
- * hand"). The owner moves it from queued to delivered or cancelled; a
- * cancelled question's text goes back into the input, and so does a restored
- * one (left unsent by an earlier visit).
- */
-export interface QueuedQuestionState {
-  id: number;
-  text: string;
-  status: 'queued' | 'delivered' | 'cancelled' | 'restored';
-  /** What the teacher finishes before answering: the line (default) or another step. */
-  waitsFor?: 'sentence' | 'step';
-}
-
-/**
- * Outcome of onMessageSend: 'queued' — the question waits for the current line
- * (its bubble shows on delivery); 'blocked' — a question is already waiting, so
- * the text stays in the input; otherwise it was sent.
- */
-export type MessageSendResult = 'queued' | 'blocked' | void;
 
 interface RoundtableProps {
   readonly mode?: 'playback' | 'autonomous';
@@ -239,29 +228,80 @@ export function Roundtable({
   onCancelQueuedQuestion,
 }: RoundtableProps) {
   const { t } = useI18n();
-  const ttsMuted = useSettingsStore((s) => s.ttsMuted);
-  const setTTSMuted = useSettingsStore((s) => s.setTTSMuted);
-  // The workspace's tts and asr slots decide whether narration and speech
-  // input are available.
-  const ttsEnabled = !!useModelCapabilities().tts;
-  const asrEnabled = useASRAvailable();
   const chatAreaWidth = useSettingsStore((s) => s.chatAreaWidth);
-  const ttsVolume = useSettingsStore((s) => s.ttsVolume);
-  const setTTSVolume = useSettingsStore((s) => s.setTTSVolume);
-  const autoPlayLecture = useSettingsStore((s) => s.autoPlayLecture);
-  const setAutoPlayLecture = useSettingsStore((s) => s.setAutoPlayLecture);
-  const playbackSpeed = useSettingsStore((s) => s.playbackSpeed);
-  const setPlaybackSpeed = useSettingsStore((s) => s.setPlaybackSpeed);
-  const [isInputOpen, setIsInputOpen] = useState(false);
-  const [isVoiceOpen, setIsVoiceOpen] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const [userMessage, setUserMessage] = useState<string | null>(null);
   const nonPresentationInputRef = useRef<HTMLTextAreaElement>(null);
   const agentScrollRef = useRef<HTMLDivElement>(null);
   const bubbleScrollRef = useRef<HTMLDivElement>(null);
   const teacherAvatarRef = useRef<HTMLDivElement>(null);
   const studentAvatarRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const userMessageClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Separate participants by role
+  const teacherParticipant = initialParticipants.find((p) => p.role === 'teacher');
+  const studentParticipants = initialParticipants.filter(
+    (p) => p.role !== 'teacher' && p.role !== 'user',
+  );
+  const userParticipant = initialParticipants.find((p) => p.role === 'user');
+
+  const teacherAvatar = teacherParticipant?.avatar || DEFAULT_TEACHER_AVATAR;
+  const teacherName = teacherParticipant?.name || t('roundtable.teacher');
+  const userAvatar = userParticipant?.avatar || DEFAULT_USER_AVATAR;
+
+  // The "you asked" overlay over the current line, cleared once the answer starts
+  const { userMessage, showUserMessage } = useUserMessageOverlay({
+    hasAgentFeedback: Boolean(playbackView?.sourceText || thinkingState),
+  });
+
+  // Who speaks and what: role, name, text and the overlay-enriched view
+  const caption = buildCaptionModel({
+    playbackView,
+    participants: initialParticipants,
+    speakingAgentId,
+    currentSpeech,
+    lectureSpeech,
+    idleText,
+    playbackCompleted,
+    isStreaming,
+    sessionType,
+    thinkingState,
+    isCueUser,
+    isTopicPending,
+    isLivePaused: isDiscussionPaused,
+    userMessage,
+    names: {
+      teacher: t('roundtable.teacher'),
+      student: t('settings.agentRoles.student'),
+      user: t('roundtable.you'),
+    },
+    avatars: { agentFallback: userAvatar },
+  });
+  const {
+    role: bubbleRole,
+    activeRole,
+    key: bubbleKey,
+    text: sourceText,
+    isLoading: isBubbleLoading,
+    isAgentLoading,
+    isInLiveFlow,
+    speakingStudent,
+    view: enrichedPlaybackView,
+  } = caption;
+  // The roundtable always calls the learner "you"
+  const bubbleName = bubbleRole === 'user' ? t('roundtable.you') : caption.name;
+
+  // Draft, open input, voice and the send cooldown
+  const composer = useComposerController({
+    speakingAgentId,
+    isStreaming,
+    canSendMessage,
+    onMessageSend,
+    onUserMessage: showUserMessage,
+    onInputActivate,
+    onUserInputActivity,
+    onClearElementReference,
+  });
+  const { isInputOpen, isSendCooldown, voice } = composer;
+  const isVoiceOpen = voice.isOpen;
+  const asrEnabled = voice.available;
 
   useEffect(() => {
     if (isPresenting) return;
@@ -273,19 +313,43 @@ export function Roundtable({
       textarea.scrollHeight,
       NON_PRESENTATION_INPUT_MAX_HEIGHT_PX,
     )}px`;
-  }, [inputValue, isInputOpen, isPresenting]);
+  }, [composer.draft, isInputOpen, isPresenting]);
+
+  // Auto-scroll bubble: keep latest streaming text visible during live/discussion flow
+  useEffect(() => {
+    if (!isInLiveFlow) return;
+    const el = bubbleScrollRef.current;
+    if (!el) return;
+    const scrollableHeight = el.scrollHeight - el.clientHeight;
+    if (scrollableHeight <= 0) return;
+    el.scrollTo({ top: scrollableHeight, behavior: 'smooth' });
+  }, [sourceText, isInLiveFlow]);
 
   // End flash visible state (Issue 3)
   const [endFlashVisible, setEndFlashVisible] = useState(false);
+  useEffect(() => {
+    if (showEndFlash) {
+      setEndFlashVisible(true);
+      const timer = setTimeout(() => setEndFlashVisible(false), 1800);
+      return () => clearTimeout(timer);
+    } else {
+      setEndFlashVisible(false);
+    }
+  }, [showEndFlash]);
 
-  // Send cooldown: lock input from "message sent" until "agent bubble appears"
-  const [isSendCooldown, setIsSendCooldown] = useState(false);
-  const isSendCooldownRef = useRef(false);
-
-  const teacherParticipant = initialParticipants.find((p) => p.role === 'teacher');
-  const studentParticipants = initialParticipants.filter(
-    (p) => p.role !== 'teacher' && p.role !== 'user',
-  );
+  // The text-input toggle (either layout), where a delivered question hands a
+  // keyboard user so they can follow up
+  const textInputToggleRef = useRef<HTMLButtonElement>(null);
+  // Raised hand: delivered / cancelled / restored transitions, the live
+  // region and the focus handoff
+  const queued = useQueuedQuestionEffects({
+    queuedQuestion,
+    isSendCooldown,
+    isSendCoolingDown: composer.isSendCoolingDown,
+    onDelivered: showUserMessage,
+    onReturned: composer.restoreDraft,
+    focusTargetRef: textInputToggleRef,
+  });
 
   // Stable ref object for the current discussion agent's avatar
   const discussionAnchorRef = useRef<HTMLDivElement>(null);
@@ -304,338 +368,38 @@ export function Roundtable({
     }
   }, [discussionRequest, teacherParticipant?.id]);
 
-  // Derived state from Stage's computePlaybackView (centralised derivation)
-  const isInLiveFlow =
-    playbackView?.isInLiveFlow ??
-    !!(speakingAgentId || thinkingState || isStreaming || sessionType);
-
-  // Role-aware source text: userMessage overlay on top of playbackView
-  const sourceText = userMessage
-    ? userMessage
-    : (playbackView?.sourceText ??
-      (currentSpeech
-        ? currentSpeech
-        : isInLiveFlow
-          ? ''
-          : lectureSpeech || (playbackCompleted ? '' : idleText) || ''));
-  const hasAgentFeedback = Boolean(playbackView?.sourceText || thinkingState);
-  const prevHasAgentFeedbackRef = useRef(hasAgentFeedback);
-
-  const clearUserMessageClearTimer = useCallback(() => {
-    if (userMessageClearTimerRef.current) {
-      clearTimeout(userMessageClearTimerRef.current);
-      userMessageClearTimerRef.current = null;
-    }
-  }, []);
-
-  const scheduleUserMessageClear = useCallback(() => {
-    clearUserMessageClearTimer();
-    userMessageClearTimerRef.current = setTimeout(() => {
-      setUserMessage(null);
-      userMessageClearTimerRef.current = null;
-    }, 3000);
-  }, [clearUserMessageClearTimer]);
-
-  const showLocalUserMessage = useCallback(
-    (text: string) => {
-      setUserMessage(text);
-      // Mark as "already seen feedback" so that the immediate thinkingState
-      // transition (false→true) after user sends won't trigger the early-clear
-      // effect and swallow the user bubble.
-      prevHasAgentFeedbackRef.current = true;
-      scheduleUserMessageClear();
-    },
-    [scheduleUserMessageClear],
-  );
-
-  // Auto-scroll bubble: keep latest streaming text visible during live/discussion flow
-  useEffect(() => {
-    if (!isInLiveFlow) return;
-    const el = bubbleScrollRef.current;
-    if (!el) return;
-    const scrollableHeight = el.scrollHeight - el.clientHeight;
-    if (scrollableHeight <= 0) return;
-    el.scrollTo({ top: scrollableHeight, behavior: 'smooth' });
-  }, [sourceText, isInLiveFlow]);
-
-  // Clear user message early when agent starts responding
-  useEffect(() => {
-    const feedbackStarted = hasAgentFeedback && !prevHasAgentFeedbackRef.current;
-    if (userMessage && feedbackStarted) {
-      clearUserMessageClearTimer();
-      setUserMessage(null);
-    }
-    prevHasAgentFeedbackRef.current = hasAgentFeedback;
-  }, [clearUserMessageClearTimer, hasAgentFeedback, userMessage]);
-
-  useEffect(() => () => clearUserMessageClearTimer(), [clearUserMessageClearTimer]);
-
-  // End flash effect (Issue 3)
-  useEffect(() => {
-    if (showEndFlash) {
-      setEndFlashVisible(true);
-      const timer = setTimeout(() => setEndFlashVisible(false), 1800);
-      return () => clearTimeout(timer);
-    } else {
-      setEndFlashVisible(false);
-    }
-  }, [showEndFlash]);
-
-  // Clear send cooldown when agent bubble appears
-  useEffect(() => {
-    if (isSendCooldown && speakingAgentId) {
-      setIsSendCooldown(false);
-      isSendCooldownRef.current = false;
-    }
-  }, [isSendCooldown, speakingAgentId]);
-
-  // Safety net: clear cooldown when streaming transitions from active → ended
-  // (not when isStreaming was already false — that would clear cooldown immediately)
-  const prevStreamingRef = useRef(false);
-  useEffect(() => {
-    if (prevStreamingRef.current && !isStreaming && isSendCooldown) {
-      setIsSendCooldown(false);
-      isSendCooldownRef.current = false;
-    }
-    prevStreamingRef.current = !!isStreaming;
-  }, [isStreaming, isSendCooldown]);
-
-  // The raised-hand pill unmounts once its question goes out; focus on its
-  // Cancel would then fall to <body>. React detaches refs before removing
-  // nodes, so the detach still sees focus inside the pill.
-  const queuedQuestionStatusRef = useRef<HTMLSpanElement>(null);
-  const queuedQuestionPillNodeRef = useRef<HTMLDivElement | null>(null);
-  const queuedQuestionPillHadFocusRef = useRef(false);
-  const queuedQuestionPillRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node) {
-      queuedQuestionPillHadFocusRef.current = !!queuedQuestionPillNodeRef.current?.contains(
-        document.activeElement,
-      );
-    }
-    queuedQuestionPillNodeRef.current = node;
-  }, []);
-  // The text-input toggle (either layout), where a delivered question hands a
-  // keyboard user so they can follow up
-  const textInputToggleRef = useRef<HTMLButtonElement>(null);
-  // Set while the send cooldown hides that toggle at delivery
-  const focusTextToggleWhenShownRef = useRef(false);
-
-  // Raised-hand outcome (owner-driven): a delivered question shows its bubble
-  // now; a cancelled one goes back into the input so nothing typed is lost.
-  // Keyed by id + status so each transition runs once (not replayed on mount).
-  const handledQueuedQuestionRef = useRef(
-    queuedQuestion ? `${queuedQuestion.id}:${queuedQuestion.status}` : null,
-  );
-  useEffect(() => {
-    if (!queuedQuestion) return;
-    const key = `${queuedQuestion.id}:${queuedQuestion.status}`;
-    if (handledQueuedQuestionRef.current === key) return;
-    handledQueuedQuestionRef.current = key;
-    const pillHadFocus = queuedQuestionPillHadFocusRef.current;
-    queuedQuestionPillHadFocusRef.current = false;
-    focusTextToggleWhenShownRef.current = false;
-    if (queuedQuestion.status === 'delivered') {
-      showLocalUserMessage(queuedQuestion.text);
-      // Keep a keyboard user's place on Cancel: hand them to the text-input
-      // toggle to follow up — never opening the input, which would pause the
-      // live answer. The send cooldown hides it until the answer starts; the
-      // status, announcing the delivery, holds focus until then.
-      if (pillHadFocus) {
-        if (textInputToggleRef.current) {
-          textInputToggleRef.current.focus();
-        } else {
-          focusTextToggleWhenShownRef.current = isSendCooldownRef.current;
-          queuedQuestionStatusRef.current?.focus();
-        }
-      }
-    } else if (queuedQuestion.status === 'cancelled' || queuedQuestion.status === 'restored') {
-      // Back into the (reopened) input, which takes focus
-      setIsSendCooldown(false);
-      isSendCooldownRef.current = false;
-      setInputValue(queuedQuestion.text);
-      setIsVoiceOpen(false);
-      setIsInputOpen(true);
-    }
-  }, [queuedQuestion, showLocalUserMessage]);
-
-  // The cooldown ended: finish handing focus to the text-input toggle, unless
-  // the user has moved on meanwhile
-  useEffect(() => {
-    if (isSendCooldown || !focusTextToggleWhenShownRef.current) return;
-    focusTextToggleWhenShownRef.current = false;
-    const active = document.activeElement;
-    if (active && active !== document.body && active !== queuedQuestionStatusRef.current) return;
-    textInputToggleRef.current?.focus();
-  }, [isSendCooldown]);
-
-  // Separate participants by role (teacherParticipant & studentParticipants declared earlier for effect)
-  const userParticipant = initialParticipants.find((p) => p.role === 'user');
-
-  const teacherAvatar = teacherParticipant?.avatar || DEFAULT_TEACHER_AVATAR;
-  const teacherName = teacherParticipant?.name || t('roundtable.teacher');
-  const userAvatar = userParticipant?.avatar || DEFAULT_USER_AVATAR;
-
-  // Audio recording
-  const { isRecording, isProcessing, startRecording, stopRecording, cancelRecording } =
-    useAudioRecorder({
-      onTranscription: (text) => {
-        if (!text.trim()) {
-          toast.info(t('roundtable.noSpeechDetected'));
-          setIsVoiceOpen(false);
-          return;
-        }
-        // Block if in send cooldown (e.g. text was sent while voice was processing)
-        if (isSendCooldownRef.current) {
-          setIsVoiceOpen(false);
-          return;
-        }
-        if (canSendMessage?.() === false) {
-          setInputValue(text);
-          setIsInputOpen(true);
-          setIsVoiceOpen(false);
-          return;
-        }
-        const result = onMessageSend?.(text);
-        if (result === 'blocked') {
-          // Another question is already waiting — keep this one editable
-          setInputValue(text);
-          setIsInputOpen(true);
-          setIsVoiceOpen(false);
-          return;
-        }
-        // A queued question shows its bubble once it is delivered
-        if (result !== 'queued') showLocalUserMessage(text);
-        setIsSendCooldown(true);
-        isSendCooldownRef.current = true;
-        setIsVoiceOpen(false);
-      },
-      onError: (error) => {
-        toast.error(error);
-        setIsVoiceOpen(false);
-      },
-    });
-
-  const handleSendMessage = () => {
-    if (!inputValue.trim() || isSendCooldown || canSendMessage?.() === false) return;
-
-    const result = onMessageSend?.(inputValue);
-    // Another question is already waiting — keep this one in the input
-    if (result === 'blocked') return;
-    // A queued question shows its bubble once it is delivered (the teacher's
-    // current line stays visible meanwhile)
-    if (result !== 'queued') showLocalUserMessage(inputValue);
-    setIsSendCooldown(true);
-    isSendCooldownRef.current = true;
-    setInputValue('');
-    setIsInputOpen(false);
-  };
-
-  const handleToggleInput = () => {
-    if (isSendCooldown) return;
-    if (!isInputOpen) {
-      onInputActivate?.('text');
-    }
-    setIsInputOpen(!isInputOpen);
-    // Cancel any in-flight ASR to prevent ghost auto-sends
-    if (isVoiceOpen || isProcessing) {
-      cancelRecording();
-      setIsVoiceOpen(false);
-    }
-  };
-
-  const handleToggleVoice = () => {
-    if (isVoiceOpen) {
-      if (isRecording) {
-        stopRecording();
-      }
-      setIsVoiceOpen(false);
-    } else {
-      if (isSendCooldown || isProcessing) return;
-      onInputActivate?.('voice');
-      onUserInputActivity?.('recording_start');
-      setIsVoiceOpen(true);
-      setIsInputOpen(false);
-      startRecording();
-    }
-  };
+  // Volume, mute, speed, auto-play, the stop control and the primary play action
+  const controls = usePlaybackControls({
+    engineMode,
+    sessionType,
+    isTopicPending,
+    isInLiveFlow,
+    isLivePaused: isDiscussionPaused,
+    // Don't allow pause during thinking or before text arrives
+    canPauseLive: !thinkingState && !!currentSpeech,
+    onResumeTopic,
+    onLivePause: onDiscussionPause,
+    onLiveResume: onDiscussionResume,
+    onPlayPause,
+  });
 
   const handleContinueSoftClosing = () => {
     onContinueDiscussion?.();
-    setIsVoiceOpen(false);
-    setIsInputOpen(true);
+    composer.openTextInput();
   };
 
   // Keyboard shortcuts for roundtable interaction (#255)
-  // T = toggle text input, V = toggle voice input, Escape = dismiss panels,
-  // Space = discussion pause/resume (during live flow)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Escape should always work, even when typing in an input
-      if (e.key === 'Escape') {
-        if (isInputOpen || isVoiceOpen) {
-          e.preventDefault();
-          e.stopPropagation(); // Prevent fullscreen exit when panels are open
-          setIsInputOpen(false);
-          setIsVoiceOpen(false);
-          if (isRecording || isProcessing) cancelRecording();
-        }
-        return;
-      }
-
-      // Skip other shortcuts when user is typing in an input, textarea, or contentEditable
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) {
-        return;
-      }
-
-      switch (e.key) {
-        case ' ':
-        case 'Spacebar':
-          // Only handle during live flow (QA/Discussion)
-          if (!isInLiveFlow) return;
-          e.preventDefault(); // Prevent page scroll
-          if (isDiscussionPaused) {
-            onDiscussionResume?.();
-          } else if (!thinkingState && currentSpeech) {
-            // Same guard as bubble click: don't pause during thinking or before text arrives
-            onDiscussionPause?.();
-          }
-          break;
-
-        case 't':
-        case 'T':
-          e.preventDefault();
-          handleToggleInput();
-          break;
-
-        case 'v':
-        case 'V':
-          e.preventDefault();
-          if (asrEnabled) handleToggleVoice();
-          break;
-
-        default:
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
+  useClassroomShortcuts({
+    isComposerOpen: isInputOpen || isVoiceOpen,
+    onDismiss: composer.dismiss,
     isInLiveFlow,
-    isDiscussionPaused,
-    thinkingState,
-    currentSpeech,
-    onDiscussionPause,
-    onDiscussionResume,
-    asrEnabled,
-    isInputOpen,
-    isVoiceOpen,
-    isRecording,
-    isProcessing,
-  ]);
+    onToggleLivePause: controls.toggleLivePause,
+    focusComposer: composer.toggleInput,
+    toggleVoice: voice.toggle,
+    canUseVoice: asrEnabled,
+  });
 
-  const isPresentationInteractionActive = isInputOpen || isVoiceOpen || isRecording || isProcessing;
+  const isPresentationInteractionActive = composer.isActive;
 
   useEffect(() => {
     onPresentationInteractionChange?.(isPresentationInteractionActive);
@@ -646,97 +410,6 @@ export function Roundtable({
       }
     };
   }, [isPresentationInteractionActive, onPresentationInteractionChange]);
-
-  // Determine active speaking state and bubble ownership
-  // Check if current speaker is a student agent (not teacher)
-  const speakingStudent = speakingAgentId
-    ? studentParticipants.find((s) => s.id === speakingAgentId)
-    : null;
-
-  // Bubble loading: speakingAgentId is set (agent_start fired) but text hasn't arrived yet
-  const isBubbleLoading = !!(speakingAgentId && !currentSpeech && !userMessage);
-  // Student agent specifically loading (for agent-style bubble)
-  const isAgentLoading = !!(speakingStudent && !currentSpeech && !userMessage);
-
-  const activeRole: 'teacher' | 'user' | 'agent' | null = userMessage
-    ? 'user'
-    : (playbackView?.activeRole ??
-      (currentSpeech && speakingStudent
-        ? 'agent'
-        : currentSpeech
-          ? 'teacher'
-          : isAgentLoading
-            ? 'agent'
-            : isBubbleLoading
-              ? 'teacher'
-              : isCueUser
-                ? null
-                : lectureSpeech
-                  ? 'teacher'
-                  : null));
-
-  const bubbleRole: 'teacher' | 'user' | 'agent' | null = userMessage
-    ? 'user'
-    : (playbackView?.bubbleRole ??
-      (currentSpeech && speakingStudent
-        ? 'agent'
-        : currentSpeech
-          ? 'teacher'
-          : isAgentLoading
-            ? 'agent'
-            : isBubbleLoading
-              ? 'teacher'
-              : isInLiveFlow
-                ? null
-                : isCueUser
-                  ? null
-                  : lectureSpeech || idleText
-                    ? 'teacher'
-                    : null));
-
-  const bubbleName =
-    bubbleRole === 'agent'
-      ? speakingStudent?.name || t('settings.agentRoles.student')
-      : bubbleRole === 'teacher'
-        ? teacherName
-        : bubbleRole === 'user'
-          ? t('roundtable.you')
-          : '';
-
-  // Stable key based on speaker identity, NOT text content (prevents re-mount flicker)
-  const bubbleKey =
-    bubbleRole === 'user'
-      ? 'user'
-      : bubbleRole === 'agent'
-        ? `agent-${speakingAgentId}`
-        : bubbleRole === 'teacher'
-          ? 'teacher'
-          : 'idle';
-
-  // Enriched playbackView that includes userMessage overlay for bubbleRole/sourceText
-  const enrichedPlaybackView: PlaybackView = playbackView
-    ? { ...playbackView, bubbleRole, sourceText, activeRole: activeRole ?? playbackView.activeRole }
-    : {
-        phase: 'idle' as const,
-        sourceText,
-        bubbleRole,
-        activeRole,
-        buttonState: 'none' as const,
-        isInLiveFlow: false,
-        isTopicActive: false,
-      };
-
-  // Show stop button whenever there's an active QA/discussion session or live mode.
-  // sessionType is only cleared in doSessionCleanup, so this stays stable through
-  // brief loading gaps (e.g. between user message and agent SSE response).
-  const showStopButton =
-    engineMode === 'live' || sessionType === 'qa' || sessionType === 'discussion';
-
-  const handleCycleSpeed = useCallback(() => {
-    const currentIndex = PLAYBACK_SPEEDS.indexOf(playbackSpeed as (typeof PLAYBACK_SPEEDS)[number]);
-    const nextIndex = (currentIndex + 1) % PLAYBACK_SPEEDS.length;
-    setPlaybackSpeed(PLAYBACK_SPEEDS[nextIndex]);
-  }, [playbackSpeed, setPlaybackSpeed]);
 
   // Intentionally non-reactive: agent metadata is treated as immutable during a classroom session.
   const agentRegistry = useAgentRegistry.getState();
@@ -751,39 +424,8 @@ export function Roundtable({
     ? getAgentConfig(discussionRequest.agentId || '')
     : null;
 
-  const handlePresentationBubbleClick = useCallback(() => {
-    if (isTopicPending) {
-      onResumeTopic?.();
-      return;
-    }
-    if (isInLiveFlow) {
-      if (isDiscussionPaused) {
-        onDiscussionResume?.();
-      } else if (!thinkingState && currentSpeech) {
-        onDiscussionPause?.();
-      }
-      return;
-    }
-    onPlayPause?.();
-  }, [
-    isTopicPending,
-    isInLiveFlow,
-    isDiscussionPaused,
-    thinkingState,
-    currentSpeech,
-    onResumeTopic,
-    onDiscussionResume,
-    onDiscussionPause,
-    onPlayPause,
-  ]);
   const showPresentationDock =
-    !!controlsVisible ||
-    !!discussionRequest ||
-    isCueUser ||
-    isInputOpen ||
-    isVoiceOpen ||
-    isRecording ||
-    isProcessing;
+    !!controlsVisible || !!discussionRequest || isCueUser || isPresentationInteractionActive;
   const toolbar = (
     <CanvasToolbar
       className="shrink-0 h-8 px-3 border-b border-gray-100/40 dark:border-gray-700/30"
@@ -810,18 +452,18 @@ export function Roundtable({
       onWhiteboardClose={onWhiteboardClose ?? (() => {})}
       isPresenting={isPresenting}
       onTogglePresentation={onTogglePresentation}
-      showStopDiscussion={showStopButton}
+      showStopDiscussion={controls.showStop}
       onStopDiscussion={onStopDiscussion}
       onContinueDiscussion={handleContinueSoftClosing}
-      ttsEnabled={ttsEnabled}
-      ttsMuted={ttsMuted}
-      ttsVolume={ttsVolume}
-      onToggleMute={() => ttsEnabled && setTTSMuted(!ttsMuted)}
-      onVolumeChange={(v) => setTTSVolume(v)}
-      autoPlayLecture={autoPlayLecture}
-      onToggleAutoPlay={() => setAutoPlayLecture(!autoPlayLecture)}
-      playbackSpeed={playbackSpeed}
-      onCycleSpeed={handleCycleSpeed}
+      ttsEnabled={controls.ttsEnabled}
+      ttsMuted={controls.ttsMuted}
+      ttsVolume={controls.ttsVolume}
+      onToggleMute={controls.toggleMute}
+      onVolumeChange={controls.setTTSVolume}
+      autoPlayLecture={controls.autoPlayLecture}
+      onToggleAutoPlay={controls.toggleAutoPlay}
+      playbackSpeed={controls.playbackSpeed}
+      onCycleSpeed={controls.cycleSpeed}
       showElementReference={showElementReference}
       canPickSlideElement={canPickSlideElement}
       elementPickActive={elementPickActive}
@@ -843,7 +485,7 @@ export function Roundtable({
       </span>
       <button
         type="button"
-        onClick={onClearElementReference}
+        onClick={composer.clearReference}
         className="-mr-1 rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
         aria-label={t('chat.elementReference.clear')}
       >
@@ -854,71 +496,56 @@ export function Roundtable({
   // Raised hand: a sent question waiting for the teacher to finish the line
   // (or, when no line is playing, the current step)
   const queuedStatusId = useId();
-  const isQuestionQueued = queuedQuestion?.status === 'queued';
-  const queuedLabel = t(
-    queuedQuestion?.waitsFor === 'step'
-      ? 'roundtable.handRaisedQueuedStep'
-      : 'roundtable.handRaisedQueued',
-  );
   // Always mounted: a live region that appears together with its text is
   // often not announced. Also where focus lands if the pill unmounts under it.
   const queuedQuestionLiveRegion = (
-    <span
-      ref={queuedQuestionStatusRef}
-      role="status"
-      aria-live="polite"
-      tabIndex={-1}
-      className="sr-only"
-    >
-      {isQuestionQueued
-        ? queuedLabel
-        : queuedQuestion?.status === 'delivered'
-          ? t('roundtable.handRaisedDelivered')
-          : ''}
+    <span ref={queued.statusRef} role="status" aria-live="polite" tabIndex={-1} className="sr-only">
+      {queued.liveText}
     </span>
   );
   // The pill never outgrows its container and only the texts truncate — the
   // question gets what the status label leaves — so Cancel stays visible
   // however long the translated label is.
-  const queuedQuestionIndicator = isQuestionQueued ? (
-    <div
-      ref={queuedQuestionPillRef}
-      data-testid="roundtable-queued-question"
-      className="pointer-events-auto flex max-w-[min(520px,calc(100vw-3rem),100%)] items-center gap-2 rounded-full border border-amber-300 bg-white/95 px-3 py-1.5 text-xs shadow-lg backdrop-blur dark:border-amber-600 dark:bg-gray-900/95"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <Hand
-        aria-hidden="true"
-        className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
-      />
-      <span
-        id={queuedStatusId}
-        className="min-w-0 truncate font-semibold text-amber-700 dark:text-amber-300"
-        title={queuedLabel}
+  const queuedQuestionIndicator =
+    queued.isQueued && queuedQuestion ? (
+      <div
+        ref={queued.pillRef}
+        data-testid="roundtable-queued-question"
+        className="pointer-events-auto flex max-w-[min(520px,calc(100vw-3rem),100%)] items-center gap-2 rounded-full border border-amber-300 bg-white/95 px-3 py-1.5 text-xs shadow-lg backdrop-blur dark:border-amber-600 dark:bg-gray-900/95"
+        onClick={(event) => event.stopPropagation()}
       >
-        {queuedLabel}
-      </span>
-      <span
-        className="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300"
-        title={queuedQuestion.text}
-      >
-        {queuedQuestion.text}
-      </span>
-      <button
-        type="button"
-        aria-describedby={queuedStatusId}
-        onClick={onCancelQueuedQuestion}
-        onKeyDown={(event) => {
-          // Keep Space/Enter on this button: the window shortcut treats Space
-          // as play/pause, which would deliver the question instead
-          if (event.key === ' ' || event.key === 'Enter') event.stopPropagation();
-        }}
-        className="-mr-1 shrink-0 rounded-full px-2 py-0.5 font-semibold text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/30"
-      >
-        {t('roundtable.cancelQueuedQuestion')}
-      </button>
-    </div>
-  ) : null;
+        <Hand
+          aria-hidden="true"
+          className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+        />
+        <span
+          id={queuedStatusId}
+          className="min-w-0 truncate font-semibold text-amber-700 dark:text-amber-300"
+          title={queued.label}
+        >
+          {queued.label}
+        </span>
+        <span
+          className="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300"
+          title={queuedQuestion.text}
+        >
+          {queuedQuestion.text}
+        </span>
+        <button
+          type="button"
+          aria-describedby={queuedStatusId}
+          onClick={onCancelQueuedQuestion}
+          onKeyDown={(event) => {
+            // Keep Space/Enter on this button: the window shortcut treats Space
+            // as play/pause, which would deliver the question instead
+            if (event.key === ' ' || event.key === 'Enter') event.stopPropagation();
+          }}
+          className="-mr-1 shrink-0 rounded-full px-2 py-0.5 font-semibold text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/30"
+        >
+          {t('roundtable.cancelQueuedQuestion')}
+        </button>
+      </div>
+    ) : null;
 
   if (isPresenting) {
     return (
@@ -931,7 +558,7 @@ export function Roundtable({
           speakingAgentId={speakingAgentId ?? null}
           isTopicPending={!!isTopicPending}
           side="left"
-          onBubbleClick={handlePresentationBubbleClick}
+          onBubbleClick={controls.primaryAction}
           audioIndicatorState={audioIndicatorState ?? 'idle'}
           buttonState={enrichedPlaybackView?.buttonState}
           isPaused={isDiscussionPaused || engineMode === 'paused'}
@@ -942,9 +569,9 @@ export function Roundtable({
           <div
             className="fixed top-[var(--desktop-titlebar-height)] left-0 right-0 bottom-14 z-[45] pointer-events-auto"
             onClick={() => {
-              setIsInputOpen(false);
-              setIsVoiceOpen(false);
-              cancelRecording();
+              composer.setInputOpen(false);
+              voice.setOpen(false);
+              voice.cancelRecording();
             }}
           />
         )}
@@ -1010,16 +637,7 @@ export function Roundtable({
                 <div className="flex items-center gap-3 bg-white/70 dark:bg-black/60 backdrop-blur-xl rounded-full px-4 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-gray-200/60 dark:border-white/10">
                   <div className="flex-1 min-w-0 flex items-center">
                     <textarea
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onBeforeInput={() => onUserInputActivity?.('text_input')}
-                      onCompositionStart={() => onUserInputActivity?.('composition_start')}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
+                      {...composer.textareaProps}
                       placeholder={t('roundtable.inputPlaceholder')}
                       autoFocus
                       rows={1}
@@ -1028,7 +646,7 @@ export function Roundtable({
                     />
                   </div>
                   <button
-                    onClick={handleSendMessage}
+                    onClick={composer.send}
                     disabled={isSendCooldown}
                     className={cn(
                       'w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0',
@@ -1064,16 +682,18 @@ export function Roundtable({
                     <VoiceWaveformBars barClassName="bg-gradient-to-t from-purple-400 to-indigo-400" />
                   </div>
                   <span className="text-[11px] font-semibold tracking-wider text-purple-600 dark:text-purple-300 uppercase">
-                    {isProcessing ? t('roundtable.processing') : t('roundtable.listening')}
+                    {voice.isProcessing ? t('roundtable.processing') : t('roundtable.listening')}
                   </span>
                   {/* Mic button */}
                   <button
                     type="button"
                     aria-label={
-                      isRecording ? t('roundtable.stopRecording') : t('roundtable.startRecording')
+                      voice.isRecording
+                        ? t('roundtable.stopRecording')
+                        : t('roundtable.startRecording')
                     }
                     className="relative group cursor-pointer bg-transparent border-none p-0"
-                    onClick={handleToggleVoice}
+                    onClick={voice.toggle}
                   >
                     <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 shadow-[0_4px_20px_rgba(147,51,234,0.3)] flex items-center justify-center group-hover:scale-105 transition-transform duration-300 border border-white/20">
                       <Mic className="w-5 h-5 text-white" />
@@ -1097,7 +717,7 @@ export function Roundtable({
                 className="pointer-events-auto"
               >
                 <button
-                  onClick={() => (asrEnabled ? handleToggleVoice() : handleToggleInput())}
+                  onClick={() => (asrEnabled ? voice.toggle() : composer.toggleInput())}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/70 dark:bg-black/50 backdrop-blur-xl border border-amber-400/50 dark:border-amber-500/50 shadow-[0_0_16px_rgba(245,158,11,0.2),0_8px_32px_rgba(0,0,0,0.06)] dark:shadow-[0_0_16px_rgba(245,158,11,0.25),0_8px_32px_rgba(0,0,0,0.4)] text-amber-600 dark:text-amber-400 text-sm font-semibold tracking-wide hover:bg-gray-100/80 dark:hover:bg-black/60 hover:border-amber-500/70 dark:hover:border-amber-400/70 hover:shadow-[0_0_24px_rgba(245,158,11,0.25)] dark:hover:shadow-[0_0_24px_rgba(245,158,11,0.35)] transition-all active:scale-95 animate-pulse"
                 >
                   {asrEnabled ? <Mic className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
@@ -1147,7 +767,7 @@ export function Roundtable({
             isTopicPending={!!isTopicPending}
             userAvatar={userAvatar}
             side="right"
-            onBubbleClick={handlePresentationBubbleClick}
+            onBubbleClick={controls.primaryAction}
             audioIndicatorState={audioIndicatorState ?? 'idle'}
             buttonState={enrichedPlaybackView?.buttonState}
             isPaused={isDiscussionPaused || engineMode === 'paused'}
@@ -1227,7 +847,7 @@ export function Roundtable({
                         }
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (asrEnabled) handleToggleVoice();
+                          if (asrEnabled) voice.toggle();
                         }}
                         disabled={!asrEnabled}
                         className={cn(
@@ -1246,7 +866,7 @@ export function Roundtable({
                         aria-label={t('roundtable.textInput')}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleToggleInput();
+                          composer.toggleInput();
                         }}
                         className={cn(
                           'w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-95',
@@ -1266,7 +886,7 @@ export function Roundtable({
                     className="relative group cursor-pointer shrink-0 bg-transparent border-none p-0"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleToggleInput();
+                      composer.toggleInput();
                     }}
                   >
                     <div
@@ -1503,11 +1123,7 @@ export function Roundtable({
           <div
             data-testid="roundtable-non-presentation-card"
             onClick={() => {
-              if (isInputOpen || isVoiceOpen) {
-                setIsInputOpen(false);
-                setIsVoiceOpen(false);
-                if (isRecording || isProcessing) cancelRecording();
-              }
+              if (isInputOpen || isVoiceOpen) composer.dismiss();
             }}
             className="relative w-full h-full rounded-[2.5rem] bg-gradient-to-b from-white/40 to-white/80 dark:from-gray-800/40 dark:to-gray-800/80 backdrop-blur-xl border border-white/50 dark:border-gray-700/50 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05),inset_0_1px_0_0_rgba(255,255,255,0.9)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex flex-col justify-center px-6 overflow-hidden group transition-all duration-700 cursor-default"
           >
@@ -1544,16 +1160,7 @@ export function Roundtable({
                     <div className="pl-4 flex-1 py-1 min-w-0">
                       <textarea
                         ref={nonPresentationInputRef}
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        onBeforeInput={() => onUserInputActivity?.('text_input')}
-                        onCompositionStart={() => onUserInputActivity?.('composition_start')}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                            e.preventDefault();
-                            handleSendMessage();
-                          }
-                        }}
+                        {...composer.textareaProps}
                         placeholder={t('roundtable.inputPlaceholder')}
                         autoFocus
                         rows={1}
@@ -1561,7 +1168,7 @@ export function Roundtable({
                       />
                     </div>
                     <button
-                      onClick={handleSendMessage}
+                      onClick={composer.send}
                       disabled={isSendCooldown}
                       className={cn(
                         'p-2.5 text-white rounded-xl transition shadow-md mb-0.5 shrink-0',
@@ -1604,13 +1211,13 @@ export function Roundtable({
                       animate={{ opacity: 1, x: 0 }}
                       className="text-[10px] font-bold tracking-widest text-purple-600 dark:text-purple-400 uppercase bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm px-2 py-0.5 rounded-full shadow-sm border border-purple-100/50 dark:border-purple-800/50 mr-1"
                     >
-                      {isProcessing ? t('roundtable.processing') : t('roundtable.listening')}
+                      {voice.isProcessing ? t('roundtable.processing') : t('roundtable.listening')}
                     </motion.div>
                   </div>
 
                   <div
                     className="pointer-events-auto relative group cursor-pointer"
-                    onClick={handleToggleVoice}
+                    onClick={voice.toggle}
                   >
                     <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 dark:from-purple-500 dark:to-indigo-600 shadow-[0_4px_20px_rgba(147,51,234,0.3)] flex items-center justify-center z-20 group-hover:scale-105 transition-transform duration-300 border border-white/20 dark:border-white/10">
                       <Mic className="w-6 h-6 text-white" />
@@ -1726,8 +1333,8 @@ export function Roundtable({
                     <motion.button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (asrEnabled) handleToggleVoice();
-                        else handleToggleInput();
+                        if (asrEnabled) voice.toggle();
+                        else composer.toggleInput();
                       }}
                       animate={{ scale: [1, 1.05, 1] }}
                       transition={{
@@ -1837,23 +1444,9 @@ export function Roundtable({
                       onClick={(e) => {
                         e.stopPropagation();
                         if (bubbleRole === 'user') return;
-                        // Topic pending: click Play to resume
-                        if (isTopicPending) {
-                          onResumeTopic?.();
-                          return;
-                        }
-                        // QA/Discussion: buffer-level pause/resume (freeze text reveal, SSE continues)
-                        if (isInLiveFlow) {
-                          if (isDiscussionPaused) {
-                            onDiscussionResume?.();
-                          } else if (!thinkingState && currentSpeech) {
-                            // Don't allow pause during thinking or before text arrives
-                            onDiscussionPause?.();
-                          }
-                          return;
-                        }
-                        // Lecture playback: toggle play/pause
-                        onPlayPause?.();
+                        // Resume a pending topic, else pause/resume the live
+                        // answer, else play/pause the lecture
+                        controls.primaryAction();
                       }}
                       className={cn(
                         'relative px-4 pt-2 pb-3 rounded-2xl text-[15px] leading-relaxed transition-all border w-[min(420px,calc(100%-3rem))] group/bubble flex flex-col max-h-[110px]',
@@ -1869,37 +1462,26 @@ export function Roundtable({
                             : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-bl-sm shadow-sm hover:shadow-md cursor-pointer',
                       )}
                     >
-                      {bubbleRole &&
-                        (() => {
-                          const bubbleAvatar =
+                      <div
+                        className={cn(
+                          'absolute -top-2.5 z-20 pointer-events-none select-none',
+                          bubbleRole === 'teacher' ? '-left-2.5' : '-right-2.5',
+                        )}
+                        title={bubbleName}
+                      >
+                        <div
+                          className={cn(
+                            'w-6 h-6 rounded-full overflow-hidden border-2 shadow-sm',
                             bubbleRole === 'user'
-                              ? userAvatar
+                              ? 'border-purple-400 dark:border-purple-500'
                               : bubbleRole === 'agent'
-                                ? speakingStudent?.avatar || userAvatar
-                                : teacherAvatar;
-                          return (
-                            <div
-                              className={cn(
-                                'absolute -top-2.5 z-20 pointer-events-none select-none',
-                                bubbleRole === 'teacher' ? '-left-2.5' : '-right-2.5',
-                              )}
-                              title={bubbleName}
-                            >
-                              <div
-                                className={cn(
-                                  'w-6 h-6 rounded-full overflow-hidden border-2 shadow-sm',
-                                  bubbleRole === 'user'
-                                    ? 'border-purple-400 dark:border-purple-500'
-                                    : bubbleRole === 'agent'
-                                      ? 'border-blue-300 dark:border-blue-600'
-                                      : 'border-purple-200 dark:border-purple-700',
-                                )}
-                              >
-                                <AvatarDisplay src={bubbleAvatar} alt={bubbleName} />
-                              </div>
-                            </div>
-                          );
-                        })()}
+                                ? 'border-blue-300 dark:border-blue-600'
+                                : 'border-purple-200 dark:border-purple-700',
+                          )}
+                        >
+                          <AvatarDisplay src={caption.avatar} alt={bubbleName} />
+                        </div>
+                      </div>
 
                       <div ref={bubbleScrollRef} className="overflow-y-auto scrollbar-hide">
                         {/* Agent name + audio indicator header */}
@@ -2287,7 +1869,7 @@ export function Roundtable({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (asrEnabled) handleToggleVoice();
+                      if (asrEnabled) voice.toggle();
                     }}
                     disabled={!asrEnabled}
                     className={cn(
@@ -2310,7 +1892,7 @@ export function Roundtable({
                     aria-label={t('roundtable.textInput')}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleToggleInput();
+                      composer.toggleInput();
                     }}
                     className={cn(
                       'w-8 h-8 rounded-full border flex items-center justify-center transition-all active:scale-95 shadow-sm',
@@ -2330,7 +1912,7 @@ export function Roundtable({
               className="relative group cursor-pointer shrink-0"
               onClick={(e) => {
                 e.stopPropagation();
-                handleToggleInput();
+                composer.toggleInput();
               }}
             >
               <div

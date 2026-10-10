@@ -21,11 +21,10 @@ import { useI18n } from '@/lib/hooks/use-i18n';
 import { SceneSidebar } from '@/components/stage/scene-sidebar';
 import { Header } from '@/components/header';
 import { CanvasArea } from '@/components/canvas/canvas-area';
-import {
-  Roundtable,
-  type MessageSendResult,
-  type QueuedQuestionState,
-} from '@/components/roundtable';
+import { Roundtable } from '@/components/roundtable';
+import type { MessageSendResult } from '@/components/classroom/interaction/use-composer-controller';
+import type { QueuedQuestionState } from '@/components/classroom/interaction/use-queued-question-effects';
+import { getStopControl } from '@/components/canvas/use-playback-controls';
 import { PlaybackEngine, computePlaybackView, shouldAutoResumeLecture } from '@/lib/playback';
 import type { EngineMode, TriggerEvent, Effect } from '@/lib/playback';
 import {
@@ -1861,8 +1860,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             break;
           case ' ':
           case 'Spacebar':
-            // During active QA/discussion, Roundtable owns Space for
-            // buffer-level pause/resume — don't also fire engine play/pause.
+            // During active QA/discussion, the classroom shortcuts
+            // (useClassroomShortcuts) own Space for buffer-level
+            // pause/resume — don't also fire engine play/pause.
             if (chatSessionType === 'qa' || chatSessionType === 'discussion') break;
             event.preventDefault();
             handlePlayPause();
@@ -2048,11 +2048,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               onWhiteboardClose={handleWhiteboardToggle}
               isPresenting={isPresenting}
               onTogglePresentation={togglePresentation}
-              showStopDiscussion={
-                engineMode === 'live' ||
-                ((chatIsStreaming || chatIsSoftClosing) &&
-                  (chatSessionType === 'qa' || chatSessionType === 'discussion'))
-              }
+              showStopDiscussion={getStopControl({ engineMode, sessionType: chatSessionType }).show}
               onStopDiscussion={handleStopDiscussion}
               onContinueDiscussion={handleContinueDiscussion}
               showElementReference={showElementReference}

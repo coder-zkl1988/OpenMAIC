@@ -209,7 +209,12 @@ describe('Roundtable raised hand (queued question)', () => {
     await setQueued('delivered');
     expect(indicator()).toBeNull();
     expect(bubbleText()).toContain(QUESTION);
-    expect(container.querySelector('textarea')?.value ?? '').toBe('');
+    // The closed input fades out on animation frames, still showing the sent
+    // text until its exit ends: wait for it rather than for a set render count
+    await vi.waitFor(async () => {
+      await act(() => new Promise((resolve) => setTimeout(resolve, 16)));
+      expect(container.querySelector('textarea')?.value ?? '').toBe('');
+    });
   });
 
   it('hands a user on Cancel to the text-input toggle when the question is delivered', async () => {
