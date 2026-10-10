@@ -210,9 +210,11 @@ test('fullscreen: the PiP floats top left, clear of the board card and the teach
 
   // The dock's teacher line sits bottom left (bottom-6 left-6) and the dock
   // bottom right, so the PiP takes the top-left corner in a strip of its own
-  const column = (await page.getByTestId('stage-column').boundingBox())!;
+  // Measured inside the poll: entering fullscreen collapses the side panels,
+  // so the column itself moves after the dock appears
   await expect
     .poll(async () => {
+      const column = (await page.getByTestId('stage-column').boundingBox())!;
       const box = (await pip(page).boundingBox())!;
       return [Math.round(box.x - column.x), Math.round(box.y - column.y)];
     })

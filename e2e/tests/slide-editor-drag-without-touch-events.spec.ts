@@ -101,12 +101,15 @@ test.describe('Slide editor without the TouchEvent global (desktop Safari)', () 
     // Select, then drag the selected element.
     await page.mouse.click(start.x + start.width / 2, start.y + start.height / 2);
     await dragBy(page, start.x + start.width / 2, start.y + start.height / 2, 120, 60);
+    // Positions snap to whole slide units, so at a canvas scale above 1 the
+    // element can land up to a pixel short of the pointer
     await expect
       .poll(async () => {
         const box = await shape.boundingBox();
-        return box && { dx: Math.round(box.x - start.x), dy: Math.round(box.y - start.y) };
+        if (!box) return false;
+        return Math.abs(box.x - start.x - 120) <= 1 && Math.abs(box.y - start.y - 60) <= 1;
       })
-      .toEqual({ dx: 120, dy: 60 });
+      .toBe(true);
 
     // Resize from the bottom-right handle of the selection.
     const moved = await shape.boundingBox();
