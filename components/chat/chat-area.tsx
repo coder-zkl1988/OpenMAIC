@@ -76,6 +76,11 @@ interface ChatAreaProps {
    * the shell drops a live recording, which would otherwise go on unseen
    */
   onFooterHidden?: () => void;
+  /**
+   * `touch` (tablet and narrower, TabletLandscape.dc.html): a 52px tab row
+   * of 44px targets and no drag-resize (the host fixes the width at 320)
+   */
+  density?: 'default' | 'touch';
 }
 
 /**
@@ -144,10 +149,12 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       footer,
       streamTrailing,
       onFooterHidden,
+      density = 'default',
     },
     ref,
   ) => {
     const { t } = useI18n();
+    const touch = density === 'touch';
     const scenes = useStageStore((s) => s.scenes);
     const {
       sessions,
@@ -335,8 +342,8 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
           className,
         )}
       >
-        {/* Drag handle */}
-        {!collapsed && (
+        {/* Drag handle (desktop only) */}
+        {!collapsed && !touch && (
           <div
             onMouseDown={handleDragStart}
             className="absolute left-0 top-0 bottom-0 z-50 w-1.5 cursor-col-resize group transition-colors hover:bg-accent-line/40 active:bg-accent-line/60"
@@ -355,11 +362,19 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
                 trigger with data-state="active" (the base TabsTrigger's
                 `data-active:` variants never match), so the weight, colour and
                 primary underline key off that */}
-            <div className="mt-2 flex h-10 shrink-0 items-center gap-1 px-3">
-              <TabsList variant="line" className="h-full w-0 flex-1">
+            <div
+              className={cn(
+                'flex shrink-0 items-center gap-1',
+                touch ? 'h-[52px] pt-1 pr-1 pl-2' : 'mt-2 h-10 px-3',
+              )}
+            >
+              <TabsList variant="line" className={cn('w-0 flex-1', touch ? 'h-11' : 'h-full')}>
                 <TabsTrigger
                   value="interaction"
-                  className="relative flex-1 gap-1.5 rounded-lg text-[13px] text-icon data-[state=active]:font-semibold data-[state=active]:text-fg after:rounded-full after:bg-primary data-[state=active]:after:opacity-100 [&_svg:not([class*='size-'])]:size-3.5"
+                  className={cn(
+                    "relative flex-1 gap-1.5 rounded-lg text-icon data-[state=active]:font-semibold data-[state=active]:text-fg after:rounded-full after:bg-primary data-[state=active]:after:opacity-100 [&_svg:not([class*='size-'])]:size-3.5",
+                    touch ? 'text-sm' : 'text-[13px]',
+                  )}
                 >
                   <Users />
                   {t('chat.tabs.chat')}
@@ -374,7 +389,10 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
                 </TabsTrigger>
                 <TabsTrigger
                   value="notes"
-                  className="flex-1 gap-1.5 rounded-lg text-[13px] text-icon data-[state=active]:font-semibold data-[state=active]:text-fg after:rounded-full after:bg-primary data-[state=active]:after:opacity-100 [&_svg:not([class*='size-'])]:size-3.5"
+                  className={cn(
+                    "flex-1 gap-1.5 rounded-lg text-icon data-[state=active]:font-semibold data-[state=active]:text-fg after:rounded-full after:bg-primary data-[state=active]:after:opacity-100 [&_svg:not([class*='size-'])]:size-3.5",
+                    touch ? 'text-sm' : 'text-[13px]',
+                  )}
                 >
                   <BookOpen />
                   {t('chat.tabs.lecture')}
@@ -387,9 +405,14 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
                   onClick={() => onCollapseChange(true)}
                   aria-label={t('chat.collapsePanel')}
                   title={t('chat.collapsePanel')}
-                  className="flex size-7 shrink-0 items-center justify-center rounded-[10px] bg-subtle text-icon ring-1 ring-black/[0.04] transition-all duration-200 hover:text-fg active:scale-90 dark:ring-white/[0.06] cursor-pointer"
+                  className={cn(
+                    'flex shrink-0 items-center justify-center rounded-[10px] text-icon transition-all duration-200 hover:text-fg active:scale-90 cursor-pointer',
+                    touch
+                      ? 'size-11 hover:bg-subtle'
+                      : 'size-7 bg-subtle ring-1 ring-black/[0.04] dark:ring-white/[0.06]',
+                  )}
                 >
-                  <PanelRightClose className="size-4" />
+                  <PanelRightClose className={touch ? 'size-[18px]' : 'size-4'} />
                 </button>
               )}
             </div>

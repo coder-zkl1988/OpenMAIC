@@ -64,6 +64,17 @@ export interface ControlBarProps {
   readonly onToggleElementPick?: () => void;
   /** `bar`: the 48px strip under the stage; `floating`: the fullscreen pill */
   readonly variant?: 'bar' | 'floating';
+  /**
+   * `touch` (tablet and narrower, TabletLandscape.dc.html): a 56px bar of
+   * 44px targets, centred, with no page counter (the header shows "n / m")
+   * and an icon-only whiteboard toggle
+   */
+  readonly density?: 'default' | 'touch';
+  /**
+   * The page counter on the left. Defaults to on for `default` density and
+   * off for `touch`; the host turns it back on when no header carries it
+   */
+  readonly showPageCounter?: boolean;
   readonly className?: string;
 }
 
@@ -75,24 +86,34 @@ const iconBtn = cn(
   'disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:active:scale-100',
 );
 
+/* 44px touch target (TabletLandscape.dc.html control bar) */
+const touchBtn = cn(iconBtn, 'size-11');
+
 /* Pressed state shared by the 白板 toggle and the reference picker */
 const pressedBtn =
   'bg-accent-soft text-accent-text ring-1 ring-inset ring-accent-line hover:bg-accent-soft hover:text-accent-text';
 
-function Divider() {
-  return <div aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line" />;
+function Divider({ touch }: { touch?: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn('shrink-0 w-px bg-line', touch ? 'mx-2 h-5' : 'mx-1.5 h-4')}
+    />
+  );
 }
 
 function VolumeIcon({
   muted,
   volume,
   disabled,
+  touch,
 }: {
   muted: boolean;
   volume: number;
   disabled: boolean;
+  touch?: boolean;
 }) {
-  const cls = 'size-4';
+  const cls = touch ? 'size-[18px]' : 'size-4';
   if (disabled || muted || volume === 0) return <VolumeX className={cls} />;
   if (volume < 0.5) return <Volume1 className={cls} />;
   return <Volume2 className={cls} />;
@@ -135,9 +156,15 @@ export function ControlBar({
   elementPickActive,
   onToggleElementPick,
   variant = 'bar',
+  density = 'default',
+  showPageCounter,
   className,
 }: ControlBarProps) {
   const { t } = useI18n();
+  const touch = density === 'touch';
+  const withPageCounter = showPageCounter ?? !touch;
+  const btn = touch ? touchBtn : iconBtn;
+  const icon = touch ? 'size-[18px]' : 'size-4';
   const inSession = !!showStop && !!onStop;
   // Leaving the page mid-session goes through the stop pill (owner decision)
   const canGoPrev = !inSession && currentSceneIndex > 0;
@@ -166,28 +193,49 @@ export function ControlBar({
   const livePauseLabel = livePaused ? t('stage.resumeAnswer') : t('stage.pauseAnswer');
   const whiteboardTitle = whiteboardOpen ? t('whiteboard.minimize') : t('whiteboard.open');
 
+  const fullscreenButton = onTogglePresentation && (
+    <button
+      type="button"
+      onClick={onTogglePresentation}
+      className={cn(btn, isPresenting && 'text-accent-text hover:text-accent-text')}
+      aria-label={presentationLabel}
+      title={presentationLabel}
+    >
+      {isPresenting ? <Minimize2 className={icon} /> : <Maximize2 className={icon} />}
+    </button>
+  );
+
   return (
     <div
       data-testid="control-bar"
       data-variant={variant}
+      data-density={density}
       className={cn(
         'flex items-center gap-3',
         variant === 'bar'
-          ? 'h-12 w-full shrink-0 border-t border-line bg-background/85 pl-4 pr-3'
-          : 'h-12 rounded-full border border-line bg-background/85 px-3 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]',
+          ? cn(
+              'w-full shrink-0 border-t border-line bg-background/85',
+              touch ? 'h-14 px-2' : 'h-12 pl-4 pr-3',
+            )
+          : cn(
+              'rounded-full border border-line bg-background/85 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]',
+              touch ? 'h-14 px-2' : 'h-12 px-3',
+            ),
         className,
       )}
     >
-      {/* ── Left: page counter ── */}
-      <span
-        data-testid="page-counter"
-        className={cn(
-          'shrink-0 select-none whitespace-nowrap text-xs font-medium tabular-nums text-fg-tertiary',
-          variant === 'bar' && 'min-w-[72px]',
-        )}
-      >
-        {t('stage.pageCounter', { current: currentSceneIndex + 1, total: scenesCount })}
-      </span>
+      {/* ── Left: page counter (touch: the header shows "n / m") ── */}
+      {withPageCounter && (
+        <span
+          data-testid="page-counter"
+          className={cn(
+            'shrink-0 select-none whitespace-nowrap text-xs font-medium tabular-nums text-fg-tertiary',
+            variant === 'bar' && 'min-w-[72px]',
+          )}
+        >
+          {t('stage.pageCounter', { current: currentSceneIndex + 1, total: scenesCount })}
+        </span>
+      )}
 
       {/* ── Centre: transport, playback settings, whiteboard, reference ── */}
       <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
@@ -195,10 +243,10 @@ export function ControlBar({
           type="button"
           onClick={onPrev}
           disabled={!canGoPrev}
-          className={iconBtn}
+          className={btn}
           aria-label={t('stage.previousScene')}
         >
-          <ChevronLeft className="size-4" />
+          <ChevronLeft className={icon} />
         </button>
 
         {inSession ? (
@@ -209,7 +257,7 @@ export function ControlBar({
                 type="button"
                 onClick={onToggleLivePause}
                 disabled={!livePaused && !canToggleLivePause}
-                className={iconBtn}
+                className={btn}
                 aria-label={livePauseLabel}
                 title={livePauseLabel}
               >
@@ -223,7 +271,10 @@ export function ControlBar({
             <button
               type="button"
               onClick={onStop}
-              className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-danger/30 bg-danger-soft px-3 text-xs font-semibold text-danger transition-colors hover:border-danger/50 active:scale-95 cursor-pointer"
+              className={cn(
+                'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-danger/30 bg-danger-soft px-3 font-semibold text-danger transition-colors hover:border-danger/50 active:scale-95 cursor-pointer',
+                touch ? 'h-11 text-sm' : 'h-8 text-xs',
+              )}
             >
               <CircleStop className="size-3" />
               {stopLabel}
@@ -233,13 +284,16 @@ export function ControlBar({
           <button
             type="button"
             onClick={onPlayPause}
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_2px_8px_color-mix(in_srgb,var(--primary)_30%,transparent)] transition-colors outline-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-95 cursor-pointer"
+            className={cn(
+              'flex shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_2px_8px_color-mix(in_srgb,var(--primary)_30%,transparent)] transition-colors outline-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-95 cursor-pointer',
+              touch ? 'size-11' : 'size-8',
+            )}
             aria-label={isPlaying ? t('stage.pause') : t('stage.play')}
           >
             {isPlaying ? (
-              <Pause className="size-3.5 fill-current" />
+              <Pause className={cn('fill-current', touch ? 'size-4' : 'size-3.5')} />
             ) : (
-              <Play className="ml-0.5 size-3.5 fill-current" />
+              <Play className={cn('ml-0.5 fill-current', touch ? 'size-4' : 'size-3.5')} />
             )}
           </button>
         )}
@@ -248,13 +302,13 @@ export function ControlBar({
           type="button"
           onClick={onNext}
           disabled={!canGoNext}
-          className={iconBtn}
+          className={btn}
           aria-label={t('stage.nextScene')}
         >
-          <ChevronRight className="size-4" />
+          <ChevronRight className={icon} />
         </button>
 
-        <Divider />
+        <Divider touch={touch} />
 
         {onCycleSpeed && (
           <TooltipProvider delayDuration={0}>
@@ -264,8 +318,10 @@ export function ControlBar({
                   type="button"
                   onClick={onCycleSpeed}
                   className={cn(
-                    iconBtn,
-                    'w-9 text-xs font-semibold tabular-nums',
+                    btn,
+                    touch
+                      ? 'text-[13px] font-semibold tabular-nums'
+                      : 'w-9 text-xs font-semibold tabular-nums',
                     playbackSpeed !== 1 && 'bg-accent-soft text-accent-text',
                   )}
                   aria-label={t('stage.playbackSpeed')}
@@ -291,10 +347,15 @@ export function ControlBar({
               type="button"
               onClick={onToggleMute}
               disabled={!ttsEnabled}
-              className={cn(iconBtn, ttsEnabled && ttsMuted && 'text-danger hover:text-danger')}
+              className={cn(btn, ttsEnabled && ttsMuted && 'text-danger hover:text-danger')}
               aria-label={ttsMuted ? t('stage.unmute') : t('stage.mute')}
             >
-              <VolumeIcon muted={!!ttsMuted} volume={ttsVolume} disabled={!ttsEnabled} />
+              <VolumeIcon
+                muted={!!ttsMuted}
+                volume={ttsVolume}
+                disabled={!ttsEnabled}
+                touch={touch}
+              />
             </button>
             <div
               className={cn(
@@ -339,14 +400,11 @@ export function ControlBar({
                 <button
                   type="button"
                   onClick={onToggleAutoPlay}
-                  className={cn(
-                    iconBtn,
-                    autoPlayLecture && 'text-accent-text hover:text-accent-text',
-                  )}
+                  className={cn(btn, autoPlayLecture && 'text-accent-text hover:text-accent-text')}
                   aria-label={t('roundtable.autoPlay')}
                   aria-pressed={!!autoPlayLecture}
                 >
-                  <Repeat className="size-4" />
+                  <Repeat className={icon} />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
@@ -356,22 +414,25 @@ export function ControlBar({
           </TooltipProvider>
         )}
 
-        <Divider />
+        <Divider touch={touch} />
 
-        {/* Labeled whiteboard toggle */}
+        {/* Labeled whiteboard toggle (touch: the 44px icon button) */}
         <button
           type="button"
           onClick={onToggleWhiteboard}
           aria-pressed={whiteboardOpen}
+          aria-label={touch ? t('stage.whiteboardToggle') : undefined}
           title={whiteboardTitle}
           className={cn(
-            'relative flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] pl-2.5 pr-3 text-xs font-semibold',
+            touch
+              ? cn(touchBtn, 'hover:bg-subtle')
+              : 'relative flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] pl-2.5 pr-3 text-xs font-semibold',
             'transition-colors outline-none cursor-pointer active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/50',
             whiteboardOpen ? pressedBtn : 'text-icon hover:bg-subtle hover:text-fg',
           )}
         >
-          <PencilLine className="size-4" />
-          {t('stage.whiteboardToggle')}
+          <PencilLine className={icon} />
+          {!touch && t('stage.whiteboardToggle')}
           {/* The board has content to come back to */}
           {!whiteboardOpen && whiteboardElementCount > 0 && (
             <span
@@ -386,7 +447,7 @@ export function ControlBar({
             type="button"
             onClick={onToggleElementPick}
             disabled={!canPickElement}
-            className={cn(iconBtn, elementPickActive && pressedBtn)}
+            className={cn(btn, elementPickActive && pressedBtn)}
             aria-label={t('chat.elementReference.button')}
             aria-pressed={!!elementPickActive}
             title={
@@ -395,25 +456,19 @@ export function ControlBar({
                 : t('chat.elementReference.unavailable')
             }
           >
-            <Quote className="size-[15px]" />
+            <Quote className={touch ? 'size-[17px]' : 'size-[15px]'} />
           </button>
         )}
+
+        {touch && fullscreenButton}
       </div>
 
-      {/* ── Right: fullscreen ── */}
-      <div className={cn('flex shrink-0 justify-end', variant === 'bar' && 'min-w-[72px]')}>
-        {onTogglePresentation && (
-          <button
-            type="button"
-            onClick={onTogglePresentation}
-            className={cn(iconBtn, isPresenting && 'text-accent-text hover:text-accent-text')}
-            aria-label={presentationLabel}
-            title={presentationLabel}
-          >
-            {isPresenting ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-          </button>
-        )}
-      </div>
+      {/* ── Right: fullscreen (touch: in the centre cluster) ── */}
+      {!touch && (
+        <div className={cn('flex shrink-0 justify-end', variant === 'bar' && 'min-w-[72px]')}>
+          {fullscreenButton}
+        </div>
+      )}
     </div>
   );
 }

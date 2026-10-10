@@ -19,6 +19,7 @@ import { PENDING_SCENE_ID } from '@/lib/store/stage';
 import { useCanvasStore } from '@/lib/store/canvas';
 import { useSettingsStore } from '@/lib/store/settings';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import { isTouchClassroomLayout, useClassroomLayout } from '@/lib/hooks/use-classroom-layout';
 import { SceneSidebar } from '@/components/stage/scene-sidebar';
 import { Header } from '@/components/header';
 import { CanvasArea } from '@/components/canvas/canvas-area';
@@ -129,6 +130,9 @@ function getSpeechTextAtOrBefore(
   }
   return null;
 }
+
+/** The interaction panel's fixed width below desktop (TabletLandscape.dc.html) */
+const TOUCH_PANEL_WIDTH = 320;
 
 /**
  * Imperative handle exposed via `ref` so the parent (`Stage`) can tear
@@ -260,6 +264,13 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const setChatAreaWidth = useSettingsStore((s) => s.setChatAreaWidth);
     const chatAreaCollapsed = useSettingsStore((s) => s.chatAreaCollapsed);
     const setChatAreaCollapsed = useSettingsStore((s) => s.setChatAreaCollapsed);
+    // Below the classroom's desktop width (tablet landscape, and stacked until
+    // its own layout lands): the numbered scene rail, the compact header with
+    // the ⋯ menu, a fixed 320px panel and 44px touch targets. The rail ignores
+    // the persisted desktop `sidebarCollapsed`; its 展开场景栏 swaps in the
+    // full sidebar for this session only.
+    const touchLayout = isTouchClassroomLayout(useClassroomLayout());
+    const [railSidebarOpen, setRailSidebarOpen] = useState(false);
     const setTTSMuted = useSettingsStore((s) => s.setTTSMuted);
     const setTTSVolume = useSettingsStore((s) => s.setTTSVolume);
 
@@ -2105,7 +2116,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             // Fullscreen keeps both panels collapsed (the dock replaces them)
             if (isPresenting) return;
             event.preventDefault();
-            setSidebarCollapsed(!sidebarCollapsed);
+            // Touch layouts toggle between the rail and the full sidebar
+            if (touchLayout) setRailSidebarOpen((open) => !open);
+            else setSidebarCollapsed(!sidebarCollapsed);
             break;
           case 'c':
           case 'C':
@@ -2136,6 +2149,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       setTTSVolume,
       sidebarCollapsed,
       togglePresentation,
+      touchLayout,
       ttsMuted,
       ttsVolume,
     ]);
@@ -2340,6 +2354,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const controlBar = (
       <ControlBar
         variant={isPresenting ? 'floating' : 'bar'}
+        density={touchLayout ? 'touch' : 'default'}
+        // Touch moves "n / m" into the header; keep it here when there is none
+        showPageCounter={!touchLayout || isPresenting || hideHeader}
         currentSceneIndex={currentSceneIndex}
         scenesCount={totalScenesCount}
         engineState={canvasEngineState}
@@ -2381,8 +2398,14 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         )}
       >
         <SceneSidebar
-          collapsed={sidebarCollapsed}
-          onCollapseChange={setSidebarCollapsed}
+          {...(touchLayout
+            ? {
+                variant: railSidebarOpen ? 'sidebar' : 'rail',
+                density: 'touch',
+                collapsed: isPresenting,
+                onCollapseChange: (collapsed: boolean) => setRailSidebarOpen(!collapsed),
+              }
+            : { collapsed: sidebarCollapsed, onCollapseChange: setSidebarCollapsed })}
           onSceneSelect={gatedSceneSwitch}
           onRetryOutline={onRetryOutline}
           isCourseComplete={isCourseComplete}
@@ -2407,6 +2430,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               hideBackControl={hideHeaderBackControl}
               hideGlobalControls={hideHeaderGlobalControls}
               hideCourseActions={hideHeaderCourseActions}
+              layout={touchLayout ? 'compact' : 'default'}
+              sceneIndex={currentSceneIndex}
+              sceneCount={totalScenesCount}
             />
           )}
 
@@ -2480,7 +2506,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           </div>
 
           {/* Re-open handles for collapsed side panels (the S / C keys work too) */}
-          {!isPresenting && sidebarCollapsed && (
+          {!isPresenting && !touchLayout && sidebarCollapsed && (
             <button
               type="button"
               onClick={() => setSidebarCollapsed(false)}
@@ -2497,9 +2523,14 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               onClick={() => setChatAreaCollapsed(false)}
               aria-label={t('stage.expandInteractionPanel')}
               title={t('stage.expandInteractionPanel')}
-              className="absolute right-0 top-1/2 z-30 flex h-12 w-3 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-line bg-background/90 text-icon-muted transition-colors hover:w-4 hover:text-fg"
+              className={cn(
+                'absolute right-0 top-1/2 z-30 flex -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-line bg-background/90 text-icon-muted transition-colors hover:text-fg',
+                // A 44px tab for touch: the persisted collapse can carry over from
+                // desktop, and without a keyboard (no C key) this is the way back
+                touchLayout ? 'h-14 w-11' : 'h-12 w-3 hover:w-4',
+              )}
             >
-              <ChevronLeft className="size-3 shrink-0" />
+              <ChevronLeft className={cn('shrink-0', touchLayout ? 'size-[18px]' : 'size-3')} />
             </button>
           )}
 
@@ -2561,8 +2592,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         <div ref={panelRef} className="flex shrink-0">
           <ChatArea
             ref={chatAreaRef}
-            width={chatAreaWidth}
+            width={touchLayout ? TOUCH_PANEL_WIDTH : chatAreaWidth}
             onWidthChange={setChatAreaWidth}
+            density={touchLayout ? 'touch' : 'default'}
             collapsed={chatAreaCollapsed}
             onCollapseChange={setChatAreaCollapsed}
             activeBubbleId={activeBubbleId}
@@ -2786,6 +2818,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               // Fullscreen only: the overlay's learner line and the card closing
               onUserMessage={showPresentationUserMessage}
               onSent={closePresentationComposer}
+              density={touchLayout ? 'touch' : 'default'}
               className={isPresenting ? 'border-t-0 bg-transparent p-0' : undefined}
             />,
             composerHost,

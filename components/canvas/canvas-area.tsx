@@ -316,7 +316,8 @@ export function CanvasArea({
     <div
       className={cn(
         'w-full h-full flex flex-col items-center bg-page group/canvas',
-        stageColumn ? 'px-4 pt-1 pb-4' : 'p-2',
+        // TabletLandscape.dc.html seats the slide right under the header
+        stageColumn ? 'px-4 pt-1 pb-4 @max-desktop/classroom:pt-0' : 'p-2',
         isInteractive && 'bg-blue-50/30 dark:bg-blue-900/10',
       )}
     >

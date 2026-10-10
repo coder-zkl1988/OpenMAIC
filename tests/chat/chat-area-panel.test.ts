@@ -87,4 +87,27 @@ describe('ChatArea panel: the 互动 tab behind 笔记 and a collapsed panel', (
     render({ footer, onFooterHidden, collapsed: true });
     expect(onFooterHidden).toHaveBeenCalledTimes(2);
   });
+
+  it('touch density: a 52px tab row of 44px targets, a 44px collapse button, no drag handle', () => {
+    const resizeHandle = () => container.querySelector('.cursor-col-resize');
+    render({ width: 320, onCollapseChange: vi.fn(), density: 'touch' });
+    const aside = container.querySelector('aside')!;
+    expect(aside.style.width).toBe('320px');
+    expect(resizeHandle()).toBeNull();
+    expect(container.querySelector('[role="tablist"]')!.className).toContain('h-11');
+    expect(container.querySelector('[role="tablist"]')!.parentElement!.className).toContain(
+      'h-[52px]',
+    );
+    expect(container.querySelector('[role="tab"]')!.className).toContain('text-sm');
+    expect(container.querySelector('button[aria-label="chat.collapsePanel"]')!.className).toContain(
+      'size-11',
+    );
+
+    // Desktop keeps the drag-resize and the 28px collapse button
+    render({ width: 360, onCollapseChange: vi.fn() });
+    expect(resizeHandle()).not.toBeNull();
+    expect(container.querySelector('button[aria-label="chat.collapsePanel"]')!.className).toContain(
+      'size-7',
+    );
+  });
 });

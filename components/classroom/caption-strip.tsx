@@ -143,14 +143,15 @@ export function CaptionStrip({
       data-status={caption.status}
       className={cn(
         // Two 24px lines + the name row + padding: a fixed height, so the
-        // contain-fitted slide above never resizes while the text changes
-        'flex h-[92px] w-full shrink-0 items-start gap-3 overflow-hidden rounded-[14px] border border-line bg-background px-4 py-3',
+        // contain-fitted slide above never resizes while the text changes.
+        // Tablet (TabletLandscape.dc.html) tightens the inset and the avatar.
+        'flex h-[92px] w-full shrink-0 items-start gap-3 overflow-hidden rounded-[14px] border border-line bg-background px-4 py-3 @max-desktop/classroom:px-3.5',
         className,
       )}
     >
       <span
         className={cn(
-          'relative size-9 shrink-0 overflow-hidden rounded-full',
+          'relative size-9 shrink-0 overflow-hidden rounded-full @max-desktop/classroom:size-8',
           // The primary ring marks a voice in progress; at rest (paused, or
           // counting down to the lecture) the avatar gets a plain hairline
           caption.status === 'paused' || resumeSeconds !== undefined

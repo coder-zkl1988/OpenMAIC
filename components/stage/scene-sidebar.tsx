@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  Loader2,
   PanelLeftClose,
+  PanelLeftOpen,
   PieChart,
   Cpu,
   MousePointer2,
@@ -28,6 +30,18 @@ interface SceneSidebarProps {
   readonly onSceneSelect?: (sceneId: string) => void;
   readonly onRetryOutline?: (outlineId: string) => Promise<void>;
   readonly isCourseComplete?: boolean;
+  /**
+   * `sidebar` (desktop): the resizable column of titled thumbnails. `rail`
+   * (tablet and narrower, TabletLandscape.dc.html): a 64px column of 44px
+   * numbered targets whose 展开场景栏 button calls `onCollapseChange(false)`
+   * (the host swaps in the sidebar); `collapsed` still hides it (fullscreen).
+   */
+  readonly variant?: 'sidebar' | 'rail';
+  /**
+   * `touch`: the sidebar opened from the rail gets a 44px collapse button, and
+   * the rail/sidebar toggles hand focus to their counterpart after the swap.
+   */
+  readonly density?: 'default' | 'touch';
 }
 
 // Classroom.dc.html draws a fixed 180px column; the owner kept drag-resize,
@@ -45,12 +59,27 @@ const BADGE_CLASS =
 const ACTIVE_BADGE_CLASS = 'bg-primary-6 dark:bg-primary-5 text-white';
 const ACTIVE_TITLE_CLASS = 'text-primary-7 dark:text-accent-text';
 
+const RAIL_WIDTH = 64;
+// 44px numbered rail targets (TabletLandscape.dc.html), tinted by scene type
+const RAIL_ITEM_CLASS =
+  'flex size-11 shrink-0 items-center justify-center rounded-[10px] text-sm font-bold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 cursor-pointer';
+const RAIL_ACTIVE_CLASS =
+  'bg-primary-1 text-accent-text ring-[1.5px] ring-inset ring-primary-3 dark:bg-accent-soft dark:ring-accent-line';
+const RAIL_TYPE_CLASS: Record<SceneType, string> = {
+  slide: 'bg-subtle text-icon hover:text-fg',
+  quiz: 'bg-warning-soft text-warning',
+  interactive: 'bg-success-soft text-success',
+  pbl: 'bg-interactive-soft text-interactive',
+};
+
 export function SceneSidebar({
   collapsed,
   onCollapseChange,
   onSceneSelect,
   onRetryOutline,
   isCourseComplete,
+  variant = 'sidebar',
+  density = 'default',
 }: SceneSidebarProps) {
   const { t } = useI18n();
   const router = useRouter();
@@ -72,6 +101,17 @@ export function SceneSidebar({
       setRetryingOutlineId(null);
     }
   };
+
+  // Swapping rail <-> sidebar unmounts the toggle that was activated, so the
+  // variant it asked for receives focus on its counterpart toggle instead.
+  const railExpandRef = useRef<HTMLButtonElement>(null);
+  const sidebarCollapseRef = useRef<HTMLButtonElement>(null);
+  const focusAfterSwapRef = useRef<'sidebar' | 'rail' | null>(null);
+  useEffect(() => {
+    if (focusAfterSwapRef.current !== variant) return;
+    focusAfterSwapRef.current = null;
+    (variant === 'rail' ? railExpandRef : sidebarCollapseRef).current?.focus();
+  }, [variant]);
 
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
   const isDraggingRef = useRef(false);
@@ -115,6 +155,163 @@ export function SceneSidebar({
     return icons[type] || BookOpen;
   };
 
+  const selectScene = (sceneId: string) => {
+    if (onSceneSelect) {
+      onSceneSelect(sceneId);
+    } else {
+      setCurrentSceneId(sceneId);
+    }
+  };
+
+  if (variant === 'rail') {
+    // The next generating page and the course-complete page as compact icons
+    const outline = generatingOutlines[0];
+    const outlineFailed =
+      !!outline && (generationInterrupted || failedOutlines.some((f) => f.id === outline.id));
+    const outlineRetrying = !!outline && retryingOutlineId === outline.id;
+    const canRetryOutline = !!onRetryOutline && !generationInterrupted;
+    const pendingActive = currentSceneId === PENDING_SCENE_ID;
+    const outlineStatus = outlineRetrying
+      ? t('generation.retryingScene')
+      : generationInterrupted
+        ? t('stage.generationInterrupted')
+        : outlineFailed
+          ? t('stage.generationFailed')
+          : generationStatus === 'paused'
+            ? t('stage.paused')
+            : t('stage.generating');
+
+    return (
+      <nav
+        aria-label={t('stage.sceneRail')}
+        data-testid="scene-rail"
+        style={{ width: collapsed ? 0 : RAIL_WIDTH, transition: 'width 0.3s ease' }}
+        className={cn(
+          'relative z-20 flex shrink-0 flex-col items-center gap-2 overflow-hidden bg-background',
+          collapsed ? 'py-0' : 'border-r border-line py-3',
+        )}
+      >
+        {!collapsed && (
+          <>
+            <button
+              type="button"
+              onClick={() => router.push('/')}
+              aria-label={t('generation.backToHome')}
+              title={t('generation.backToHome')}
+              className="mb-2 flex size-11 shrink-0 items-center justify-center rounded-[10px] transition-colors hover:bg-subtle cursor-pointer"
+            >
+              <img src="/openmaic-mark.png" alt="" className="size-7 object-contain" />
+            </button>
+
+            <div
+              data-testid="scene-rail-list"
+              className="flex min-h-0 w-full flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden py-0.5 scrollbar-hide"
+            >
+              {scenes.map((scene, index) => {
+                const isActive = currentSceneId === scene.id;
+                return (
+                  <button
+                    key={scene.id}
+                    type="button"
+                    data-testid="scene-rail-item"
+                    aria-label={t('stage.sceneRailItem', { n: index + 1, title: scene.title })}
+                    aria-current={isActive ? 'page' : undefined}
+                    title={scene.title}
+                    onClick={() => selectScene(scene.id)}
+                    className={cn(
+                      RAIL_ITEM_CLASS,
+                      isActive ? RAIL_ACTIVE_CLASS : RAIL_TYPE_CLASS[scene.type],
+                    )}
+                  >
+                    {index + 1}
+                  </button>
+                );
+              })}
+
+              {outline && (
+                <button
+                  key={`generating-${outline.id}`}
+                  type="button"
+                  data-testid="scene-rail-pending"
+                  aria-label={`${t('stage.sceneRailItem', {
+                    n: scenes.length + 1,
+                    title: outline.title,
+                  })} · ${outlineStatus}`}
+                  aria-current={pendingActive && !outlineFailed ? 'page' : undefined}
+                  title={
+                    outlineFailed && canRetryOutline ? t('generation.retryScene') : outlineStatus
+                  }
+                  disabled={outlineFailed && (!canRetryOutline || outlineRetrying)}
+                  onClick={() => {
+                    if (outlineFailed) {
+                      if (canRetryOutline) void handleRetryOutline(outline.id);
+                      return;
+                    }
+                    selectScene(PENDING_SCENE_ID);
+                  }}
+                  className={cn(
+                    RAIL_ITEM_CLASS,
+                    'disabled:cursor-default',
+                    outlineFailed
+                      ? 'bg-danger-soft text-danger'
+                      : pendingActive
+                        ? RAIL_ACTIVE_CLASS
+                        : 'bg-subtle text-icon-muted',
+                  )}
+                >
+                  {outlineFailed ? (
+                    canRetryOutline ? (
+                      <RefreshCw className={cn('size-4', outlineRetrying && 'animate-spin')} />
+                    ) : (
+                      <AlertCircle className="size-4" />
+                    )
+                  ) : (
+                    <Loader2
+                      className={cn('size-4', generationStatus !== 'paused' && 'animate-spin')}
+                    />
+                  )}
+                </button>
+              )}
+
+              {isCourseComplete && !outline && (
+                <button
+                  key="course-complete-slot"
+                  type="button"
+                  data-testid="scene-rail-complete"
+                  aria-label={t('stage.courseComplete')}
+                  aria-current={pendingActive ? 'page' : undefined}
+                  title={t('stage.courseComplete')}
+                  onClick={() => selectScene(PENDING_SCENE_ID)}
+                  className={cn(
+                    RAIL_ITEM_CLASS,
+                    'bg-warning-soft text-warning',
+                    pendingActive && 'ring-[1.5px] ring-inset ring-warning',
+                  )}
+                >
+                  <Trophy className="size-[18px]" strokeWidth={1.8} />
+                </button>
+              )}
+            </div>
+
+            <button
+              ref={railExpandRef}
+              type="button"
+              onClick={() => {
+                focusAfterSwapRef.current = 'sidebar';
+                onCollapseChange(false);
+              }}
+              aria-label={t('stage.expandSceneSidebar')}
+              title={t('stage.expandSceneSidebar')}
+              className="mt-auto flex size-11 shrink-0 items-center justify-center rounded-[10px] text-icon transition-colors hover:bg-subtle hover:text-fg cursor-pointer"
+            >
+              <PanelLeftOpen className="size-[18px]" />
+            </button>
+          </>
+        )}
+      </nav>
+    );
+  }
+
   const displayWidth = collapsed ? 0 : sidebarWidth;
 
   return (
@@ -137,7 +334,12 @@ export function SceneSidebar({
 
       <div className={cn('flex flex-col w-full h-full overflow-hidden', collapsed && 'hidden')}>
         {/* Logo Header */}
-        <div className="h-10 flex items-center justify-between gap-2 shrink-0 relative mt-2 mb-1 pl-3 pr-2.5">
+        <div
+          className={cn(
+            'flex items-center justify-between gap-2 shrink-0 relative mt-2 mb-1 pl-3 pr-2.5',
+            density === 'touch' ? 'h-11' : 'h-10',
+          )}
+        >
           <button
             onClick={() => router.push('/')}
             className="flex min-w-0 items-center gap-2 cursor-pointer rounded-[10px] px-1.5 -mx-1.5 py-1 -my-1 hover:bg-subtle active:scale-[0.97] transition-all duration-150"
@@ -146,11 +348,19 @@ export function SceneSidebar({
             <img src="/logo-horizontal.png" alt="OpenMAIC" className="h-[22px] w-auto" />
           </button>
           <button
+            ref={sidebarCollapseRef}
             type="button"
-            onClick={() => onCollapseChange(true)}
+            onClick={() => {
+              // Only the touch host swaps the sidebar for the rail on collapse
+              if (density === 'touch') focusAfterSwapRef.current = 'rail';
+              onCollapseChange(true);
+            }}
             aria-label={t('stage.collapseSceneSidebar')}
             title={t('stage.collapseSceneSidebar')}
-            className="size-7 shrink-0 rounded-[10px] flex items-center justify-center bg-subtle text-icon ring-1 ring-black/[0.04] dark:ring-white/[0.06] hover:bg-line hover:text-fg active:scale-90 transition-all duration-200"
+            className={cn(
+              'shrink-0 rounded-[10px] flex items-center justify-center bg-subtle text-icon ring-1 ring-black/[0.04] dark:ring-white/[0.06] hover:bg-line hover:text-fg active:scale-90 transition-all duration-200',
+              density === 'touch' ? 'size-11' : 'size-7',
+            )}
           >
             <PanelLeftClose className="w-4 h-4" />
           </button>

@@ -35,6 +35,20 @@
   --color-primary-10: #120338;
 }
 
+/* Classroom container sizes (TabletLandscape / TabletPortrait boards). The
+   classroom root is `@container/classroom`, so these resolve against its
+   width, which also covers the narrower workbench pane:
+     @desktop/classroom:      ≥ 1200px  desktop chrome
+     @max-desktop/classroom:  < 1200px  tablet landscape and stacked (touch)
+     @max-tablet/classroom:   <  900px  stacked
+   The JS twin is lib/hooks/use-classroom-layout.ts; keep both in sync. A
+   desktop threshold above ~1265px would flip the 1280px e2e viewport (minus
+   the scrollbar gutter) into the tablet layout. */
+@theme {
+  --container-tablet: 56.25rem;
+  --container-desktop: 75rem;
+}
+
 /* Design role → utility map (redesigned surfaces use these instead of raw
    gray/slate/zinc/violet classes or muted-foreground opacity steps). The
    design board's text-primary / text-secondary are named fg / fg-secondary

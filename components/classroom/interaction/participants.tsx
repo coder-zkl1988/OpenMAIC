@@ -126,7 +126,8 @@ interface ParticipantsProps {
 
 /**
  * The interaction panel's participants block (Classroom.dc.html): '5 人在线'
- * and a five-column grid of 44px avatars with name and status — 讲解中 for
+ * and a five-column grid of 44px avatars (40px below the classroom's
+ * desktop width, TabletLandscape.dc.html) with name and status — 讲解中 for
  * the speaker, 想发言 for the agent offering a discussion, 举手中 for the
  * learner's raised hand, else the role. Hovering an agent shows its persona.
  */
@@ -186,10 +187,10 @@ export function Participants({
     const isLoading =
       thinkingState?.stage === 'agent_loading' && thinkingState.agentId === participant.id;
     return (
-      <span className="relative size-11 shrink-0">
+      <span className="relative size-11 shrink-0 @max-desktop/classroom:size-10">
         <span
           className={cn(
-            'block size-11 overflow-hidden rounded-full border-2 border-background bg-subtle',
+            'block size-11 @max-desktop/classroom:size-10 overflow-hidden rounded-full border-2 border-background bg-subtle',
             status === 'speaking'
               ? 'ring-2 ring-primary'
               : status === 'wantsToSpeak' || status === 'handRaised'
@@ -306,7 +307,7 @@ export function Participants({
           >
             <span
               className={cn(
-                'flex size-11 items-center justify-center rounded-full bg-subtle text-[13px] font-semibold text-fg-secondary ring-1 ring-line',
+                'flex size-11 @max-desktop/classroom:size-10 items-center justify-center rounded-full bg-subtle text-[13px] font-semibold text-fg-secondary ring-1 ring-line',
                 // Someone hidden in the list is speaking or wants to: hint at it
                 overflow.some((p) => describe(p).status !== 'role') && 'ring-2 ring-amber-500',
               )}

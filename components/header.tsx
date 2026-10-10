@@ -29,6 +29,16 @@ interface HeaderProps {
   readonly hideGlobalControls?: boolean;
   /** Hide course-level share/export in a workbench-attached classroom. */
   readonly hideCourseActions?: boolean;
+  /**
+   * `compact` (tablet and narrower, TabletLandscape.dc.html): a 52px header
+   * with a 44px back button, the title, "n / m" and the ⋯ menu that holds
+   * every header control. `default` is the 56px desktop header.
+   */
+  readonly layout?: 'default' | 'compact';
+  /** 0-based current scene, for the compact header's "n / m" */
+  readonly sceneIndex?: number;
+  /** Scene count, for the compact header's "n / m" */
+  readonly sceneCount?: number;
 }
 
 export function Header({
@@ -41,11 +51,67 @@ export function Header({
   hideBackControl,
   hideGlobalControls,
   hideCourseActions,
+  layout = 'default',
+  sceneIndex,
+  sceneCount,
 }: HeaderProps) {
   const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const exitLabel = t(classroomExitLabelKey(searchParams));
+  if (layout === 'compact') {
+    const showCounter = sceneIndex !== undefined && sceneCount !== undefined && sceneCount > 0;
+    return (
+      <header className="h-[52px] shrink-0 px-2 flex items-center gap-1 z-10 bg-transparent">
+        {hideBackControl
+          ? null
+          : (backControl ?? (
+              <button
+                onClick={() => exitClassroom(router, searchParams)}
+                className="shrink-0 size-11 flex items-center justify-center rounded-[10px] text-icon hover:bg-subtle hover:text-fg transition-colors"
+                title={exitLabel}
+                aria-label={exitLabel}
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            ))}
+        {/* The edit cross-fade guard is explained on the desktop title below */}
+        {mode !== 'edit' ? (
+          <h1
+            className="min-w-0 flex-1 truncate text-base leading-6 font-semibold text-fg"
+            suppressHydrationWarning
+          >
+            {currentSceneTitle || t('common.loading')}
+          </h1>
+        ) : (
+          <div className="flex-1" />
+        )}
+        {/* The control bar drops its counter at this width; the header carries it */}
+        {showCounter && (
+          <span
+            data-testid="page-counter"
+            className="shrink-0 select-none px-2 text-xs font-medium tabular-nums text-fg-tertiary"
+          >
+            <span aria-hidden="true">
+              {sceneIndex + 1} / {sceneCount}
+            </span>
+            <span className="sr-only">
+              {t('stage.pageCounter', { current: sceneIndex + 1, total: sceneCount })}
+            </span>
+          </span>
+        )}
+        <HeaderControls
+          variant="overflow"
+          mode={mode}
+          proModeActive={proModeActive}
+          canEdit={canEdit}
+          onToggleEditMode={onToggleEditMode}
+          showGlobalControls={!hideGlobalControls}
+          showCourseActions={!hideCourseActions}
+        />
+      </header>
+    );
+  }
 
   return (
     <>

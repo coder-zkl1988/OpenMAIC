@@ -100,6 +100,11 @@ export interface ComposerProps {
   readonly onUserMessage?: (text: string) => void;
   /** A question went out, now or queued: the fullscreen card closes */
   readonly onSent?: () => void;
+  /**
+   * `touch` (tablet and narrower, TabletLandscape.dc.html): 44px pills and
+   * round buttons, 15px text
+   */
+  readonly density?: 'default' | 'touch';
   readonly className?: string;
 }
 
@@ -127,6 +132,9 @@ function RecordingWave() {
 
 const roundButton =
   'flex size-8 shrink-0 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-95';
+/* The 举手 / 放下 / 取消 pills (the padding and fill come from each pill) */
+const pillSize = (touch: boolean) =>
+  touch ? 'h-11 gap-1 text-sm pr-3.5 pl-3' : 'h-8 gap-1 text-[13px] pr-3 pl-2.5';
 
 /**
  * The interaction panel's composer (Classroom.dc.html): an 18px-radius box
@@ -159,9 +167,13 @@ export function Composer({
   onInteractionChange,
   onUserMessage,
   onSent,
+  density = 'default',
   className,
 }: ComposerProps) {
   const { t } = useI18n();
+  const touch = density === 'touch';
+  const round = touch ? cn(roundButton, 'size-11') : roundButton;
+  const roundIcon = touch ? 'size-[18px]' : 'size-4';
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isFocused, setIsFocused] = useState(false);
 
@@ -379,7 +391,12 @@ export function Composer({
   return (
     <div
       data-testid="classroom-composer"
-      className={cn('shrink-0 border-t border-line bg-background px-3 pt-2.5 pb-3', className)}
+      data-density={density}
+      className={cn(
+        'shrink-0 border-t border-line bg-background pt-2.5 pb-3',
+        touch ? 'px-2.5' : 'px-3',
+        className,
+      )}
     >
       {/* Always mounted: a live region that appears together with its text is
           often not announced. Also where focus parks if the row unmounts under it. */}
@@ -411,7 +428,8 @@ export function Composer({
           data-testid="composer-box"
           data-state={isCued ? 'cue' : isRecordingSurface ? 'voice' : 'default'}
           className={cn(
-            'flex flex-col gap-1.5 rounded-[18px] border bg-background pt-2.5 pr-2.5 pb-2 pl-3.5 transition-[border-color,box-shadow]',
+            'flex flex-col gap-1.5 rounded-[18px] border bg-background pb-2 pl-3.5 transition-[border-color,box-shadow]',
+            touch ? 'pt-2 pr-2' : 'pt-2.5 pr-2.5',
             isCued
               ? 'border-warning ring-1 ring-warning'
               : isRecordingSurface
@@ -439,7 +457,11 @@ export function Composer({
                 onClick={controller.clearReference}
                 aria-label={t('chat.elementReference.clear')}
                 title={t('chat.elementReference.clear')}
-                className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-icon transition-colors hover:bg-background hover:text-fg cursor-pointer"
+                className={cn(
+                  'relative flex size-[22px] shrink-0 items-center justify-center rounded-full text-icon transition-colors hover:bg-background hover:text-fg cursor-pointer',
+                  // Touch: an invisible 44px hit area around the 22px glyph
+                  touch && "before:absolute before:-inset-[11px] before:content-['']",
+                )}
               >
                 <X className="size-3 stroke-[2.25]" />
               </button>
@@ -473,7 +495,10 @@ export function Composer({
                     noteFocusOn(event.currentTarget);
                     voice.dismiss();
                   }}
-                  className="flex h-8 shrink-0 items-center gap-1 rounded-full bg-subtle pr-3 pl-2.5 text-[13px] font-semibold text-fg-secondary transition-colors hover:text-fg cursor-pointer"
+                  className={cn(
+                    'flex shrink-0 items-center rounded-full bg-subtle font-semibold text-fg-secondary transition-colors hover:text-fg cursor-pointer',
+                    pillSize(touch),
+                  )}
                 >
                   <X aria-hidden="true" className="size-3.5" />
                   {t('common.cancel')}
@@ -488,7 +513,7 @@ export function Composer({
                       voice.toggle();
                     }}
                     className={cn(
-                      roundButton,
+                      round,
                       'ml-auto bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer',
                     )}
                   >
@@ -523,7 +548,10 @@ export function Composer({
                   }
                   controller.textareaProps.onKeyDown(event);
                 }}
-                className="block min-h-[72px] w-full resize-none overflow-y-auto border-0 bg-transparent pt-0.5 pr-1 text-sm leading-[1.6] text-fg shadow-none outline-none placeholder:text-fg-tertiary focus:ring-0"
+                className={cn(
+                  'block min-h-[72px] w-full resize-none overflow-y-auto border-0 bg-transparent pt-0.5 pr-1 leading-[1.6] text-fg shadow-none outline-none placeholder:text-fg-tertiary focus:ring-0',
+                  touch ? 'text-[15px]' : 'text-sm',
+                )}
                 style={{ maxHeight: COMPOSER_TEXTAREA_MAX_HEIGHT_PX }}
               />
               <div className="flex items-center gap-1.5">
@@ -534,9 +562,12 @@ export function Composer({
                     aria-pressed="true"
                     title={t('stage.composer.lowerHandHint')}
                     onClick={lowerHand}
-                    className="flex h-8 shrink-0 items-center gap-1 rounded-full bg-amber-500 pr-3 pl-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-amber-600 cursor-pointer"
+                    className={cn(
+                      'flex shrink-0 items-center rounded-full bg-amber-500 font-semibold text-white transition-colors hover:bg-amber-600 cursor-pointer',
+                      pillSize(touch),
+                    )}
                   >
-                    <Hand aria-hidden="true" className="size-[15px]" />
+                    <Hand aria-hidden="true" className={touch ? 'size-4' : 'size-[15px]'} />
                     {t('stage.composer.lowerHand')}
                   </button>
                 ) : (
@@ -550,9 +581,15 @@ export function Composer({
                         : t('stage.composer.raiseHandHint')
                     }
                     onClick={raiseHand}
-                    className="flex h-8 shrink-0 items-center gap-1 rounded-full bg-subtle pr-3 pl-2.5 text-[13px] font-semibold text-fg-secondary transition-colors hover:text-fg disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                    className={cn(
+                      'flex shrink-0 items-center rounded-full bg-subtle font-semibold text-fg-secondary transition-colors hover:text-fg disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer',
+                      pillSize(touch),
+                    )}
                   >
-                    <Hand aria-hidden="true" className="size-[15px] text-warning" />
+                    <Hand
+                      aria-hidden="true"
+                      className={cn('text-warning', touch ? 'size-4' : 'size-[15px]')}
+                    />
                     {t('stage.composer.raiseHand')}
                   </button>
                 )}
@@ -574,7 +611,7 @@ export function Composer({
                     voice.toggle();
                   }}
                   className={cn(
-                    roundButton,
+                    round,
                     'disabled:cursor-not-allowed disabled:opacity-50',
                     isCued
                       ? 'bg-accent-soft text-accent-text'
@@ -583,9 +620,9 @@ export function Composer({
                   )}
                 >
                   {voice.available ? (
-                    <Mic aria-hidden="true" className="size-4" />
+                    <Mic aria-hidden="true" className={roundIcon} />
                   ) : (
-                    <MicOff aria-hidden="true" className="size-4" />
+                    <MicOff aria-hidden="true" className={roundIcon} />
                   )}
                 </button>
                 <button
@@ -597,7 +634,7 @@ export function Composer({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={controller.send}
                   className={cn(
-                    roundButton,
+                    round,
                     'ml-auto',
                     canSend
                       ? 'bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer'
@@ -605,9 +642,9 @@ export function Composer({
                   )}
                 >
                   {isSendCooldown ? (
-                    <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                    <Loader2 aria-hidden="true" className={cn(roundIcon, 'animate-spin')} />
                   ) : (
-                    <Send aria-hidden="true" className="size-[15px]" />
+                    <Send aria-hidden="true" className={touch ? 'size-[18px]' : 'size-[15px]'} />
                   )}
                 </button>
               </div>
