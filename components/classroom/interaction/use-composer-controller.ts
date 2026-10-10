@@ -80,6 +80,12 @@ export interface UseComposerControllerOptions {
   onUserInputActivity?: (kind: InputActivityKind) => void;
   onClearElementReference?: () => void;
   /**
+   * Text went back into the draft for the user (a returned question, a voice
+   * transcript that could not go out, a continued session): an always-visible
+   * composer focuses its textarea here, without reporting activation
+   */
+  onTextInputOpened?: () => void;
+  /**
    * A text-less raised hand (engine raiseHand / lowerHand / getHandState).
    * Text sent while the hand waits upgrades it to a question in the owner's
    * onMessageSend (attachQuestion).
@@ -105,6 +111,7 @@ export function useComposerController({
   onInputActivate,
   onUserInputActivity,
   onClearElementReference,
+  onTextInputOpened,
   hand,
 }: UseComposerControllerOptions) {
   const [draft, setDraft] = useState('');
@@ -152,6 +159,7 @@ export function useComposerController({
     onFallbackToDraft: (text) => {
       setDraft(text);
       setIsInputOpen(true);
+      onTextInputOpened?.();
     },
     onSent: handleSent,
     onOpen: () => {
@@ -187,10 +195,20 @@ export function useComposerController({
     }
   };
 
+  /**
+   * An always-visible text input took focus: report it like opening one
+   * (text keeps the lecture going), except while a send cools down.
+   */
+  const activateText = () => {
+    if (isSendCooldownRef.current) return;
+    onInputActivate?.('text');
+  };
+
   /** Show the text input (e.g. a soft-closing session continues) without reporting activation. */
   const openTextInput = () => {
     voice.setOpen(false);
     setIsInputOpen(true);
+    onTextInputOpened?.();
   };
 
   /** Give text back to the reopened input (a cancelled or restored raised hand). */
@@ -199,6 +217,7 @@ export function useComposerController({
     setDraft(text);
     voice.setOpen(false);
     setIsInputOpen(true);
+    onTextInputOpened?.();
   };
 
   /** Close both inputs and drop any recording in flight (Escape, click outside). */
@@ -239,6 +258,7 @@ export function useComposerController({
     voice,
     send,
     toggleInput,
+    activateText,
     openTextInput,
     restoreDraft,
     dismiss,

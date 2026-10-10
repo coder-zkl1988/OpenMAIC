@@ -19,6 +19,11 @@ export interface QueuedQuestionState {
   waitsFor?: 'sentence' | 'step';
 }
 
+/** Anything that can take focus: an element, or a host's wrapper that focuses quietly */
+export interface FocusTarget {
+  focus: () => void;
+}
+
 /**
  * Polls how far the line in flight has been spoken (0..1, engine
  * getSpeechProgress) once per frame while `active`; null otherwise.
@@ -60,9 +65,10 @@ export interface UseQueuedQuestionEffectsOptions {
   onReturned: (text: string) => void;
   /**
    * Where a keyboard user lands after their question is delivered, so they can
-   * follow up (today the text-input toggle; a host can point it at its textarea)
+   * follow up (the fullscreen text-input toggle, or the panel composer's
+   * textarea focused without reporting activation)
    */
-  focusTargetRef: RefObject<HTMLElement | null>;
+  focusTargetRef: RefObject<FocusTarget | null>;
   /** A text-less raised hand (engine getHandState) */
   handState?: HandState | null;
   /** Engine getSpeechProgress: polled for the "hand raised" progress while something waits */

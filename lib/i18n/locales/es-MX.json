@@ -338,7 +338,9 @@
     "join": "Unirme",
     "skip": "Omitir",
     "pause": "Pausar",
-    "resume": "Reanudar"
+    "resume": "Reanudar",
+    "offerLabel": "{{name}} quiere iniciar un debate",
+    "autoSkipHint": "Se omitirá automáticamente en {{seconds}} segundos"
   },
   "voice": {
     "startListening": "Entrada de voz",
@@ -366,6 +368,25 @@
       "paused": "En pausa, es tu turno de hablar",
       "answering": "Respondiendo",
       "discussing": "Debatiendo"
+    },
+    "composer": {
+      "raiseHand": "Levantar la mano",
+      "raiseHandHint": "Levanta la mano: escribe tu pregunta y el profesor responderá al terminar esta frase",
+      "raiseHandInLiveSession": "Durante las preguntas puedes hablar directamente",
+      "lowerHand": "Bajar",
+      "lowerHandHint": "Bajar la mano y retirar la pregunta",
+      "cuePlaceholder": "Di o escribe tu pregunta",
+      "cueStatus": "Es tu turno · clase en pausa",
+      "send": "Enviar",
+      "cancelRecording": "Cancelar grabación"
+    },
+    "participants": {
+      "label": "Participantes",
+      "online": "{{count}} en línea",
+      "speaking": "Hablando",
+      "wantsToSpeak": "Quiere hablar",
+      "handRaised": "Mano levantada",
+      "more": "{{count}} participantes más"
     },
     "generating": "Generando...",
     "paused": "En pausa",

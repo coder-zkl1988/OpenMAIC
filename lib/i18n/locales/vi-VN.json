@@ -338,7 +338,9 @@
     "join": "Tham gia",
     "skip": "Bỏ qua",
     "pause": "Tạm dừng",
-    "resume": "Tiếp tục"
+    "resume": "Tiếp tục",
+    "offerLabel": "{{name}} muốn bắt đầu thảo luận",
+    "autoSkipHint": "Tự động bỏ qua sau {{seconds}} giây"
   },
   "voice": {
     "startListening": "Nhập bằng giọng nói",
@@ -366,6 +368,25 @@
       "paused": "Đã tạm dừng, đến lượt bạn nói",
       "answering": "Đang trả lời",
       "discussing": "Đang thảo luận"
+    },
+    "composer": {
+      "raiseHand": "Giơ tay",
+      "raiseHandHint": "Giơ tay hỏi: viết câu hỏi, giáo viên sẽ trả lời sau câu này",
+      "raiseHandInLiveSession": "Trong phần hỏi đáp bạn có thể nói ngay",
+      "lowerHand": "Hạ tay",
+      "lowerHandHint": "Hạ tay và rút lại câu hỏi",
+      "cuePlaceholder": "Nói hoặc nhập câu hỏi của bạn",
+      "cueStatus": "Đến lượt bạn nói · lớp học đang tạm dừng",
+      "send": "Gửi",
+      "cancelRecording": "Hủy ghi âm"
+    },
+    "participants": {
+      "label": "Thành viên",
+      "online": "{{count}} người trực tuyến",
+      "speaking": "Đang nói",
+      "wantsToSpeak": "Muốn phát biểu",
+      "handRaised": "Đang giơ tay",
+      "more": "Thêm {{count}} thành viên"
     },
     "generating": "Đang tạo…",
     "paused": "Đã tạm dừng",

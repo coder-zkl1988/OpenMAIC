@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { MessageSquare } from 'lucide-react';
 import type { ChatSession } from '@/lib/types/chat';
 import type { Scene } from '@/lib/types/stage';
@@ -69,6 +69,8 @@ interface ConversationStreamProps {
   readonly activeBubbleId?: string | null;
   readonly onEndSession: (sessionId: string) => Promise<void> | void;
   readonly onContinueSession: (sessionId: string) => void;
+  /** Rendered after the latest item (the inline 发起讨论 card) */
+  readonly trailing?: ReactNode;
 }
 
 /**
@@ -84,6 +86,7 @@ export function ConversationStream({
   activeBubbleId,
   onEndSession,
   onContinueSession,
+  trailing,
 }: ConversationStreamProps) {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -92,6 +95,8 @@ export function ConversationStream({
   const items = useMemo(() => buildConversationStream(sessions, scenes), [sessions, scenes]);
   const sessionCount = items.reduce((n, item) => n + (item.kind === 'session' ? 1 : 0), 0);
   const hasSessions = sessionCount > 0;
+  const hasTrailing = trailing != null && trailing !== false;
+  const hasContent = hasSessions || hasTrailing;
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -112,15 +117,16 @@ export function ConversationStream({
     observer.observe(content);
     return () => observer.disconnect();
     // Re-attach when the scroll container mounts (the empty state has none)
-  }, [hasSessions]);
+  }, [hasContent]);
 
-  // A new session (a question sent, a discussion joined) always comes into view
+  // A new session (a question sent, a discussion joined) or a new trailing
+  // card (a discussion offer) always comes into view
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el || sessionCount === 0) return;
+    if (!el || (sessionCount === 0 && !hasTrailing)) return;
     isAtBottomRef.current = true;
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [sessionCount]);
+  }, [sessionCount, hasTrailing]);
 
   // Bring the bubble being spoken into view
   useEffect(() => {
@@ -133,7 +139,7 @@ export function ConversationStream({
     isAtBottomRef.current = true;
   }, [activeBubbleId]);
 
-  if (!hasSessions) {
+  if (!hasContent) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center bg-page p-6 text-center">
         <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-subtle text-icon-muted">
@@ -192,6 +198,7 @@ export function ConversationStream({
             />
           );
         })}
+        {trailing}
       </div>
     </div>
   );

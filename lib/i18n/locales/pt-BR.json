@@ -338,7 +338,9 @@
     "join": "Entrar",
     "skip": "Pular",
     "pause": "Pausar",
-    "resume": "Continuar"
+    "resume": "Continuar",
+    "offerLabel": "{{name}} quer iniciar uma discussão",
+    "autoSkipHint": "Será pulado automaticamente em {{seconds}} segundos"
   },
   "voice": {
     "startListening": "Entrada por voz",
@@ -779,6 +781,25 @@
       "paused": "Pausado, sua vez de falar",
       "answering": "Respondendo",
       "discussing": "Discutindo"
+    },
+    "composer": {
+      "raiseHand": "Levantar a mão",
+      "raiseHandHint": "Levante a mão: escreva sua pergunta e o professor responde ao fim desta frase",
+      "raiseHandInLiveSession": "Durante as perguntas você pode falar diretamente",
+      "lowerHand": "Abaixar",
+      "lowerHandHint": "Abaixar a mão e retirar a pergunta",
+      "cuePlaceholder": "Fale ou digite sua pergunta",
+      "cueStatus": "Sua vez de falar · aula pausada",
+      "send": "Enviar",
+      "cancelRecording": "Cancelar gravação"
+    },
+    "participants": {
+      "label": "Participantes",
+      "online": "{{count}} online",
+      "speaking": "Falando",
+      "wantsToSpeak": "Quer falar",
+      "handRaised": "Mão levantada",
+      "more": "Mais {{count}} participantes"
     },
     "generating": "Gerando...",
     "paused": "Pausado",

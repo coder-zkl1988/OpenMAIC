@@ -338,7 +338,9 @@
     "join": "Join",
     "skip": "Skip",
     "pause": "Pause",
-    "resume": "Resume"
+    "resume": "Resume",
+    "offerLabel": "{{name}} wants to start a discussion",
+    "autoSkipHint": "Skips automatically in {{seconds}} seconds"
   },
   "voice": {
     "startListening": "Voice input",
@@ -366,6 +368,25 @@
       "paused": "Paused, your turn to speak",
       "answering": "Answering",
       "discussing": "Discussing"
+    },
+    "composer": {
+      "raiseHand": "Raise hand",
+      "raiseHandHint": "Raise your hand: write your question and the teacher answers after this sentence",
+      "raiseHandInLiveSession": "You can speak directly during Q&A",
+      "lowerHand": "Lower",
+      "lowerHandHint": "Lower your hand and take the question back",
+      "cuePlaceholder": "Say or type your question",
+      "cueStatus": "Your turn to speak · class is paused",
+      "send": "Send",
+      "cancelRecording": "Cancel recording"
+    },
+    "participants": {
+      "label": "Participants",
+      "online": "{{count}} online",
+      "speaking": "Speaking",
+      "wantsToSpeak": "Wants to speak",
+      "handRaised": "Hand raised",
+      "more": "{{count}} more participants"
     },
     "generating": "Generating...",
     "paused": "Paused",

@@ -338,7 +338,9 @@
     "join": "انضمام",
     "skip": "تخطي",
     "pause": "إيقاف مؤقت",
-    "resume": "استئناف"
+    "resume": "استئناف",
+    "offerLabel": "{{name}} يريد بدء نقاش",
+    "autoSkipHint": "سيتم التخطي تلقائيًا بعد {{seconds}} ثوانٍ"
   },
   "voice": {
     "startListening": "إدخال صوتي",
@@ -366,6 +368,25 @@
       "paused": "متوقف مؤقتًا، حان دورك للتحدث",
       "answering": "يجيب",
       "discussing": "يناقش"
+    },
+    "composer": {
+      "raiseHand": "رفع اليد",
+      "raiseHandHint": "ارفع يدك: اكتب سؤالك وسيجيب المعلم بعد انتهاء هذه الجملة",
+      "raiseHandInLiveSession": "يمكنك التحدث مباشرة أثناء الأسئلة",
+      "lowerHand": "إنزال",
+      "lowerHandHint": "أنزل يدك واسحب السؤال",
+      "cuePlaceholder": "قل سؤالك أو اكتبه",
+      "cueStatus": "حان دورك للتحدث · الدرس متوقف مؤقتًا",
+      "send": "إرسال",
+      "cancelRecording": "إلغاء التسجيل"
+    },
+    "participants": {
+      "label": "المشاركون",
+      "online": "{{count}} متصل الآن",
+      "speaking": "يتحدث",
+      "wantsToSpeak": "يريد التحدث",
+      "handRaised": "رافع يده",
+      "more": "{{count}} مشاركين آخرين"
     },
     "generating": "جارٍ التوليد...",
     "paused": "متوقف مؤقتًا",

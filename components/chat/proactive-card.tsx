@@ -6,11 +6,22 @@ import { motion } from 'motion/react';
 import { Play, Pause, X } from 'lucide-react';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import type { DiscussionAction } from '@/lib/types/action';
+import { AvatarDisplay } from '@/components/ui/avatar-display';
+import { DISCUSSION_AUTO_SKIP_MS } from '@/lib/choreography';
 import { useProactiveCountdown } from './use-proactive-countdown';
 
-interface ProactiveCardProps {
+interface ProactiveCardCommonProps {
   action: DiscussionAction;
   mode: 'playback' | 'paused' | 'autonomous';
+  agentName?: string;
+  agentAvatar?: string;
+  agentColor?: string;
+  onSkip: () => void;
+  onListen: () => void;
+}
+
+interface PortalProactiveCardProps extends ProactiveCardCommonProps {
+  variant?: 'portal';
   /** Ref to the anchor element the card points to (avatar, etc.) */
   anchorRef: React.RefObject<HTMLElement | null>;
   /** Where the card prefers to align relative to the anchor */
@@ -18,13 +29,15 @@ interface ProactiveCardProps {
   /** Portal target — defaults to document.body. Pass the fullscreen container
    *  when in presentation mode so the card stays visible inside the top-layer. */
   portalContainer?: HTMLElement | null;
-  agentName?: string;
-  agentAvatar?: string;
-  agentColor?: string;
-  onSkip: () => void;
-  onListen: () => void;
   onTogglePause: () => void;
 }
+
+/** The card as a row of the interaction stream (no anchor, no pause toggle) */
+interface InlineProactiveCardProps extends ProactiveCardCommonProps {
+  variant: 'inline';
+}
+
+type ProactiveCardProps = PortalProactiveCardProps | InlineProactiveCardProps;
 
 const CARD_WIDTH = 256; // w-64
 const VIEWPORT_PAD = 12;
@@ -32,10 +45,111 @@ const VIEWPORT_PAD = 12;
 /**
  * 主动讨论卡片组件
  *
+ * `variant="inline"` renders the 发起讨论 card inside the interaction stream
+ * (Classroom.dc.html); the default portal variant floats over an avatar in
+ * fullscreen. Both auto-skip once the countdown runs out and freeze while
+ * playback is paused.
+ */
+export const ProactiveCard = (props: ProactiveCardProps) =>
+  props.variant === 'inline' ? (
+    <InlineProactiveCard {...props} />
+  ) : (
+    <PortalProactiveCard {...props} />
+  );
+
+/**
+ * The stream row: an amber card with a 3px countdown bar, avatar, name, 讨论
+ * chip, the seconds left, the topic and 加入讨论 / 跳过. The control bar's
+ * play / pause freezes the countdown, so there is no pause toggle here.
+ */
+function InlineProactiveCard({
+  action,
+  mode,
+  agentName,
+  agentAvatar,
+  onSkip,
+  onListen,
+}: InlineProactiveCardProps) {
+  const { t } = useI18n();
+  const { progress, remainingSeconds, isPaused } = useProactiveCountdown({ mode, onSkip });
+
+  return (
+    <motion.div
+      role="group"
+      aria-label={
+        agentName
+          ? t('proactiveCard.offerLabel', { name: agentName })
+          : t('proactiveCard.discussion')
+      }
+      data-testid="proactive-card-inline"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, transition: { duration: 0.15 } }}
+      className="relative flex shrink-0 flex-col gap-2 overflow-hidden rounded-[14px] border border-amber-200 bg-amber-50 px-3 pt-3.5 pb-3 dark:border-amber-500/30 dark:bg-amber-500/10"
+    >
+      <span
+        aria-hidden="true"
+        data-testid="proactive-card-progress"
+        className={`absolute top-0 left-0 h-[3px] transition-[width] duration-[50ms] ease-linear ${
+          isPaused ? 'bg-line-strong' : 'bg-amber-500'
+        }`}
+        style={{ width: `${progress}%` }}
+      />
+      <div className="flex items-center gap-2">
+        {agentAvatar && (
+          <span className="size-6 shrink-0 overflow-hidden rounded-full ring-1 ring-amber-200 dark:ring-amber-500/40">
+            <AvatarDisplay src={agentAvatar} alt="" />
+          </span>
+        )}
+        {agentName && (
+          <span className="min-w-0 truncate text-xs font-semibold text-fg-secondary">
+            {agentName}
+          </span>
+        )}
+        <span className="shrink-0 rounded-full bg-warning-soft px-1.5 text-[10px] leading-4 font-semibold text-warning">
+          {t('proactiveCard.discussion')}
+        </span>
+        {/* The stream is a live log: a ticking number would be read out every
+            second, so the time limit is stated once (below) instead */}
+        <span
+          aria-hidden="true"
+          className={`ml-auto shrink-0 text-xs font-semibold tabular-nums ${
+            isPaused ? 'text-fg-tertiary' : 'text-warning'
+          }`}
+        >
+          {remainingSeconds}s
+        </span>
+      </div>
+      <span className="sr-only">
+        {t('proactiveCard.autoSkipHint', { seconds: Math.round(DISCUSSION_AUTO_SKIP_MS / 1000) })}
+      </span>
+      <p className="text-sm leading-normal font-semibold text-fg">{action.topic}</p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onListen}
+          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-primary text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.98] cursor-pointer"
+        >
+          <Play aria-hidden="true" className="size-3 fill-current" />
+          {t('proactiveCard.join')}
+        </button>
+        <button
+          type="button"
+          onClick={onSkip}
+          className="h-9 shrink-0 rounded-[10px] border border-line bg-background px-4 text-[13px] font-medium text-fg-secondary transition-colors hover:bg-subtle hover:text-fg cursor-pointer"
+        >
+          {t('proactiveCard.skip')}
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+/**
  * 通过 React Portal 渲染到 document.body，使用 fixed 定位，
  * 不受父级 overflow/z-index stacking context 影响。
  */
-export const ProactiveCard = ({
+function PortalProactiveCard({
   action,
   mode,
   anchorRef,
@@ -47,7 +161,7 @@ export const ProactiveCard = ({
   onSkip,
   onListen,
   onTogglePause,
-}: ProactiveCardProps) => {
+}: PortalProactiveCardProps) {
   const { t } = useI18n();
   const { progress, remainingSeconds, isPaused } = useProactiveCountdown({ mode, onSkip });
 
@@ -216,4 +330,4 @@ export const ProactiveCard = ({
   );
 
   return createPortal(card, portalContainer || document.body);
-};
+}

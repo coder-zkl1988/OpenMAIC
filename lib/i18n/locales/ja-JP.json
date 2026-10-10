@@ -338,7 +338,9 @@
     "join": "参加する",
     "skip": "スキップ",
     "pause": "一時停止",
-    "resume": "再開"
+    "resume": "再開",
+    "offerLabel": "{{name}} がディスカッションを始めようとしています",
+    "autoSkipHint": "{{seconds}} 秒後に自動的にスキップします"
   },
   "voice": {
     "startListening": "音声入力",
@@ -366,6 +368,25 @@
       "paused": "一時停止中・あなたの番です",
       "answering": "回答中",
       "discussing": "ディスカッション中"
+    },
+    "composer": {
+      "raiseHand": "挙手",
+      "raiseHandHint": "挙手して質問：質問を書くと、先生がこの文を話し終えた後に答えます",
+      "raiseHandInLiveSession": "Q&A 中はそのまま発言できます",
+      "lowerHand": "手を下ろす",
+      "lowerHandHint": "手を下ろして質問を取り消す",
+      "cuePlaceholder": "質問を話すか入力してください",
+      "cueStatus": "あなたの番です · 授業は一時停止中",
+      "send": "送信",
+      "cancelRecording": "録音をキャンセル"
+    },
+    "participants": {
+      "label": "参加者",
+      "online": "{{count}} 人がオンライン",
+      "speaking": "説明中",
+      "wantsToSpeak": "発言したい",
+      "handRaised": "挙手中",
+      "more": "ほか {{count}} 人の参加者"
     },
     "generating": "生成中...",
     "paused": "一時停止中",

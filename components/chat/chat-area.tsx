@@ -8,6 +8,7 @@ import {
   useState,
   useMemo,
   useEffect,
+  type ReactNode,
 } from 'react';
 import type { SessionType } from '@/lib/types/chat';
 import type { DiscussionRequest } from '@/components/roundtable';
@@ -58,6 +59,23 @@ interface ChatAreaProps {
   onJumpToAction?: (sceneId: string, actionIndex: number) => void;
   /** The stream's soft-close row continued the session (the shell reopens the composer) */
   onSoftCloseContinued?: () => void;
+  /** Above the stream on the 互动 tab (the participants block) */
+  header?: ReactNode;
+  /**
+   * Below the stream on the 互动 tab (the composer). Kept mounted on 笔记 and
+   * while collapsed — only hidden — so a draft or a recording survives.
+   */
+  footer?: ReactNode;
+  /**
+   * After the stream's latest item (the inline 发起讨论 card). The 互动 tab
+   * stays mounted on 笔记 so the offer's auto-skip countdown keeps running.
+   */
+  streamTrailing?: ReactNode;
+  /**
+   * The composer went out of sight (笔记 in front, or the panel collapsed):
+   * the shell drops a live recording, which would otherwise go on unseen
+   */
+  onFooterHidden?: () => void;
 }
 
 /**
@@ -122,6 +140,10 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       canJumpToAction,
       onJumpToAction,
       onSoftCloseContinued,
+      header,
+      footer,
+      streamTrailing,
+      onFooterHidden,
     },
     ref,
   ) => {
@@ -160,7 +182,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       shouldHoldAfterReveal,
     });
 
-    // 互动 is the default tab: the conversation and (later) the composer live there
+    // 互动 is the default tab: participants, the conversation and the composer live there
     const [activeTab, setActiveTab] = useState<PanelTab>('interaction');
     const isDraggingRef = useRef(false);
     const [isDragging, setIsDragging] = useState(false);
@@ -176,6 +198,9 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       () => chatSessions.some((s) => s.status === 'active'),
       [chatSessions],
     );
+
+    // A 发起讨论 offer waits for an answer: the 互动 dot shows it on 笔记 too
+    const hasPendingOffer = Boolean(streamTrailing);
 
     const softClosingChatSession = useMemo(
       () => chatSessions.find((s) => s.status === 'soft-closing'),
@@ -215,6 +240,18 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       const softClosing = chatSessions.find((session) => session.status === 'soft-closing');
       return softClosing ? continueSoftClosingSession(softClosing.id) : false;
     }, [chatSessions, continueSoftClosingSession]);
+
+    // Only on the way out of sight, not on every render while hidden
+    const isFooterHidden = collapsed || activeTab !== 'interaction';
+    const onFooterHiddenRef = useRef(onFooterHidden);
+    useEffect(() => {
+      onFooterHiddenRef.current = onFooterHidden;
+    });
+    const wasFooterHiddenRef = useRef(isFooterHidden);
+    useEffect(() => {
+      if (isFooterHidden && !wasFooterHiddenRef.current) onFooterHiddenRef.current?.();
+      wasFooterHiddenRef.current = isFooterHidden;
+    }, [isFooterHidden]);
 
     const switchToTab = useCallback((tab: ChatAreaTab) => {
       setActiveTab(resolvePanelTab(tab));
@@ -325,8 +362,9 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
                 >
                   <Users />
                   {t('chat.tabs.chat')}
-                  {/* Amber pulse dot while a session is live and 笔记 is in front */}
-                  {hasActiveChatSession && activeTab === 'notes' && (
+                  {/* Amber pulse dot while a session is live or a discussion
+                      offer waits, and 笔记 is in front */}
+                  {(hasActiveChatSession || hasPendingOffer) && activeTab === 'notes' && (
                     <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
@@ -355,11 +393,15 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
               )}
             </div>
 
-            {/* 互动: the flat conversation stream */}
+            {/* 互动: participants and the flat conversation stream. Hidden, not
+                unmounted, on 笔记 (as when collapsed): a pending 发起讨论
+                card keeps counting down to its auto-skip */}
             <TabsContent
               value="interaction"
-              className="flex flex-1 flex-col overflow-hidden border-t border-line"
+              forceMount
+              className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-line data-[state=inactive]:hidden"
             >
+              {header}
               <ConversationStream
                 sessions={chatSessions}
                 scenes={scenes}
@@ -367,6 +409,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
                 activeBubbleId={activeBubbleId}
                 onEndSession={handleEndSession}
                 onContinueSession={handleContinueSession}
+                trailing={streamTrailing}
               />
             </TabsContent>
 
@@ -383,6 +426,13 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
                 onJumpToAction={onJumpToAction}
               />
             </TabsContent>
+
+            {/* The 互动 composer: hidden, never unmounted, on 笔记 */}
+            {footer && (
+              <div className={cn('shrink-0', activeTab !== 'interaction' && 'hidden')}>
+                {footer}
+              </div>
+            )}
           </Tabs>
         </div>
       </aside>

@@ -236,6 +236,32 @@ describe('useComposerController', () => {
     expect(composer).toMatchObject({ draft: 'Why?', isInputOpen: true, isSendCooldown: false });
   });
 
+  it('tells an always-visible host when text goes back into the draft', () => {
+    const onTextInputOpened = vi.fn();
+    render({ onTextInputOpened, canSendMessage: () => false });
+    act(() => composer.restoreDraft('Why?'));
+    expect(onTextInputOpened).toHaveBeenCalledOnce();
+    act(() => composer.openTextInput());
+    expect(onTextInputOpened).toHaveBeenCalledTimes(2);
+    // A transcript that cannot go out lands in the draft too
+    act(() => audio.onTranscription?.('Spoken question'));
+    expect(onTextInputOpened).toHaveBeenCalledTimes(3);
+    expect(composer.draft).toBe('Spoken question');
+    // None of these report activation
+    expect(options.onInputActivate).not.toHaveBeenCalled();
+  });
+
+  it('reports a focused always-visible input as text activation, except while cooling down', () => {
+    render();
+    act(() => composer.activateText());
+    expect(options.onInputActivate).toHaveBeenCalledExactlyOnceWith('text');
+
+    act(() => composer.setDraft('Why?'));
+    act(() => composer.send());
+    act(() => composer.activateText());
+    expect(options.onInputActivate).toHaveBeenCalledOnce();
+  });
+
   it('closes everything on dismiss', () => {
     render();
     act(() => composer.toggleInput());

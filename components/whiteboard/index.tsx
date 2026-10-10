@@ -309,7 +309,7 @@ export function Whiteboard({
                     exit={{ opacity: 0, scale: 0.9 }}
                     transition={{ duration: 0.15 }}
                     className={cn(
-                      'inline-flex h-[26px] min-w-0 shrink items-center gap-1.5 rounded-full bg-accent-soft pr-2.5 text-xs font-semibold text-accent-hover',
+                      'inline-flex h-[26px] min-w-0 shrink items-center gap-1.5 rounded-full bg-accent-soft pr-2.5 text-xs font-semibold text-accent-hover dark:text-accent-text',
                       drawingAgent?.avatar ? 'pl-[3px]' : 'pl-2.5',
                     )}
                   >

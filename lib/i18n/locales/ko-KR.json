@@ -338,7 +338,9 @@
     "join": "참여",
     "skip": "건너뛰기",
     "pause": "일시정지",
-    "resume": "재개"
+    "resume": "재개",
+    "offerLabel": "{{name}} 님이 토론을 제안했습니다",
+    "autoSkipHint": "{{seconds}}초 후 자동으로 건너뜁니다"
   },
   "voice": {
     "startListening": "음성 입력",
@@ -366,6 +368,25 @@
       "paused": "일시정지됨 · 발언할 차례입니다",
       "answering": "답변 중",
       "discussing": "토론 중"
+    },
+    "composer": {
+      "raiseHand": "손들기",
+      "raiseHandHint": "손들고 질문하기: 질문을 적으면 선생님이 이 문장을 마친 뒤 답해 줍니다",
+      "raiseHandInLiveSession": "Q&A 중에는 바로 말할 수 있어요",
+      "lowerHand": "내리기",
+      "lowerHandHint": "손을 내리고 질문 취소",
+      "cuePlaceholder": "질문을 말하거나 입력하세요",
+      "cueStatus": "발언할 차례입니다 · 수업 일시정지됨",
+      "send": "보내기",
+      "cancelRecording": "녹음 취소"
+    },
+    "participants": {
+      "label": "참여자",
+      "online": "{{count}}명 접속 중",
+      "speaking": "설명 중",
+      "wantsToSpeak": "발언 희망",
+      "handRaised": "손 든 상태",
+      "more": "참여자 {{count}}명 더 보기"
     },
     "generating": "생성 중...",
     "paused": "일시정지됨",

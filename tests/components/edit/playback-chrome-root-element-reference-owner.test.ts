@@ -12,7 +12,12 @@ const mocks = vi.hoisted(() => ({
     lastSeq: number | null;
     whiteboard: import('@/lib/types/stage').Whiteboard | null;
   } | null,
+  // The fullscreen roundtable (mounted only while presenting)
   roundtableProps: undefined as Record<string, unknown> | undefined,
+  // The interaction panel's composer, participants and inline discussion card
+  composerProps: undefined as Record<string, unknown> | undefined,
+  participantsProps: undefined as Record<string, unknown> | undefined,
+  proactiveProps: undefined as Record<string, unknown> | undefined,
   canvasProps: undefined as Record<string, unknown> | undefined,
   controlBarProps: undefined as Record<string, unknown> | undefined,
   captionProps: undefined as Record<string, unknown> | undefined,
@@ -58,6 +63,12 @@ const mocks = vi.hoisted(() => ({
   lastSendResult: undefined as unknown,
   chatAreaProps: undefined as Record<string, unknown> | undefined,
   openTextInput: vi.fn(),
+  focusComposer: vi.fn(),
+  toggleVoice: vi.fn(),
+  dismissComposer: vi.fn(),
+  switchToTab: vi.fn(),
+  confirmDiscussion: vi.fn(),
+  skipDiscussion: vi.fn(),
 }));
 
 const textElement = {
@@ -233,13 +244,23 @@ vi.mock('@/components/canvas/canvas-area', async () => {
     },
   };
 });
-vi.mock('@/components/roundtable', async () => {
+vi.mock('@/components/roundtable', () => ({
+  Roundtable: (props: Record<string, unknown>) => {
+    mocks.roundtableProps = props;
+    return null;
+  },
+}));
+// The panel composer: a send button and the reference chip it shows
+vi.mock('@/components/classroom/interaction/composer', async () => {
   const React = await import('react');
   return {
-    Roundtable: (props: Record<string, unknown>) => {
-      mocks.roundtableProps = props;
+    Composer: (props: Record<string, unknown>) => {
+      mocks.composerProps = props;
       React.useImperativeHandle(props.composerRef as React.Ref<unknown>, () => ({
         openTextInput: mocks.openTextInput,
+        focus: mocks.focusComposer,
+        toggleVoice: mocks.toggleVoice,
+        dismiss: mocks.dismissComposer,
       }));
       const pill = props.elementReferencePill as
         | { sceneLabel: string; displaySummary: string; elementType: string }
@@ -271,6 +292,18 @@ vi.mock('@/components/roundtable', async () => {
     },
   };
 });
+vi.mock('@/components/classroom/interaction/participants', () => ({
+  Participants: (props: Record<string, unknown>) => {
+    mocks.participantsProps = props;
+    return null;
+  },
+}));
+vi.mock('@/components/chat/proactive-card', () => ({
+  ProactiveCard: (props: Record<string, unknown>) => {
+    mocks.proactiveProps = props;
+    return null;
+  },
+}));
 // The shell-owned control bar: the "Reference content" entry, prev / next and play
 vi.mock('@/components/classroom/control-bar', async () => {
   const React = await import('react');
@@ -300,9 +333,9 @@ vi.mock('@/components/classroom/caption-strip', () => ({
 vi.mock('@/components/chat/chat-area', async () => {
   const React = await import('react');
   return {
-    ChatArea: React.forwardRef(function MockChatArea(props, ref) {
+    ChatArea: React.forwardRef(function MockChatArea(props: Record<string, unknown>, ref) {
       React.useEffect(() => {
-        mocks.chatAreaProps = props as Record<string, unknown>;
+        mocks.chatAreaProps = props;
       });
       React.useImperativeHandle(ref, () => ({
         sendMessage: mocks.sendMessage,
@@ -312,7 +345,7 @@ vi.mock('@/components/chat/chat-area', async () => {
         addLectureMessage: vi.fn(),
         getLectureMessageId: vi.fn(),
         startDiscussion: vi.fn(),
-        switchToTab: vi.fn(),
+        switchToTab: mocks.switchToTab,
         resumeActiveLiveBuffer: vi.fn(),
         pauseActiveLiveBuffer: vi.fn(),
         stopActiveSession: vi.fn(),
@@ -322,7 +355,14 @@ vi.mock('@/components/chat/chat-area', async () => {
         resumeBuffer: vi.fn(),
         resumeActiveSession: vi.fn(),
       }));
-      return null;
+      // The 互动 tab's slots: participants, the inline card, the composer
+      return React.createElement(
+        React.Fragment,
+        null,
+        props.header as React.ReactNode,
+        props.streamTrailing as React.ReactNode,
+        props.footer as React.ReactNode,
+      );
     }),
   };
 });
@@ -389,6 +429,9 @@ vi.mock('@/lib/playback', () => ({
     isExhausted() {
       return mocks.engineExhausted;
     }
+    getSpeechProgress() {
+      return 0.4;
+    }
     isSpeechInFlight() {
       return mocks.speechInFlight;
     }
@@ -412,8 +455,12 @@ vi.mock('@/lib/playback', () => ({
     pause() {
       mocks.enginePause();
     }
-    confirmDiscussion() {}
-    skipDiscussion() {}
+    confirmDiscussion() {
+      mocks.confirmDiscussion();
+    }
+    skipDiscussion() {
+      mocks.skipDiscussion();
+    }
   },
   computePlaybackView: () => ({ kind: 'idle', isTopicActive: mocks.topicActive }),
   shouldAutoResumeLecture: (args: unknown) => mocks.shouldAutoResume(args),
@@ -487,6 +534,7 @@ vi.mock('@/lib/orchestration/registry/store', () => ({
     { getState: () => ({ getAgent: () => undefined }) },
   ),
 }));
+vi.mock('@/lib/hooks/use-asr-available', () => ({ useASRAvailable: () => true }));
 vi.mock('@/lib/config/feature-flags', () => ({
   isPiChatEnabled: () => mocks.piEnabled,
   isCoursewareReferenceEnabled: () => mocks.coursewareReferenceEnabled,
@@ -510,6 +558,17 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.sendMessage.mockReset();
     mocks.sendMessage.mockResolvedValue(undefined);
     mocks.roundtableProps = undefined;
+    mocks.composerProps = undefined;
+    mocks.participantsProps = undefined;
+    mocks.proactiveProps = undefined;
+    mocks.focusComposer.mockReset();
+    mocks.toggleVoice.mockReset();
+    mocks.dismissComposer.mockReset();
+    mocks.switchToTab.mockReset();
+    mocks.confirmDiscussion.mockReset();
+    mocks.skipDiscussion.mockReset();
+    settingsState.chatAreaCollapsed = false;
+    settingsState.setChatAreaCollapsed.mockReset();
     mocks.canvasProps = undefined;
     mocks.controlBarProps = undefined;
     mocks.captionProps = undefined;
@@ -562,6 +621,11 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     vi.unstubAllGlobals();
   });
 
+  /** Props of the caption strip element passed to the (mocked) canvas */
+  function captionElementProps() {
+    return (mocks.canvasProps?.caption as { props?: Record<string, unknown> } | null)?.props;
+  }
+
   function click(testId: string) {
     act(() => {
       container
@@ -612,7 +676,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     expect(container.querySelector('[data-testid="owner-pill"]')?.textContent).toContain(
       'whiteboard.title · Text · First grounded fact',
     );
-    expect((mocks.roundtableProps?.canSendMessage as () => boolean)()).toBe(true);
+    expect((mocks.composerProps?.canSendMessage as () => boolean)()).toBe(true);
     click('send');
     expect(mocks.sendMessage.mock.calls[0][1].elementReference).toEqual({
       kind: 'whiteboard_element',
@@ -672,11 +736,11 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     );
     stageState.stage.whiteboard[0].elements = [];
     await rerenderOwner();
-    expect((mocks.roundtableProps?.canSendMessage as () => boolean)()).toBe(false);
+    expect((mocks.composerProps?.canSendMessage as () => boolean)()).toBe(false);
     expect(mocks.sendMessage).not.toHaveBeenCalled();
     expect(container.querySelector('[data-testid="owner-pill"]')).not.toBeNull();
-    act(() => (mocks.roundtableProps?.onClearElementReference as () => void)());
-    expect((mocks.roundtableProps?.canSendMessage as () => boolean)()).toBe(true);
+    act(() => (mocks.composerProps?.onClearElementReference as () => void)());
+    expect((mocks.composerProps?.canSendMessage as () => boolean)()).toBe(true);
   });
 
   it('does not clear a slide draft merely because the whiteboard opens', async () => {
@@ -831,7 +895,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     async (mode) => {
       mocks.engineMode = mode;
       await renderOwner();
-      expect(mocks.roundtableProps?.engineMode).toBe(mode);
+      expect(mocks.controlBarProps?.engineState).toBe(mode === 'live' ? 'playing' : mode);
 
       click('toggle-pick');
       click('pick-text');
@@ -1104,7 +1168,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
 
     expect(mocks.engineStop).toHaveBeenCalledOnce();
     act(() => previousEngineOptions?.onProgress?.({ actionIndex: 1, sceneId: scene.id }));
-    expect(mocks.roundtableProps?.currentActionIndex).toBe(0);
+    expect(mocks.chatAreaProps?.currentActionIndex).toBe(0);
   });
 
   it('does not resume manual playback after its engine is superseded', async () => {
@@ -1115,7 +1179,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       }),
     );
     await renderOwner();
-    const onPlayPause = mocks.roundtableProps?.onPlayPause as () => Promise<void>;
+    const onPlayPause = mocks.canvasProps?.onPlayPause as () => Promise<void>;
 
     let playPromise!: Promise<void>;
     act(() => {
@@ -1197,7 +1261,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     const textReference = { kind: 'slide_element', sceneId: 'scene-1', elementId: 'text-1' };
 
     function queuedQuestion() {
-      return mocks.roundtableProps?.queuedQuestion as
+      return mocks.composerProps?.queuedQuestion as
         | { id: number; text: string; status: string }
         | null
         | undefined;
@@ -1244,7 +1308,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       await raiseHandWithTextReference();
       const { id } = queuedQuestion()!;
 
-      act(() => (mocks.roundtableProps?.onCancelQueuedQuestion as () => void)());
+      act(() => (mocks.composerProps?.onCancelQueuedQuestion as () => void)());
       expect(mocks.cancelQueuedInterrupt).toHaveBeenCalledOnce();
       expect(queuedQuestion()).toEqual({ id, text: 'Explain this', status: 'cancelled' });
 
@@ -1257,7 +1321,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       await raiseHandWithTextReference();
 
       await act(async () => {
-        await (mocks.roundtableProps?.onPlayPause as () => Promise<void>)();
+        await (mocks.canvasProps?.onPlayPause as () => Promise<void>)();
       });
       expect(mocks.flushQueuedInterrupt).toHaveBeenCalledOnce();
       expect(mocks.enginePause).not.toHaveBeenCalled();
@@ -1270,7 +1334,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
 
       // With no raised hand, pause is an ordinary pause again
       await act(async () => {
-        await (mocks.roundtableProps?.onPlayPause as () => Promise<void>)();
+        await (mocks.canvasProps?.onPlayPause as () => Promise<void>)();
       });
       expect(mocks.enginePause).toHaveBeenCalledOnce();
     });
@@ -1278,7 +1342,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     it('keeps playing while typing, but pauses for voice and in live Q&A', async () => {
       mocks.engineMode = 'playing';
       await renderOwner();
-      const onInputActivate = mocks.roundtableProps?.onInputActivate as (
+      const onInputActivate = mocks.composerProps?.onInputActivate as (
         kind: 'text' | 'voice',
       ) => void;
 
@@ -1402,7 +1466,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
           });
         });
         await act(async () => {
-          await (mocks.roundtableProps?.onPlayPause as () => Promise<void>)();
+          await (mocks.canvasProps?.onPlayPause as () => Promise<void>)();
         });
 
         if (pendingCompletion) {
@@ -1499,7 +1563,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       it('leaves no draft once the question is cancelled', async () => {
         await raiseHand();
         pageHide();
-        act(() => (mocks.roundtableProps?.onCancelQueuedQuestion as () => void)());
+        act(() => (mocks.composerProps?.onCancelQueuedQuestion as () => void)());
         expect(storedDraft()).toBeNull();
 
         act(() => root.unmount());
@@ -1642,7 +1706,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
         );
         stageState.mode = 'autonomous';
         await renderOwner();
-        expect(mocks.roundtableProps).toBeUndefined();
+        expect(mocks.composerProps).toBeUndefined();
         expect(storedDraft()).toBe('Left behind');
 
         stageState.mode = 'playback';
@@ -1671,11 +1735,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       }
 
       function setComposing(active: boolean) {
-        act(() =>
-          (mocks.roundtableProps?.onPresentationInteractionChange as (active: boolean) => void)(
-            active,
-          ),
-        );
+        act(() => (mocks.composerProps?.onInteractionChange as (active: boolean) => void)(active));
       }
 
       it('holds the advance until the input closes', async () => {
@@ -1726,7 +1786,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     async function pauseLiveQA() {
       mocks.engineMode = 'live';
       await act(async () => {
-        await (mocks.roundtableProps?.onPlayPause as () => Promise<void>)();
+        await (mocks.canvasProps?.onPlayPause as () => Promise<void>)();
       });
     }
 
@@ -1768,8 +1828,9 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
         atBoundary: true,
       });
       // The line that finished stays on screen, matching the line counter
-      expect(mocks.roundtableProps?.currentActionIndex).toBe(1);
-      expect(mocks.roundtableProps?.lectureSpeech).toBe('First line');
+      expect(mocks.chatAreaProps?.currentActionIndex).toBe(1);
+      // The caption strip element the canvas receives shows the same line
+      expect(captionElementProps()?.lectureSpeech).toBe('First line');
     });
 
     it('stores a boundary before a visual cue instead of the finished line', async () => {
@@ -1829,7 +1890,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
         autoplay: false,
         atBoundary: false,
       });
-      expect(mocks.roundtableProps?.lectureSpeech).toBe('Second');
+      expect(captionElementProps()?.lectureSpeech).toBe('Second');
     });
   });
 
@@ -1847,9 +1908,9 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
         showElementReference: true,
         canPickElement: true,
       });
-      // The roundtable no longer carries any of the bar's controls
+      // The composer carries none of the bar's controls
       for (const key of ['onNextSlide', 'onPrevSlide', 'onToggleElementPick', 'onStopDiscussion']) {
-        expect(mocks.roundtableProps).not.toHaveProperty(key);
+        expect(mocks.composerProps).not.toHaveProperty(key);
       }
     });
 
@@ -1875,16 +1936,21 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       expect(mocks.startLecture).toHaveBeenCalledWith('scene-1');
     });
 
-    it('reopens the roundtable composer when the stream continues a soft-closing session', async () => {
+    it('reopens the panel composer when the stream continues a soft-closing session', async () => {
       mocks.openTextInput.mockReset();
+      // Collapsed: continuing must bring the composer it focuses into view
+      settingsState.chatAreaCollapsed = true;
       await renderOwner();
       // The control bar no longer carries the soft-close "continue" (the
       // stream's soft-close row owns it): none of the old toolbar's props
       for (const key of ['onContinueDiscussion', 'isSoftClosing', 'softCloseDeadline']) {
         expect(mocks.controlBarProps).not.toHaveProperty(key);
       }
+      expect(settingsState.setChatAreaCollapsed).not.toHaveBeenCalled();
       act(() => (mocks.chatAreaProps?.onSoftCloseContinued as () => void)());
       expect(mocks.openTextInput).toHaveBeenCalledOnce();
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(false);
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
     });
 
     it('shows the caption under slides only', async () => {
@@ -1895,6 +1961,126 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       stageState.currentSceneId = interactiveScene.id;
       await rerenderOwner();
       expect(mocks.canvasProps?.caption).toBeNull();
+    });
+  });
+
+  describe('interaction panel: participants, composer and the inline discussion card', () => {
+    function pressKey(key: string) {
+      act(() => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+        );
+      });
+    }
+
+    it('mounts participants and the composer in the panel, never the roundtable outside fullscreen', async () => {
+      await renderOwner();
+      expect(mocks.chatAreaProps?.header).toBeTruthy();
+      expect(mocks.chatAreaProps?.footer).toBeTruthy();
+      expect(mocks.participantsProps).toBeDefined();
+      expect(mocks.composerProps).toBeDefined();
+      expect(mocks.roundtableProps).toBeUndefined();
+      // The transient end flash is gone: the stream keeps persistent markers
+      expect(mocks.composerProps).not.toHaveProperty('showEndFlash');
+    });
+
+    it('routes a mid-line question through raiseHand: queued, with the hand on the participants', async () => {
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      click('send');
+      expect(mocks.queueUserInterrupt).toHaveBeenCalledExactlyOnceWith('Explain this');
+      expect(mocks.lastSendResult).toBe('queued');
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+      expect(mocks.composerProps?.queuedQuestion).toMatchObject({
+        text: 'Explain this',
+        status: 'queued',
+      });
+      expect(mocks.participantsProps?.userHandRaised).toBe(true);
+      // The status row's progress bar reads the line in flight from the engine
+      expect((mocks.composerProps?.getSpeechProgress as () => number | null)()).toBe(0.4);
+      // Lecture time: 举手 stays available
+      expect(mocks.composerProps?.isLiveSession).toBe(false);
+    });
+
+    it('sends at once outside the lecture and treats the open Q&A as a live session', async () => {
+      await renderOwner();
+      click('send');
+      expect(mocks.lastSendResult).toBeUndefined();
+      expect(mocks.sendMessage).toHaveBeenCalledOnce();
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+      expect(mocks.composerProps?.isLiveSession).toBe(true);
+    });
+
+    it('T and V each reveal a collapsed panel on 互动 before focusing or recording', async () => {
+      settingsState.chatAreaCollapsed = true;
+      await renderOwner();
+      pressKey('t');
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(false);
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+      expect(mocks.focusComposer).toHaveBeenCalledOnce();
+
+      // The mocked store stays collapsed, so V must reveal on its own
+      settingsState.setChatAreaCollapsed.mockClear();
+      mocks.switchToTab.mockClear();
+      pressKey('v');
+      expect(mocks.toggleVoice).toHaveBeenCalledOnce();
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(false);
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+    });
+
+    it('drops a recording when the composer goes out of sight (笔记 or collapsed)', async () => {
+      await renderOwner();
+      expect(mocks.dismissComposer).not.toHaveBeenCalled();
+      act(() => (mocks.chatAreaProps?.onFooterHidden as () => void)());
+      expect(mocks.dismissComposer).toHaveBeenCalledOnce();
+    });
+
+    it('Escape leaves the composer only while it is composing', async () => {
+      await renderOwner();
+      pressKey('Escape');
+      expect(mocks.dismissComposer).not.toHaveBeenCalled();
+
+      act(() => (mocks.composerProps?.onInteractionChange as (active: boolean) => void)(true));
+      pressKey('Escape');
+      expect(mocks.dismissComposer).toHaveBeenCalledOnce();
+    });
+
+    it('expands the collapsed panel on 互动 when the learner is cued', async () => {
+      settingsState.chatAreaCollapsed = true;
+      await renderOwner();
+      expect(settingsState.setChatAreaCollapsed).not.toHaveBeenCalled();
+
+      act(() => (mocks.chatAreaProps?.onCueUser as () => void)());
+      expect(mocks.composerProps?.isCueUser).toBe(true);
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(false);
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+    });
+
+    it('offers a discussion inline in the stream; join and skip go to the engine', async () => {
+      mocks.engineMode = 'paused';
+      await renderOwner();
+      expect(mocks.proactiveProps).toBeUndefined();
+
+      const options = mocks.engineOptions as unknown as {
+        onProactiveShow: (trigger: Record<string, unknown>) => void;
+      };
+      mocks.switchToTab.mockClear();
+      act(() =>
+        options.onProactiveShow({ id: 'trigger-1', question: 'Why green?', agentId: 'agent-2' }),
+      );
+      expect(mocks.proactiveProps).toMatchObject({
+        variant: 'inline',
+        mode: 'paused',
+        action: { topic: 'Why green?', agentId: 'agent-2' },
+      });
+      expect(mocks.participantsProps?.discussionAgentId).toBe('agent-2');
+      // The lecture waits on join / skip: the offer is brought into view
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+
+      act(() => (mocks.proactiveProps?.onListen as () => void)());
+      expect(mocks.confirmDiscussion).toHaveBeenCalledOnce();
+      act(() => (mocks.proactiveProps?.onSkip as () => void)());
+      expect(mocks.skipDiscussion).toHaveBeenCalledOnce();
     });
   });
 });

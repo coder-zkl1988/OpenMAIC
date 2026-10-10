@@ -38,7 +38,9 @@ import { Roundtable, type QueuedQuestionState } from '@/components/roundtable';
 
 const QUESTION = 'Why does the curve flatten?';
 
-describe('Roundtable raised hand (queued question)', () => {
+// Outside fullscreen the panel composer owns this (composer-queued-question);
+// the roundtable keeps serving the fullscreen dock until it is replaced
+describe('Roundtable raised hand in fullscreen (queued question)', () => {
   let container: HTMLDivElement;
   let root: Root;
   let props: Record<string, unknown>;
@@ -49,6 +51,8 @@ describe('Roundtable raised hand (queued question)', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     props = {
+      isPresenting: true,
+      controlsVisible: true,
       onMessageSend: vi.fn(() => 'queued'),
       onInputActivate: vi.fn(),
       onCancelQueuedQuestion: vi.fn(),
@@ -124,15 +128,12 @@ describe('Roundtable raised hand (queued question)', () => {
     return [...container.querySelectorAll('p')].map((p) => p.textContent).join('\n');
   }
 
-  it('is a slim participants + composer strip: no playback toolbar, no speech bubble', async () => {
-    await render({ lectureSpeech: 'The teacher is speaking', engineMode: 'playing' });
-    // The shell's control bar and caption strip own these now
-    expect(container.querySelector('[data-testid="control-bar"]')).toBeNull();
-    for (const label of ['Play', 'Pause', 'Next scene', 'stage.play', 'stage.nextScene']) {
-      expect(container.querySelector(`button[aria-label="${label}"]`)).toBeNull();
-    }
-    expect(bubbleText()).not.toContain('The teacher is speaking');
-    expect(container.firstElementChild?.className).toContain('h-24');
+  it('renders nothing outside fullscreen: the interaction panel owns participants and the composer', async () => {
+    await render({ isPresenting: false, lectureSpeech: 'The teacher is speaking' });
+    expect(container.innerHTML).toBe('');
+    expect(container.querySelector('[data-testid="roundtable-non-presentation-card"]')).toBeNull();
+    // No end flash either: the stream keeps persistent ended markers
+    expect(container.textContent).not.toContain('roundtable.qaEnded');
   });
 
   it('reports which input opened: text keeps the lecture, voice pauses it', async () => {

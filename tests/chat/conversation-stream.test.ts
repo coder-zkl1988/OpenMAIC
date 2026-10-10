@@ -146,6 +146,38 @@ describe('ConversationStream', () => {
     expect(render(qa, true)).toContain('aria-busy="true"');
   });
 
+  it('renders a trailing row (the inline discussion card) after the latest session', () => {
+    const trailing = createElement('div', { 'data-testid': 'trailing-card' }, 'offer');
+    const html = renderToStaticMarkup(
+      createElement(ConversationStream, {
+        sessions: [session('qa', { createdAt: 1, sceneId: 'scene-a' })],
+        scenes,
+        isStreaming: false,
+        onEndSession: vi.fn(),
+        onContinueSession: vi.fn(),
+        trailing,
+      }),
+    );
+    expect(html.indexOf('data-testid="trailing-card"')).toBeGreaterThan(
+      html.indexOf('roundtable.qaEnded'),
+    );
+
+    // Without sessions the card still shows, in the log instead of the empty state
+    const alone = renderToStaticMarkup(
+      createElement(ConversationStream, {
+        sessions: [],
+        scenes,
+        isStreaming: false,
+        onEndSession: vi.fn(),
+        onContinueSession: vi.fn(),
+        trailing,
+      }),
+    );
+    expect(alone).toContain('data-testid="trailing-card"');
+    expect(alone).toContain('data-testid="conversation-stream"');
+    expect(alone).not.toContain('chat.noConversations');
+  });
+
   it('renders no per-session collapse toggle', () => {
     const html = render([session('qa', { createdAt: 1, sceneId: 'scene-a', status: 'active' })]);
     expect(html).not.toContain('aria-expanded');

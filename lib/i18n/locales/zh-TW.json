@@ -338,7 +338,9 @@
     "join": "加入討論",
     "skip": "略過",
     "pause": "暫停",
-    "resume": "繼續"
+    "resume": "繼續",
+    "offerLabel": "{{name}} 發起討論",
+    "autoSkipHint": "{{seconds}} 秒後自動略過"
   },
   "voice": {
     "startListening": "語音輸入",
@@ -366,6 +368,25 @@
       "paused": "已暫停，等你發言",
       "answering": "回答中",
       "discussing": "討論中"
+    },
+    "composer": {
+      "raiseHand": "舉手",
+      "raiseHandHint": "舉手提問：寫下問題，老師講完這句就回答你",
+      "raiseHandInLiveSession": "問答中可直接發言",
+      "lowerHand": "放下",
+      "lowerHandHint": "放下手，撤回提問",
+      "cuePlaceholder": "說出或輸入你的問題",
+      "cueStatus": "輪到你發言了 · 課堂已暫停",
+      "send": "傳送",
+      "cancelRecording": "取消錄音"
+    },
+    "participants": {
+      "label": "課堂成員",
+      "online": "{{count}} 人在線",
+      "speaking": "講解中",
+      "wantsToSpeak": "想發言",
+      "handRaised": "舉手中",
+      "more": "另外 {{count}} 位成員"
     },
     "generating": "生成中...",
     "paused": "已暫停",
