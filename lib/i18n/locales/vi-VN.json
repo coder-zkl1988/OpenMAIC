@@ -320,6 +320,7 @@
   },
   "stage": {
     "currentScene": "Cảnh hiện tại",
+    "collapseSceneSidebar": "Thu gọn danh sách cảnh",
     "generating": "Đang tạo…",
     "paused": "Đã tạm dừng",
     "generationFailed": "Tạo không thành công",

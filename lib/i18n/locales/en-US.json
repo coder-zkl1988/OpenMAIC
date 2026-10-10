@@ -320,6 +320,7 @@
   },
   "stage": {
     "currentScene": "Current Scene",
+    "collapseSceneSidebar": "Collapse scene list",
     "generating": "Generating...",
     "paused": "Paused",
     "generationFailed": "Generation failed",

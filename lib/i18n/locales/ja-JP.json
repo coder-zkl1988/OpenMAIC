@@ -320,6 +320,7 @@
   },
   "stage": {
     "currentScene": "現在のシーン",
+    "collapseSceneSidebar": "シーン一覧を折りたたむ",
     "generating": "生成中...",
     "paused": "一時停止中",
     "generationFailed": "生成に失敗しました",

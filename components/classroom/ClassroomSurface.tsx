@@ -291,7 +291,11 @@ export function ClassroomSurface({
   return (
     <ThemeProvider>
       <MediaStageProvider value={classroomId}>
+        {/* data-ui="v2" scopes the redesigned classroom: later subtree token
+            overrides (e.g. a [data-ui=v2] --muted-foreground retune) hang off
+            this attribute instead of changing the global tokens. */}
         <div
+          data-ui="v2"
           className={
             variant === 'pane'
               ? // A flex CHILD of the pane's row box, so it has to claim both
@@ -303,7 +307,7 @@ export function ClassroomSurface({
           }
         >
           {view === 'loading' ? (
-            <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+            <div className="flex-1 flex items-center justify-center bg-page">
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin" />
                 <p>{t('common.loadingClassroom')}</p>
@@ -315,7 +319,7 @@ export function ClassroomSurface({
             // the answer. One message for "deleted" and for "never existed" —
             // see the state's declaration.
             <div
-              className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900"
+              className="flex-1 flex items-center justify-center bg-page"
               data-testid="classroom-not-found"
             >
               <div className="flex flex-col items-center gap-3 text-center max-w-md px-6">
@@ -332,7 +336,7 @@ export function ClassroomSurface({
             </div>
           ) : view === 'error' ? (
             <div
-              className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900"
+              className="flex-1 flex items-center justify-center bg-page"
               data-testid="classroom-load-error"
             >
               <div className="text-center">

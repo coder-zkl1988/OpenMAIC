@@ -320,6 +320,7 @@
   },
   "stage": {
     "currentScene": "Aktuelle Szene",
+    "collapseSceneSidebar": "Szenenliste einklappen",
     "generating": "Wird generiert...",
     "paused": "Pausiert",
     "generationFailed": "Generierung fehlgeschlagen",

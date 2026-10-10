@@ -40,7 +40,10 @@ export function CommandBar({ title, history, commands, trailing }: CommandBarPro
   const exitLabel = t(classroomExitLabelKey(searchParams));
 
   return (
-    <header className="flex h-20 shrink-0 items-center gap-3 border-b border-zinc-200/60 px-8 dark:border-zinc-800/60">
+    // h-14 / px-5 match the playback Header (h-14, pr-5) so the shared
+    // HeaderControls cluster in `trailing` stays pixel-stable across the Stage
+    // cross-fade (see the contract in components/stage/header-controls.tsx).
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-zinc-200/60 px-5 dark:border-zinc-800/60">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {/* Classroom exit mirrors playback Header's leftmost button so the
             user has the same global-out affordance across standalone modes. */}

@@ -320,6 +320,7 @@
   },
   "stage": {
     "currentScene": "当前场景",
+    "collapseSceneSidebar": "收起场景栏",
     "generating": "生成中...",
     "paused": "已暂停",
     "generationFailed": "生成失败",

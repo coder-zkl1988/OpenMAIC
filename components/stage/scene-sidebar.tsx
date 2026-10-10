@@ -30,9 +30,20 @@ interface SceneSidebarProps {
   readonly isCourseComplete?: boolean;
 }
 
-const DEFAULT_WIDTH = 220;
+// Classroom.dc.html draws a fixed 180px column; the owner kept drag-resize,
+// so 180 is the default and 170–400 stays the resize range.
+const DEFAULT_WIDTH = 180;
 const MIN_WIDTH = 170;
 const MAX_WIDTH = 400;
+
+// Scene row styling (Classroom.dc.html). The primary-* steps are light-only
+// swatches, so dark mode switches to the theme-aware accent-* role tokens.
+const ACTIVE_ITEM_CLASS =
+  'bg-primary-1 ring-1 ring-primary-3 dark:bg-accent-soft dark:ring-accent-line';
+const BADGE_CLASS =
+  'text-[10px] font-extrabold size-4 rounded-full flex items-center justify-center shrink-0';
+const ACTIVE_BADGE_CLASS = 'bg-primary-6 dark:bg-primary-5 text-white';
+const ACTIVE_TITLE_CLASS = 'text-primary-7 dark:text-accent-text';
 
 export function SceneSidebar({
   collapsed,
@@ -112,7 +123,7 @@ export function SceneSidebar({
         width: displayWidth,
         transition: isDraggingRef.current ? 'none' : 'width 0.3s ease',
       }}
-      className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-gray-100 dark:border-gray-800 shadow-[2px_0_24px_rgba(0,0,0,0.02)] flex flex-col shrink-0 z-20 relative overflow-visible"
+      className="bg-white/85 dark:bg-slate-900/85 border-r border-line flex flex-col shrink-0 z-20 relative overflow-visible"
     >
       {/* Drag handle */}
       {!collapsed && (
@@ -126,17 +137,20 @@ export function SceneSidebar({
 
       <div className={cn('flex flex-col w-full h-full overflow-hidden', collapsed && 'hidden')}>
         {/* Logo Header */}
-        <div className="h-10 flex items-center justify-between shrink-0 relative mt-3 mb-1 px-3">
+        <div className="h-10 flex items-center justify-between gap-2 shrink-0 relative mt-2 mb-1 pl-3 pr-2.5">
           <button
             onClick={() => router.push('/')}
-            className="flex items-center gap-2 cursor-pointer rounded-lg px-1.5 -mx-1.5 py-1 -my-1 hover:bg-gray-100/80 dark:hover:bg-gray-800/60 active:scale-[0.97] transition-all duration-150"
+            className="flex min-w-0 items-center gap-2 cursor-pointer rounded-[10px] px-1.5 -mx-1.5 py-1 -my-1 hover:bg-subtle active:scale-[0.97] transition-all duration-150"
             title={t('generation.backToHome')}
           >
-            <img src="/logo-horizontal.png" alt="OpenMAIC" className="h-6" />
+            <img src="/logo-horizontal.png" alt="OpenMAIC" className="h-[22px] w-auto" />
           </button>
           <button
+            type="button"
             onClick={() => onCollapseChange(true)}
-            className="w-7 h-7 shrink-0 rounded-lg flex items-center justify-center bg-gray-100/80 dark:bg-gray-800/80 text-gray-500 dark:text-gray-400 ring-1 ring-black/[0.04] dark:ring-white/[0.06] hover:bg-gray-200/90 dark:hover:bg-gray-700/90 hover:text-gray-700 dark:hover:text-gray-200 active:scale-90 transition-all duration-200"
+            aria-label={t('stage.collapseSceneSidebar')}
+            title={t('stage.collapseSceneSidebar')}
+            className="size-7 shrink-0 rounded-[10px] flex items-center justify-center bg-subtle text-icon ring-1 ring-black/[0.04] dark:ring-white/[0.06] hover:bg-line hover:text-fg active:scale-90 transition-all duration-200"
           >
             <PanelLeftClose className="w-4 h-4" />
           </button>
@@ -145,7 +159,7 @@ export function SceneSidebar({
         {/* Scenes List */}
         <div
           data-testid="scene-list"
-          className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-2 scrollbar-hide pt-1"
+          className="flex-1 overflow-y-auto overflow-x-hidden px-2 pb-2 pt-1 space-y-1.5 scrollbar-hide"
         >
           {scenes.map((scene, index) => {
             const isActive = currentSceneId === scene.id;
@@ -167,21 +181,17 @@ export function SceneSidebar({
                   }
                 }}
                 className={cn(
-                  'group relative rounded-lg transition-all duration-200 cursor-pointer flex flex-col gap-1 p-1.5',
-                  isActive
-                    ? 'bg-purple-50 dark:bg-purple-900/20 ring-1 ring-purple-200 dark:ring-purple-700'
-                    : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/50',
+                  'group relative rounded-[10px] transition-all duration-200 cursor-pointer flex flex-col gap-1 p-1.5',
+                  isActive ? ACTIVE_ITEM_CLASS : 'hover:bg-subtle',
                 )}
               >
                 {/* Scene Header */}
-                <div className="flex justify-between items-center px-2 pt-0.5">
-                  <div className="flex items-center gap-2 max-w-full">
+                <div className="flex justify-between items-center px-1 pt-0.5">
+                  <div className="flex items-center gap-1.5 max-w-full min-w-0">
                     <span
                       className={cn(
-                        'text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center shrink-0',
-                        isActive
-                          ? 'bg-purple-600 dark:bg-purple-500 text-white shadow-sm shadow-purple-500/30'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
+                        BADGE_CLASS,
+                        isActive ? ACTIVE_BADGE_CLASS : 'bg-subtle text-icon',
                       )}
                     >
                       {index + 1}
@@ -189,10 +199,8 @@ export function SceneSidebar({
                     <span
                       data-testid="scene-title"
                       className={cn(
-                        'text-xs font-bold truncate transition-colors',
-                        isActive
-                          ? 'text-purple-700 dark:text-purple-300'
-                          : 'text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100',
+                        'text-xs font-semibold truncate transition-colors',
+                        isActive ? ACTIVE_TITLE_CLASS : 'text-fg-secondary group-hover:text-fg',
                       )}
                     >
                       {scene.title}
@@ -201,7 +209,7 @@ export function SceneSidebar({
                 </div>
 
                 {/* Thumbnail */}
-                <div className="relative aspect-video w-full rounded overflow-hidden bg-gray-100 dark:bg-gray-800 ring-1 ring-black/5 dark:ring-white/5">
+                <div className="relative aspect-video w-full rounded overflow-hidden bg-white dark:bg-gray-800 ring-1 ring-black/[0.06] dark:ring-white/5">
                   <div className="absolute inset-0 flex items-center justify-center">
                     {isSlide && slideContent ? (
                       <LazySlideThumbnail
@@ -360,37 +368,31 @@ export function SceneSidebar({
                     }
                   }}
                   className={cn(
-                    'group relative rounded-lg flex flex-col gap-1 p-1.5 transition-all duration-200',
-                    isFailed
-                      ? 'opacity-100 cursor-default'
-                      : 'cursor-pointer hover:bg-gray-50/80 dark:hover:bg-gray-800/50',
+                    'group relative rounded-[10px] flex flex-col gap-1 p-1.5 transition-all duration-200',
+                    isFailed ? 'opacity-100 cursor-default' : 'cursor-pointer hover:bg-subtle',
                     !isFailed && !isActive && 'opacity-60',
-                    isActive &&
-                      !isFailed &&
-                      'bg-purple-50 dark:bg-purple-900/20 ring-1 ring-purple-200 dark:ring-purple-700 opacity-100',
+                    isActive && !isFailed && cn(ACTIVE_ITEM_CLASS, 'opacity-100'),
                   )}
                 >
                   {/* Scene Header */}
-                  <div className="flex justify-between items-center px-2 pt-0.5">
-                    <div className="flex items-center gap-2 max-w-full">
+                  <div className="flex justify-between items-center px-1 pt-0.5">
+                    <div className="flex items-center gap-1.5 max-w-full min-w-0">
                       <span
                         className={cn(
-                          'text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center shrink-0',
-                          isActive && !isFailed
-                            ? 'bg-purple-600 dark:bg-purple-500 text-white shadow-sm shadow-purple-500/30'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500',
+                          BADGE_CLASS,
+                          isActive && !isFailed ? ACTIVE_BADGE_CLASS : 'bg-subtle text-icon-muted',
                         )}
                       >
                         {scenes.length + 1}
                       </span>
                       <span
                         className={cn(
-                          'text-xs font-bold truncate transition-colors',
+                          'text-xs font-semibold truncate transition-colors',
                           isActive && !isFailed
-                            ? 'text-purple-700 dark:text-purple-300'
+                            ? ACTIVE_TITLE_CLASS
                             : isFailed
-                              ? 'text-gray-700 dark:text-gray-200'
-                              : 'text-gray-400 dark:text-gray-500',
+                              ? 'text-fg-secondary'
+                              : 'text-fg-tertiary',
                         )}
                       >
                         {outline.title}
@@ -479,17 +481,17 @@ export function SceneSidebar({
                     }
                   }}
                   className={cn(
-                    'group relative rounded-lg flex flex-col gap-1 p-1.5 transition-all duration-200 cursor-pointer hover:bg-amber-50/60 dark:hover:bg-amber-900/10',
+                    'group relative rounded-[10px] flex flex-col gap-1 p-1.5 transition-all duration-200 cursor-pointer hover:bg-amber-50/60 dark:hover:bg-amber-900/10',
                     !isActive && 'opacity-80',
                     isActive &&
                       'bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200 dark:ring-amber-700 opacity-100',
                   )}
                 >
-                  <div className="flex justify-between items-center px-2 pt-0.5">
-                    <div className="flex items-center gap-2 max-w-full">
+                  <div className="flex justify-between items-center px-1 pt-0.5">
+                    <div className="flex items-center gap-1.5 max-w-full min-w-0">
                       <span
                         className={cn(
-                          'text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center shrink-0',
+                          BADGE_CLASS,
                           isActive
                             ? 'bg-amber-500 dark:bg-amber-400 text-white shadow-sm shadow-amber-500/30'
                             : 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400',
@@ -499,7 +501,7 @@ export function SceneSidebar({
                       </span>
                       <span
                         className={cn(
-                          'text-xs font-bold truncate transition-colors',
+                          'text-xs font-semibold truncate transition-colors',
                           isActive
                             ? 'text-amber-700 dark:text-amber-300'
                             : 'text-amber-600 dark:text-amber-400',

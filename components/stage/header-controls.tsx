@@ -88,14 +88,19 @@ interface HeaderControlsProps {
   readonly onToggleEditMode?: () => void;
   readonly showGlobalControls?: boolean;
   readonly showCourseActions?: boolean;
-  /**
-   * `default` — the chunky h-9 pill used in the playback Stage Header.
-   * `compact` — slightly tighter padding for embedding in CommandBar's
-   * right slot (Pro mode chrome already eats height, so the pill backs
-   * off ring weight / blur to keep the CommandBar quiet).
-   */
-  readonly variant?: 'default' | 'compact';
 }
+
+/** 26px icon button inside the 32px settings pill (Classroom.dc.html). */
+const PILL_ICON_BUTTON =
+  'size-[26px] flex items-center justify-center rounded-full text-icon hover:bg-white dark:hover:bg-gray-700 hover:text-fg hover:shadow-sm transition-all group';
+
+/**
+ * The 32×18 Pro switch: a 1px transparent border plus 1px padding around the
+ * 16px thumb, so the thumb travels 12px (shadcn's default thumb travel is
+ * 16px for its 36px track). The unchecked track is the line-strong stroke.
+ */
+const PRO_SWITCH_CLASS =
+  'h-[18px] w-8 border px-px shadow-none data-[state=unchecked]:bg-line-strong [&[data-state=checked]>span]:translate-x-3 [&>span]:shadow-sm';
 
 /**
  * Stage-level global controls: language picker, theme picker, settings
@@ -117,7 +122,6 @@ export function HeaderControls({
   onToggleEditMode,
   showGlobalControls = true,
   showCourseActions = true,
-  variant = 'default',
 }: HeaderControlsProps) {
   const { t } = useI18n();
   const { theme, setTheme } = useTheme();
@@ -155,20 +159,20 @@ export function HeaderControls({
   // Only read while the menu is open: the scan walks every scene's actions.
   const htmlHasPlaybackMedia = exportMenuOpen && classroomHasPlaybackMedia(scenes);
 
-  const compact = variant === 'compact';
   const proChecked = proModeActive ?? mode === 'edit';
 
   if (!showGlobalControls && !showCourseActions) {
     return onToggleEditMode ? (
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-          {t('stage.proMode')}
+      <div className="flex items-center gap-2.5">
+        <span className="text-xs font-semibold text-fg-secondary select-none">
+          {t('edit.proMode')}
         </span>
         <Switch
           checked={proChecked}
           onCheckedChange={onToggleEditMode}
           disabled={!canEdit}
           aria-label={proChecked ? t('stage.doneEditing') : t('stage.editCourse')}
+          className={PRO_SWITCH_CLASS}
         />
       </div>
     ) : null;
@@ -179,30 +183,21 @@ export function HeaderControls({
   // slot (`gap-2`) would otherwise impose different inter-control spacing on
   // these fragment children, making the pill/switch/export cluster visibly
   // shift width and position across the mode swap. A fixed internal gap keeps
-  // the cluster pixel-stable; both hosts pad to `px-8`, so the right edge
-  // anchors identically too.
+  // the cluster pixel-stable; both hosts are 56px tall (`h-14`) with a 20px
+  // right padding (Header `pr-5`, CommandBar `px-5`), so the right edge and
+  // the vertical centre anchor identically too.
   return (
-    <div className="flex items-center gap-4">
-      <div
-        className={cn(
-          'shrink-0 flex items-center gap-1 backdrop-blur-md shadow-sm rounded-full',
-          compact
-            ? 'bg-zinc-100/70 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/60 px-1.5 py-1'
-            : 'bg-white/60 dark:bg-gray-800/60 border border-gray-100/50 dark:border-gray-700/50 px-2 py-1.5',
-        )}
-      >
+    <div className="flex items-center gap-2.5">
+      <div className="shrink-0 flex items-center gap-0.5 h-8 px-1 rounded-full border border-line bg-white/70 dark:bg-gray-800/60">
         {/* Language — Radix DropdownMenu so its menu portals to body
             and never gets clipped by an ancestor's overflow-hidden. */}
-        <LanguageSwitcher />
+        <LanguageSwitcher size="sm" />
 
         {/* Theme — same Portal-backed DropdownMenu pattern. Non-modal keeps
             Radix from body scroll-locking a fixed-height classroom layout. */}
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <button
-              className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm transition-all group"
-              aria-label={t('settings.theme')}
-            >
+            <button type="button" className={PILL_ICON_BUTTON} aria-label={t('settings.theme')}>
               {theme === 'light' && <Sun className="w-4 h-4" />}
               {theme === 'dark' && <Moon className="w-4 h-4" />}
               {theme === 'system' && <Monitor className="w-4 h-4" />}
@@ -247,8 +242,9 @@ export function HeaderControls({
 
         {/* Settings */}
         <button
+          type="button"
           onClick={() => setSettingsOpen(true)}
-          className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm transition-all group"
+          className={PILL_ICON_BUTTON}
           aria-label={t('settings.title')}
         >
           <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
@@ -264,15 +260,12 @@ export function HeaderControls({
       {onToggleEditMode && (
         <label
           className={cn(
-            'shrink-0 inline-flex items-center gap-2.5 rounded-full border shadow-sm transition-colors duration-200',
-            'bg-white/60 dark:bg-gray-800/60 backdrop-blur-md',
-            compact ? 'h-8 px-2.5' : 'h-9 px-3',
-            proChecked
-              ? 'border-violet-500/60 dark:border-violet-400/60'
-              : 'border-gray-100/50 dark:border-gray-700/50',
+            'shrink-0 inline-flex items-center gap-2.5 h-8 pl-3 pr-2.5 rounded-full border transition-colors duration-200',
+            'bg-white/70 dark:bg-gray-800/60',
+            proChecked ? 'border-accent-line' : 'border-line',
             !canEdit && mode !== 'edit'
               ? 'opacity-60 cursor-not-allowed'
-              : 'cursor-pointer hover:border-violet-400/60 dark:hover:border-violet-500/50',
+              : 'cursor-pointer hover:border-accent-line',
           )}
           // When disabled (e.g. the course-complete placeholder), explain why
           // on hover and point the user to a real scene instead of a bare
@@ -287,10 +280,8 @@ export function HeaderControls({
         >
           <span
             className={cn(
-              'text-[11px] font-bold uppercase tracking-[0.14em] tabular-nums select-none transition-colors duration-200',
-              proChecked
-                ? 'text-violet-600 dark:text-violet-300'
-                : 'text-gray-500 dark:text-gray-400',
+              'text-xs font-semibold select-none transition-colors duration-200',
+              proChecked ? 'text-accent-text' : 'text-fg-secondary',
             )}
           >
             {t('edit.proMode')}
@@ -300,7 +291,7 @@ export function HeaderControls({
             onCheckedChange={onToggleEditMode}
             disabled={!canEdit && mode !== 'edit'}
             aria-label={proChecked ? t('stage.doneEditing') : t('stage.editCourse')}
-            className="data-[state=checked]:bg-violet-600 dark:data-[state=checked]:bg-violet-500"
+            className={PRO_SWITCH_CLASS}
           />
         </label>
       )}
@@ -315,10 +306,10 @@ export function HeaderControls({
             disabled={!canExport || anyExporting}
             title={anyExporting ? t('export.exporting') : exportLabel}
             className={cn(
-              'shrink-0 p-2 rounded-full transition-all',
+              'shrink-0 size-8 flex items-center justify-center rounded-full transition-all',
               canExport && !anyExporting
-                ? 'text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm'
-                : 'text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50',
+                ? 'text-icon hover:bg-white dark:hover:bg-gray-700 hover:text-fg hover:shadow-sm'
+                : 'text-icon-muted cursor-not-allowed opacity-50',
             )}
             aria-label={exportLabel}
           >

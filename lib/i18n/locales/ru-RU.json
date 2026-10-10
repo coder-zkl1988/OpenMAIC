@@ -320,6 +320,7 @@
   },
   "stage": {
     "currentScene": "Текущая сцена",
+    "collapseSceneSidebar": "Свернуть список сцен",
     "generating": "Генерация...",
     "paused": "Пауза",
     "generationFailed": "Ошибка генерации",

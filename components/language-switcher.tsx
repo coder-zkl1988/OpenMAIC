@@ -14,11 +14,11 @@ interface LanguageSwitcherProps {
   /** Called when the dropdown opens, so parent can close sibling dropdowns. */
   onOpen?: () => void;
   /**
-   * `md` is the redesigned 32px pill button (home top-right pill). The
-   * default keeps the original look for the classroom header and the Pro
-   * WorkspaceRail.
+   * `md` is the redesigned 32px pill button (home top-right pill); `sm` is
+   * the 26px button inside the classroom header's 32px settings pill. The
+   * default keeps the original look for the Pro WorkspaceRail.
    */
-  size?: 'default' | 'md';
+  size?: 'default' | 'sm' | 'md';
   /** Accessible name for the trigger; omitted, the short locale label names it. */
   ariaLabel?: string;
   className?: string;
@@ -53,7 +53,9 @@ export function LanguageSwitcher({
             'flex items-center gap-1 rounded-full text-xs font-bold hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm transition-all',
             size === 'md'
               ? 'h-8 px-2.5 text-fg-secondary hover:text-fg'
-              : 'px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200',
+              : size === 'sm'
+                ? 'h-[26px] px-2.5 text-fg-secondary hover:text-fg'
+                : 'px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200',
             className,
           )}
         >

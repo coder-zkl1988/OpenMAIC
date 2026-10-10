@@ -320,6 +320,7 @@
   },
   "stage": {
     "currentScene": "المشهد الحالي",
+    "collapseSceneSidebar": "طي قائمة المشاهد",
     "generating": "جارٍ التوليد...",
     "paused": "متوقف مؤقتًا",
     "generationFailed": "فشل التوليد",

@@ -320,6 +320,7 @@
   },
   "stage": {
     "currentScene": "Scène actuelle",
+    "collapseSceneSidebar": "Réduire la liste des scènes",
     "generating": "Génération…",
     "paused": "En pause",
     "generationFailed": "Échec de la génération",
