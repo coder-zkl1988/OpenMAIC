@@ -578,7 +578,10 @@ export function Composer({
                     title={t('stage.composer.lowerHandHint')}
                     onClick={lowerHand}
                     className={cn(
-                      'flex shrink-0 items-center rounded-full bg-amber-500 font-semibold text-white transition-colors hover:bg-amber-600 cursor-pointer',
+                      // The board's #f59e0b with white text is about 2.1:1; the warning
+                      // token pair keeps the amber look at AA contrast (5:1). Hover darkens
+                      // the fill (a /90 fade would let the white composer through, ≈4.2:1).
+                      'flex shrink-0 items-center rounded-full bg-warning font-semibold text-warning-foreground transition-[color,background-color,filter] hover:brightness-90 cursor-pointer',
                       pillSize(touch),
                     )}
                   >

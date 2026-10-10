@@ -17,14 +17,14 @@ export function ThumbnailSkeleton({ static: isStatic = false }: { static?: boole
       data-thumbnail-state={isStatic ? 'pending' : 'loading'}
       className={cn('absolute inset-0 flex flex-col gap-[6%] p-[7%]', !isStatic && 'animate-pulse')}
     >
-      <div className="h-[11%] w-1/2 rounded-md bg-slate-200 dark:bg-slate-700" />
+      <div className="h-[11%] w-1/2 rounded-md bg-line" />
       <div className="flex flex-1 gap-[5%]">
         <div className="flex flex-1 flex-col gap-[10%] pt-[2%]">
-          <div className="h-[11%] w-full rounded bg-slate-200 dark:bg-slate-700" />
-          <div className="h-[11%] w-5/6 rounded bg-slate-200 dark:bg-slate-700" />
-          <div className="h-[11%] w-2/3 rounded bg-slate-200 dark:bg-slate-700" />
+          <div className="h-[11%] w-full rounded bg-line" />
+          <div className="h-[11%] w-5/6 rounded bg-line" />
+          <div className="h-[11%] w-2/3 rounded bg-line" />
         </div>
-        <div className="w-[38%] rounded-lg bg-slate-200 dark:bg-slate-700" />
+        <div className="w-[38%] rounded-lg bg-line" />
       </div>
     </div>
   );

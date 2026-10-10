@@ -110,7 +110,7 @@ function resolvePanelTab(tab: ChatAreaTab): PanelTab {
 
 /** The stacked layouts' segmented control (TabletPortrait / ClassroomPhone.dc.html) */
 const SEGMENT_TRIGGER =
-  'relative h-full rounded-[10px] px-2 font-medium text-icon hover:text-fg data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:text-fg data-[state=active]:shadow-[0_1px_2px_rgba(0,0,0,0.08)] dark:data-[state=active]:bg-background';
+  'relative h-full rounded-[10px] px-2 font-medium text-icon hover:text-fg data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:text-fg group-data-[variant=default]/tabs-list:data-[state=active]:shadow-[0_1px_2px_rgba(0,0,0,0.08)] dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-background';
 
 export interface ChatAreaRef {
   createSession: (type: SessionType, title: string) => Promise<string>;
@@ -365,9 +365,9 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
         </span>
       );
 
-    // Tab header row: 互动 / 笔记 + collapse. Radix marks the selected trigger
-    // with data-state="active" (the base TabsTrigger's `data-active:` variants
-    // never match), so the weight, colour and primary underline key off that
+    // Tab header row: 互动 / 笔记 + collapse. The selected trigger
+    // (data-state="active") takes the panel's weight, colour and primary
+    // underline over the base TabsTrigger's line-variant look
     const panelTabRow = (
       <div
         className={cn(

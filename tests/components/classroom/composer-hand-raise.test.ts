@@ -112,7 +112,7 @@ describe('Composer: the 举手 flow', () => {
     expect(document.activeElement).not.toBe(textarea());
   });
 
-  it('shows 放下 (pressed, amber) and the 已举手 row with 撤回 and the progress while raised', async () => {
+  it('shows 放下 (pressed, warning) and the 已举手 row with 撤回 and the progress while raised', async () => {
     vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
     await render({ getSpeechProgress: () => 0.64 });
     await setHand('raised');
@@ -120,8 +120,13 @@ describe('Composer: the 举手 flow', () => {
     expect(raiseButton()).toBeNull();
     const lower = lowerButton()!;
     expect(lower.getAttribute('aria-pressed')).toBe('true');
-    expect(lower.className).toContain('bg-amber-500');
-    expect(lower.className).toContain('text-white');
+    // The warning token pair (white on #b45309, 5:1), not the 2.1:1 amber-500
+    expect(lower.className).toContain('bg-warning');
+    expect(lower.className).toContain('text-warning-foreground');
+    expect(lower.className).not.toContain('amber-500');
+    // Hover darkens; a /90 fade over the white composer drops to about 4.2:1
+    expect(lower.className).toContain('hover:brightness-90');
+    expect(lower.className).not.toContain('hover:bg-warning/');
     expect(lower.textContent).toBe('stage.composer.lowerHand');
 
     expect(row()?.getAttribute('data-kind')).toBe('hand');

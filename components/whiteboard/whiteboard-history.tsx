@@ -11,6 +11,7 @@ import { restoreWhiteboardElements } from '@/lib/whiteboard/restore';
 import { normalizeWhiteboardViewportRatio } from '@/lib/whiteboard/viewport';
 import { toast } from 'sonner';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import { useEscapeLayer } from '@/lib/hooks/use-escape-layer';
 
 interface WhiteboardHistoryProps {
   readonly isOpen: boolean;
@@ -118,19 +119,12 @@ export function WhiteboardHistory({ isOpen, onClose, id, triggerRef }: Whiteboar
     return () => document.removeEventListener('pointerdown', handler);
   }, [isOpen, onClose, triggerRef]);
 
-  // Escape closes and hands focus back to the trigger.
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-      triggerRef?.current?.focus();
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [isOpen, onClose, triggerRef]);
+  // Escape closes and hands focus back to the trigger. An escape layer: with
+  // the element picker armed under the popover, only the popover closes.
+  useEscapeLayer(isOpen, () => {
+    onClose();
+    triggerRef?.current?.focus();
+  });
 
   // Move focus into the popover when it opens: the newest restore, or the panel.
   useEffect(() => {

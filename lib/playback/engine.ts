@@ -1144,8 +1144,11 @@ export class PlaybackEngine {
       case 'widget_setState':
       case 'widget_annotation':
       case 'widget_reveal': {
-        // Synchronous actions — await completion, then continue
-        await this.actionEngine.execute(action);
+        // Synchronous actions — await completion, then continue. The lecture's
+        // narrator performs them (named by the whiteboard's drawing chip).
+        await this.actionEngine.execute(action, {
+          agentId: this.callbacks.getLectureAgentId?.() ?? null,
+        });
         if (!this.isCurrentGeneration(generation)) return;
         if (this.mode === 'playing') {
           this.processNext(generation);

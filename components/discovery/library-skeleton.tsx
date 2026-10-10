@@ -9,7 +9,7 @@ const SKELETON_FOLDERS = 2;
 const SKELETON_COURSES = 6;
 
 /** The pulse the course cards use while their thumbnail loads. */
-const PULSE = 'animate-pulse bg-slate-200/70 dark:bg-slate-700/50';
+const PULSE = 'animate-pulse bg-line';
 
 /**
  * Placeholder for the home library while its course and folder lists load.
@@ -41,8 +41,8 @@ function SkeletonTile({ folder = false }: { folder?: boolean }) {
       <div
         className={
           folder
-            ? 'relative w-full aspect-[16/9] rounded-2xl bg-slate-100 dark:bg-slate-800/80 overflow-hidden'
-            : 'relative w-full aspect-[16/9] rounded-2xl bg-white ring-1 ring-line dark:bg-slate-800/80 overflow-hidden'
+            ? 'relative w-full aspect-[16/9] rounded-2xl bg-subtle dark:bg-card overflow-hidden'
+            : 'relative w-full aspect-[16/9] rounded-2xl bg-white ring-1 ring-line dark:bg-card overflow-hidden'
         }
       >
         {folder ? (

@@ -512,8 +512,8 @@ test.describe('Classroom at phone width (390×844): condensed controls and the b
     await classroom.goto(stageId);
     await classroom.waitForLoaded();
 
-    await page.getByTestId('control-bar').getByRole('button', { name: 'Whiteboard' }).click();
-    await expect(page.getByTestId('stage-column')).toHaveAttribute('data-board-open', 'true');
+    await classroom.toggleWhiteboard();
+    await expect(classroom.stageColumn).toHaveAttribute('data-board-open', 'true');
     // No 192×108 PiP below 600px
     await expect(page.getByTestId('whiteboard-pip')).toHaveCount(0);
     const chip = page.getByTestId('whiteboard-return-chip');

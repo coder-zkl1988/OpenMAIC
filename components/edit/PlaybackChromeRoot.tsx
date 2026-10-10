@@ -46,7 +46,7 @@ import type { MessageSendResult } from '@/components/classroom/interaction/use-c
 import type { QueuedQuestionState } from '@/components/classroom/interaction/use-queued-question-effects';
 import { ProactiveCard } from '@/components/chat/proactive-card';
 import { HandRaiseStreamStatus } from '@/components/chat/conversation-stream';
-import { DEFAULT_TEACHER_AVATAR } from '@/components/roundtable/constants';
+import { DEFAULT_TEACHER_AVATAR } from '@/lib/constants/avatar-fallbacks';
 import { useASRAvailable } from '@/lib/hooks/use-asr-available';
 import { usePlaybackControls } from '@/components/canvas/use-playback-controls';
 import {
@@ -1260,6 +1260,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             return ids.includes(agentId);
           },
           getPlaybackSpeed: () => useSettingsStore.getState().playbackSpeed || 1,
+          // The lecture's narrator: the classroom teacher (same pick as the
+          // participants block)
+          getLectureAgentId: () =>
+            agentsToParticipants(useSettingsStore.getState().selectedAgentIds).find(
+              (p) => p.role === 'teacher',
+            )?.id ?? null,
           onComplete: () => {
             // lectureSpeech intentionally NOT cleared — last sentence stays visible
             // until scene transition (auto-play) or user restarts. Scene change

@@ -6,13 +6,13 @@ import type { DirectorState } from '@/lib/types/chat';
  * Sits between data sources (SSE stream / PlaybackEngine) and React state.
  * Events are pushed into an ordered queue; a fixed-rate tick loop reveals
  * text character-by-character and fires typed callbacks so both the Chat
- * area and the Roundtable bubble consume identically-paced content.
+ * area and the caption strip consume identically-paced content.
  *
  * Key invariants:
  *   - ONE source of pacing (this tick loop) — no double typewriter.
  *   - pause() is O(1) instant — tick returns immediately.
  *   - Actions fire only when the tick cursor reaches them (after preceding text).
- *   - Roundtable sees only the current speech segment (resets on action / agent switch).
+ *   - The caption sees only the current speech segment (resets on action / agent switch).
  */
 
 // ─── Buffer Item Types ───────────────────────────────────────────────
@@ -107,13 +107,13 @@ export interface StreamBufferCallbacks {
   /** Fired when tick reaches an action item. Callers should execute the effect + add badge. */
   onActionReady(messageId: string, data: ActionItem, signal: AbortSignal): void | Promise<void>;
   /**
-   * Unified speech feed for the Roundtable bubble.
+   * Unified speech feed for the caption strip (and the presentation overlay).
    * Reports only the CURRENT segment text (resets on action / agent switch).
    * Called with (null, null) when buffer completes or is disposed.
    */
   onLiveSpeech(text: string | null, agentId: string | null): void;
   /**
-   * Speech progress ratio for the Roundtable bubble auto-scroll.
+   * Speech progress ratio of the current segment (for a speech surface's auto-scroll).
    * Fired each tick during text reveal: ratio = charCursor / totalTextLength.
    * Called with null when buffer completes or is disposed.
    */
@@ -172,7 +172,7 @@ export class StreamBuffer {
   private readIndex = 0;
   private charCursor = 0;
 
-  // Roundtable segment tracking
+  // Caption segment tracking
   private currentSegmentText = '';
   private currentAgentId: string | null = null;
 
@@ -449,7 +449,7 @@ export class StreamBuffer {
   /**
    * Stop the tick timer and mark disposed WITHOUT firing final onLiveSpeech.
    * Used when replacing a buffer (e.g. resume after soft-pause) to avoid
-   * the dispose callback clearing roundtable state via a stale microtask.
+   * the dispose callback clearing caption state via a stale microtask.
    */
   shutdown(): void {
     if (this._disposed) return;
@@ -550,7 +550,7 @@ export class StreamBuffer {
         // Update chat area
         this.cb.onTextReveal(item.messageId, item.partId, revealed, isComplete);
 
-        // Update roundtable (current segment only).
+        // Update the caption (current segment only).
         // Use this.currentAgentId (set when tick processes agent_start) rather than
         // item.agentId — push-time race means item.agentId can carry a stale value
         // from the previous agent when SSE pushes outpace the tick loop.

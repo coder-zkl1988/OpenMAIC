@@ -33,30 +33,28 @@ export function CourseGeneratingPlaceholder({
   const paused = status.kind === 'paused';
   return (
     <div
-      className="flex flex-1 items-center justify-center bg-gray-50 px-6 dark:bg-gray-900"
+      className="flex flex-1 items-center justify-center bg-page px-6"
       data-testid="course-generating-placeholder"
       data-run-state={status.kind}
     >
       <div className="flex max-w-sm flex-col items-center gap-3 text-center">
         <CourseRunStatusIcon
           status={status}
-          className={cn('size-8', paused ? 'text-amber-500' : 'text-violet-500')}
+          className={cn('size-8', paused ? 'text-warning' : 'text-accent-text')}
         />
-        <p className="text-base font-medium">
+        <p className="text-base font-medium text-fg">
           {paused ? t('workspace.coursePausedTitle') : t('workspace.courseGeneratingTitle')}
         </p>
         <p
           className={cn(
             'rounded-full px-2.5 py-0.5 text-xs font-medium',
-            paused
-              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-              : 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400',
+            paused ? 'bg-warning-soft text-warning' : 'bg-accent-soft text-accent-text',
           )}
           data-testid="course-generating-progress"
         >
           {courseRunStatusText(status, t)}
         </p>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-fg-tertiary">
           {paused ? t('workspace.coursePausedDesc') : t('workspace.courseGeneratingDesc')}
         </p>
         <a
@@ -64,7 +62,7 @@ export function CourseGeneratingPlaceholder({
           target="_blank"
           rel="noopener"
           data-testid="course-generating-link"
-          className="mt-1 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-600/10 dark:text-violet-300 dark:hover:bg-violet-400/10"
+          className="mt-1 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-accent-text hover:bg-accent-soft hover:text-accent-hover"
         >
           {paused ? t('workspace.openToRetry') : t('workspace.viewGenerationProgress')}
           <ExternalLink className="size-3.5" aria-hidden="true" />

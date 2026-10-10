@@ -18,7 +18,7 @@ import { useASRAvailable } from '@/lib/hooks/use-asr-available';
 import { AvatarDisplay } from '@/components/ui/avatar-display';
 import { ProactiveCard } from '@/components/chat/proactive-card';
 import { PresentationSpeechOverlay } from '@/components/roundtable/presentation-speech-overlay';
-import { DEFAULT_USER_AVATAR } from '@/components/roundtable/constants';
+import { DEFAULT_USER_AVATAR } from '@/lib/constants/avatar-fallbacks';
 import type { AudioIndicatorState } from '@/components/roundtable/audio-indicator';
 import { useUserMessageOverlay } from '@/components/classroom/interaction/use-composer-controller';
 import type { ComposerHandle } from '@/components/classroom/interaction/composer';

@@ -89,6 +89,7 @@ import { useMediaGenerationStore } from '@/lib/store/media-generation';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCourseThumbnails } from '@/lib/hooks/use-course-thumbnails';
+import { useEscapeLayer } from '@/lib/hooks/use-escape-layer';
 import { SpeechButton } from '@/components/audio/speech-button';
 import { useImportClassroom } from '@/lib/import/use-import-classroom';
 import {
@@ -629,7 +630,10 @@ function HomePage() {
   };
 
   return (
-    <div className="min-h-app w-full bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex flex-col items-center p-4 pt-16 md:p-8 md:pt-16 overflow-x-hidden">
+    <div
+      data-ui="v2"
+      className="min-h-app w-full bg-gradient-to-b from-page to-page-end flex flex-col items-center p-4 pt-16 md:p-8 md:pt-16 overflow-x-hidden"
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -649,7 +653,7 @@ function HomePage() {
       {/* ═══ Top-right pill: language · theme · settings, 32px buttons ═══ */}
       <div
         ref={toolbarRef}
-        className="fixed top-[calc(1rem+var(--desktop-titlebar-height))] right-4 z-50 flex items-center gap-1 bg-white/75 dark:bg-gray-800/60 backdrop-blur-md px-1.5 py-1 rounded-full border border-line shadow-xs"
+        className="fixed top-[calc(1rem+var(--desktop-titlebar-height))] right-4 z-50 flex items-center gap-1 bg-white/75 dark:bg-card/60 backdrop-blur-md px-1.5 py-1 rounded-full border border-line shadow-xs"
       >
         {/* Language Selector */}
         <LanguageSwitcher
@@ -671,14 +675,14 @@ function HomePage() {
             onClick={() => {
               setThemeOpen(!themeOpen);
             }}
-            className="size-8 flex items-center justify-center rounded-full text-icon hover:bg-white dark:hover:bg-gray-700 hover:text-fg hover:shadow-sm transition-all"
+            className="size-8 flex items-center justify-center rounded-full text-icon hover:bg-card dark:hover:bg-subtle hover:text-fg hover:shadow-sm transition-all"
           >
             {theme === 'light' && <Sun className="w-4 h-4" />}
             {theme === 'dark' && <Moon className="w-4 h-4" />}
             {theme === 'system' && <Monitor className="w-4 h-4" />}
           </button>
           {themeOpen && (
-            <div className="absolute top-full mt-2 right-0 bg-white dark:bg-gray-800 border border-line rounded-lg shadow-lg overflow-hidden z-50 min-w-[140px]">
+            <div className="absolute top-full mt-2 right-0 bg-popover border border-line rounded-lg shadow-lg overflow-hidden z-50 min-w-[140px]">
               <button
                 onClick={() => {
                   setTheme('light');
@@ -733,7 +737,7 @@ function HomePage() {
             type="button"
             aria-label={t('settings.title')}
             onClick={() => setSettingsOpen(true)}
-            className="size-8 flex items-center justify-center rounded-full text-icon hover:bg-white dark:hover:bg-gray-700 hover:text-fg hover:shadow-sm transition-all group"
+            className="size-8 flex items-center justify-center rounded-full text-icon hover:bg-card dark:hover:bg-subtle hover:text-fg hover:shadow-sm transition-all group"
           >
             <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
           </button>
@@ -755,7 +759,7 @@ function HomePage() {
           style={{ animationDuration: '4s' }}
         />
         <div
-          className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"
+          className="absolute bottom-0 right-1/4 w-96 h-96 bg-primary-5/10 rounded-full blur-3xl animate-pulse"
           style={{ animationDuration: '6s' }}
         />
       </div>
@@ -801,7 +805,7 @@ function HomePage() {
         <div className={cn('w-full', heroEnter('fade-in zoom-in-97 duration-300 delay-350'))}>
           <div
             data-pro-morph="composer"
-            className="w-full rounded-2xl border border-line bg-white/92 dark:bg-slate-900/80 backdrop-blur-xl shadow-[0_20px_25px_-5px_rgba(0,0,0,0.04),0_8px_10px_-6px_rgba(0,0,0,0.04)] dark:shadow-black/20 transition-shadow focus-within:shadow-2xl focus-within:shadow-violet-500/[0.06]"
+            className="w-full rounded-2xl border border-line bg-white/92 dark:bg-card/80 backdrop-blur-xl shadow-[0_20px_25px_-5px_rgba(0,0,0,0.04),0_8px_10px_-6px_rgba(0,0,0,0.04)] dark:shadow-black/20 transition-shadow focus-within:shadow-2xl focus-within:shadow-primary-6/[0.06]"
           >
             {/* ── Greeting + Profile + Agents ── wraps on narrow widths; the
                 agent bar starts at 384px and may shrink */}
@@ -812,9 +816,10 @@ function HomePage() {
               </div>
             </div>
 
-            {/* Textarea — must stay the first <textarea> in the DOM (e2e HomePage.textarea) */}
+            {/* Requirement textarea (e2e HomePage.textarea finds it by its testid) */}
             <textarea
               ref={textareaRef}
+              data-testid="home-requirement"
               aria-label={t('upload.requirementLabel')}
               placeholder={t('upload.requirementPlaceholder')}
               className="w-full resize-none border-0 bg-transparent px-4 pt-1 pb-2 text-sm leading-[1.6] text-fg placeholder:text-icon-muted focus:outline-none min-h-[140px] max-h-[300px]"
@@ -996,10 +1001,7 @@ function HomePage() {
                   {currentFolder ? currentFolderClassrooms.length : classrooms.length}
                 </span>
               ) : (
-                <span
-                  aria-hidden
-                  className="h-3 w-4 rounded-sm bg-slate-200/70 dark:bg-slate-700/50 animate-pulse"
-                />
+                <span aria-hidden className="h-3 w-4 rounded-sm bg-line animate-pulse" />
               )}
               <motion.div
                 animate={{ rotate: recentOpen ? 180 : 0 }}
@@ -1288,7 +1290,7 @@ function HomePage() {
                               // Search view: show the owning folder as a badge
                               // (top-left; the mode badge holds the bottom-left).
                               isSearching && classroom.folderId ? (
-                                <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-violet-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm pointer-events-none">
+                                <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-primary/80 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm pointer-events-none">
                                   <Folder className="size-2.5" />
                                   {folderNameById.get(classroom.folderId) ?? ''}
                                 </span>
@@ -1349,14 +1351,28 @@ function GreetingBar() {
   const nameInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLButtonElement>(null);
+  const avatarButtonRef = useRef<HTMLButtonElement>(null);
+  const nameButtonRef = useRef<HTMLButtonElement>(null);
+  // Set by the close paths that take focus with them (the row, the collapse
+  // arrow, Escape); a click outside leaves focus where the user put it
+  const returnFocusRef = useRef(false);
 
   const displayName = nickname || t('profile.defaultNickname');
+
+  const close = (returnFocus: boolean) => {
+    returnFocusRef.current = returnFocus;
+    setOpen(false);
+    setEditingName(false);
+    setAvatarPickerOpen(false);
+  };
 
   // Click-outside to collapse
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        returnFocusRef.current = false;
         setOpen(false);
         setEditingName(false);
         setAvatarPickerOpen(false);
@@ -1365,6 +1381,31 @@ function GreetingBar() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
+
+  // Focus moves into the panel when it opens (the pill turns inert under it)
+  // and back to the pill when it closes, instead of dropping to <body>
+  useEffect(() => {
+    if (open) {
+      avatarButtonRef.current?.focus();
+    } else if (returnFocusRef.current) {
+      returnFocusRef.current = false;
+      pillRef.current?.focus();
+    }
+  }, [open]);
+
+  // Leaving the name field (Enter, Escape, ✓) unmounts it: keep focus on the
+  // name button rather than <body>; a blur to elsewhere keeps its target
+  useEffect(() => {
+    if (editingName || !open) return;
+    const active = document.activeElement;
+    if (!active || active === document.body) nameButtonRef.current?.focus();
+  }, [editingName, open]);
+
+  // Escape backs out one step: the name edit first, then the panel
+  useEscapeLayer(open, () => {
+    if (editingName) setEditingName(false);
+    else close(true);
+  });
 
   const startEditName = () => {
     setNameDraft(nickname);
@@ -1425,6 +1466,7 @@ function GreetingBar() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              ref={pillRef}
               type="button"
               aria-label={t('profile.edit')}
               className="flex items-center gap-2.5 cursor-pointer transition-all duration-200 group rounded-full py-[5px] pl-[5px] pr-3 border border-line bg-background hover:bg-subtle active:scale-[0.97]"
@@ -1462,40 +1504,40 @@ function GreetingBar() {
             transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
             className="absolute left-4 top-3.5 z-50 w-64"
           >
-            <div className="rounded-2xl bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] shadow-[0_1px_8px_-2px_rgba(0,0,0,0.06)] dark:shadow-[0_1px_8px_-2px_rgba(0,0,0,0.3)] px-2.5 py-2">
+            <div className="rounded-2xl bg-popover/95 backdrop-blur-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] shadow-[0_1px_8px_-2px_rgba(0,0,0,0.06)] dark:shadow-[0_1px_8px_-2px_rgba(0,0,0,0.3)] px-2.5 py-2">
               {/* ── Row: avatar + name ── */}
               <div
                 className="flex items-center gap-2.5 cursor-pointer transition-all duration-200"
-                onClick={() => {
-                  setOpen(false);
-                  setEditingName(false);
-                  setAvatarPickerOpen(false);
-                }}
+                onClick={() => close(true)}
               >
                 {/* Avatar */}
-                <div
-                  className="shrink-0 relative cursor-pointer"
+                <button
+                  ref={avatarButtonRef}
+                  type="button"
+                  aria-label={t('profile.chooseAvatar')}
+                  aria-expanded={avatarPickerOpen}
+                  className="shrink-0 relative cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   onClick={(e) => {
                     e.stopPropagation();
                     setAvatarPickerOpen(!avatarPickerOpen);
                   }}
                 >
-                  <div className="size-8 rounded-full overflow-hidden ring-[1.5px] ring-violet-300/70 dark:ring-violet-500/40 transition-all duration-300">
+                  <div className="size-8 rounded-full overflow-hidden ring-[1.5px] ring-accent-line transition-all duration-300">
                     <img src={avatar} alt="" className="size-full object-cover" />
                   </div>
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full bg-white dark:bg-slate-800 border border-border/60 flex items-center justify-center"
+                    className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full bg-popover border border-line flex items-center justify-center"
                   >
                     <ChevronDown
                       className={cn(
-                        'size-2 text-muted-foreground/70 transition-transform duration-200',
+                        'size-2 text-icon-muted transition-transform duration-200',
                         avatarPickerOpen && 'rotate-180',
                       )}
                     />
                   </motion.div>
-                </div>
+                </button>
 
                 {/* Text */}
                 <div className="flex-1 min-w-0">
@@ -1507,46 +1549,50 @@ function GreetingBar() {
                         onChange={(e) => setNameDraft(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') commitName();
-                          if (e.key === 'Escape') {
-                            setEditingName(false);
-                          }
                         }}
                         onBlur={commitName}
                         maxLength={20}
                         placeholder={t('profile.defaultNickname')}
-                        className="flex-1 min-w-0 h-6 bg-transparent border-b border-border/80 text-[13px] font-semibold text-foreground outline-none placeholder:text-muted-foreground/40"
+                        className="flex-1 min-w-0 h-6 bg-transparent border-b border-line-strong text-[13px] font-semibold text-fg outline-none placeholder:text-icon-muted"
                       />
                       <button
+                        type="button"
                         onClick={commitName}
-                        className="shrink-0 size-5 rounded flex items-center justify-center text-violet-500 hover:bg-violet-100 dark:hover:bg-violet-900/30"
+                        aria-label={t('common.confirm')}
+                        className="shrink-0 size-5 rounded flex items-center justify-center text-accent-text hover:bg-accent-soft"
                       >
                         <Check className="size-3" />
                       </button>
                     </div>
                   ) : (
-                    <span
+                    <button
+                      ref={nameButtonRef}
+                      type="button"
+                      aria-label={`${t('classroom.rename')}: ${displayName}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         startEditName();
                       }}
-                      className="group/name inline-flex items-center gap-1 cursor-pointer"
+                      className="group/name inline-flex max-w-full items-center gap-1 cursor-pointer"
                     >
-                      <span className="text-[13px] font-semibold text-foreground/85 group-hover/name:text-foreground transition-colors">
+                      <span className="truncate text-[13px] font-semibold text-fg-secondary group-hover/name:text-fg transition-colors">
                         {displayName}
                       </span>
-                      <Pencil className="size-2.5 text-muted-foreground/30 opacity-0 group-hover/name:opacity-100 transition-opacity" />
-                    </span>
+                      <Pencil className="size-2.5 shrink-0 text-icon-muted opacity-0 group-hover/name:opacity-100 group-focus-visible/name:opacity-100 transition-opacity" />
+                    </button>
                   )}
                 </div>
 
-                {/* Collapse arrow */}
-                <motion.div
+                {/* Collapse arrow (the row's click closes the panel) */}
+                <motion.button
+                  type="button"
+                  aria-label={t('common.close')}
                   initial={{ opacity: 0, y: -2 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="shrink-0 size-6 rounded-full flex items-center justify-center hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition-colors"
                 >
-                  <ChevronUp className="size-3.5 text-muted-foreground/50" />
-                </motion.div>
+                  <ChevronUp className="size-3.5 text-icon-muted" />
+                </motion.button>
               </div>
 
               {/* ── Expandable content ── */}
@@ -1562,15 +1608,18 @@ function GreetingBar() {
                       className="overflow-hidden"
                     >
                       <div className="p-1 pb-2.5 flex items-center gap-1.5 flex-wrap">
-                        {AVATAR_OPTIONS.map((url) => (
+                        {AVATAR_OPTIONS.map((url, i) => (
                           <button
                             key={url}
+                            type="button"
+                            aria-label={t('profile.avatarOption', { n: i + 1 })}
+                            aria-pressed={avatar === url}
                             onClick={() => setAvatar(url)}
                             className={cn(
-                              'size-7 rounded-full overflow-hidden bg-gray-50 dark:bg-gray-800 cursor-pointer transition-all duration-150',
+                              'size-7 rounded-full overflow-hidden bg-subtle cursor-pointer transition-all duration-150',
                               'hover:scale-110 active:scale-95',
                               avatar === url
-                                ? 'ring-2 ring-violet-400 dark:ring-violet-500 ring-offset-0'
+                                ? 'ring-2 ring-primary ring-offset-0'
                                 : 'hover:ring-1 hover:ring-muted-foreground/30',
                             )}
                           >
@@ -1582,10 +1631,19 @@ function GreetingBar() {
                             'size-7 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150 border border-dashed',
                             'hover:scale-110 active:scale-95',
                             isCustomAvatar(avatar)
-                              ? 'ring-2 ring-violet-400 dark:ring-violet-500 ring-offset-0 border-violet-300 dark:border-violet-600 bg-violet-50 dark:bg-violet-900/30'
-                              : 'border-muted-foreground/30 text-muted-foreground/50 hover:border-muted-foreground/50',
+                              ? 'ring-2 ring-primary ring-offset-0 border-accent-line bg-accent-soft'
+                              : 'border-line-strong text-icon-muted hover:border-icon-muted',
                           )}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={t('profile.uploadAvatar')}
+                          aria-pressed={isCustomAvatar(avatar)}
                           onClick={() => avatarInputRef.current?.click()}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter' && e.key !== ' ') return;
+                            e.preventDefault();
+                            avatarInputRef.current?.click();
+                          }}
                           title={t('profile.uploadAvatar')}
                         >
                           <ImagePlus className="size-3" />

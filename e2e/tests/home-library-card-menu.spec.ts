@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/base';
 import { defaultTheme } from '../fixtures/test-data/slide-theme';
 import { seedServerDocument, uniqueStageId } from '../fixtures/server-seed';
+import { HomePage } from '../pages/home.page';
 
 async function seedCourse(page: Page, name: string): Promise<string> {
   const stageId = uniqueStageId('e2e-card-menu');
@@ -44,12 +45,13 @@ test.describe('Home library card menu', () => {
     await seedCourse(page, name);
     await page.goto('/');
 
-    const card = page.getByTestId('library-card').filter({ hasText: name });
+    const home = new HomePage(page);
+    const card = home.libraryCard(name);
     await expect(card).toBeVisible();
     const homeUrl = page.url();
 
     // Opening the menu neither opens the course nor starts a drag.
-    const trigger = card.getByTestId('card-actions-trigger');
+    const trigger = home.cardMenuTrigger(name);
     await trigger.click();
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
@@ -75,7 +77,7 @@ test.describe('Home library card menu', () => {
     const renamed = `${name} renamed`;
     await input.fill(renamed);
     await input.press('Enter');
-    await expect(page.getByTestId('library-card').filter({ hasText: renamed })).toBeVisible();
+    await expect(home.libraryCard(renamed)).toBeVisible();
     expect(page.url()).toBe(homeUrl);
   });
 });

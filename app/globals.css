@@ -66,10 +66,12 @@
      border-strong          → border-line-strong   switch track, idle inputs
      bg-subtle              → bg-subtle            soft fills, disabled
      bg-page                → bg-page              home + classroom page background
+                            → to-page-end          bottom stop of the home page gradient
      primary-1 / -3 / -6 / -7 → bg-accent-soft / border-accent-line /
                               text-accent-text / hover:text-accent-hover
      semantic pairs         → text-{interactive,warning,danger,success} on
-                              bg-{interactive,warning,danger,success}-soft
+                              bg-{interactive,warning,danger,success}-soft;
+                              text-warning-foreground on a solid bg-warning
    --muted-foreground, --background and --border are intentionally unchanged
    globally; retune them only inside a scoped [data-ui=v2] subtree. */
 @theme inline {
@@ -82,6 +84,7 @@
   --color-line-strong: var(--line-strong);
   --color-subtle: var(--subtle);
   --color-page: var(--page);
+  --color-page-end: var(--page-end);
   --color-accent-soft: var(--accent-soft);
   --color-accent-line: var(--accent-line);
   --color-accent-text: var(--accent-text);
@@ -90,6 +93,7 @@
   --color-interactive-soft: var(--interactive-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-success: var(--success);
@@ -187,6 +191,7 @@
   --line-strong: #d4d4d4;
   --subtle: #f5f5f5;
   --page: #f8fafc;
+  --page-end: #f1f5f9;
   --accent-soft: #f9f0ff;
   --accent-line: #d3adf7;
   --accent-text: #722ed1;
@@ -195,6 +200,8 @@
   --interactive-soft: #ecfeff;
   --warning: #b45309;
   --warning-soft: #fef3c7;
+  /* Text on a solid bg-warning fill (white on #b45309 is 5:1). */
+  --warning-foreground: #ffffff;
   --danger: #dc2626;
   --danger-soft: #fef2f2;
   --success: #047857;
@@ -248,6 +255,7 @@
   --line-strong: oklch(1 0 0 / 15%);
   --subtle: oklch(0.269 0 0);
   --page: #0a0a0a;
+  --page-end: #141414;
   --accent-soft: rgba(146, 84, 222, 0.16);
   --accent-line: #531dab;
   --accent-text: #b37feb;
@@ -256,10 +264,21 @@
   --interactive-soft: rgba(6, 182, 212, 0.14);
   --warning: #fcd34d;
   --warning-soft: rgba(245, 158, 11, 0.16);
+  --warning-foreground: #0a0a0a;
   --danger: #f87171;
   --danger-soft: rgba(239, 68, 68, 0.16);
   --success: #6ee7b7;
   --success-soft: rgba(16, 185, 129, 0.16);
+}
+
+/* Redesigned surfaces (home and classroom roots carry data-ui="v2"): the
+   shadcn muted text inside them follows the design's tertiary text, #666 in
+   light (5.7:1 on white, vs 4.6:1 for the global #737373) and the dark
+   fg-tertiary in dark. Scoped on purpose: the global --muted-foreground stays
+   untouched for the rest of the app. Portalled popovers and dialogs render
+   outside the subtree and keep the global value. */
+[data-ui='v2'] {
+  --muted-foreground: var(--fg-tertiary);
 }
 
 @layer base {

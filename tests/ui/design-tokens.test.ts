@@ -33,6 +33,7 @@ const LIGHT_ROLE_VALUES: Record<string, string> = {
   'line-strong': '#d4d4d4',
   subtle: '#f5f5f5',
   page: '#f8fafc',
+  'page-end': '#f1f5f9',
   'accent-soft': '#f9f0ff',
   'accent-line': '#d3adf7',
   'accent-text': '#722ed1',
@@ -41,6 +42,7 @@ const LIGHT_ROLE_VALUES: Record<string, string> = {
   'interactive-soft': '#ecfeff',
   warning: '#b45309',
   'warning-soft': '#fef3c7',
+  'warning-foreground': '#ffffff',
   danger: '#dc2626',
   'danger-soft': '#fef2f2',
   success: '#047857',
@@ -162,6 +164,21 @@ describe('design tokens in app/globals.css', () => {
     expect(darkDecls.get('--primary-foreground')).toBe('#ffffff');
   });
 
+  it('retunes --muted-foreground only inside [data-ui=v2], to the tertiary text', () => {
+    const scoped = declarations(topLevelBlock(globalsCss, "[data-ui='v2']"));
+    // fg-tertiary is #666 in light and the dark fg-tertiary in dark
+    expect(scoped.get('--muted-foreground')).toBe('var(--fg-tertiary)');
+    expect([...scoped.keys()]).toEqual(['--muted-foreground']);
+    expect(rootDecls.get('--fg-tertiary')).toBe('#666666');
+    // Never globally: :root and .dark keep the shadcn values
+    expect(rootDecls.get('--muted-foreground')).toBe('oklch(0.556 0 0)');
+    expect(darkDecls.get('--muted-foreground')).toBe('oklch(0.708 0 0)');
+    // Both redesigned roots opt in
+    for (const file of ['app/page.tsx', 'components/classroom/ClassroomSurface.tsx']) {
+      expect(readFileSync(join(ROOT, file), 'utf-8'), file).toContain('data-ui="v2"');
+    }
+  });
+
   it('draws the desktop title bar from the page and icon tokens', () => {
     const titlebar = globalsCss.slice(
       globalsCss.indexOf('html[data-openmaic-desktop] .desktop-titlebar {'),
@@ -195,6 +212,8 @@ describe('design token utilities', () => {
       'bg-danger-soft',
       'text-interactive',
       'bg-success-soft',
+      'to-page-end',
+      'text-warning-foreground',
     ]);
 
     const roleUtilities: Array<[string, string, string]> = [
@@ -214,6 +233,8 @@ describe('design token utilities', () => {
       ['bg-danger-soft', 'background-color', 'danger-soft'],
       ['text-interactive', 'color', 'interactive'],
       ['bg-success-soft', 'background-color', 'success-soft'],
+      ['to-page-end', '--tw-gradient-to', 'page-end'],
+      ['text-warning-foreground', 'color', 'warning-foreground'],
     ];
     for (const [utility, property, role] of roleUtilities) {
       expect(utilityBody(css, utility)).toContain(`${property}: var(--${role});`);

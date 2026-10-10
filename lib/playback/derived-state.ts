@@ -3,7 +3,8 @@
  * from the ~15 raw state variables scattered across Stage.
  *
  * This centralises all "what is happening now?" derivation logic so that
- * both Stage and Roundtable can consume a single, consistent view object
+ * the playback chrome (caption strip, control bar, presentation dock) and Stage
+ * gating consume a single, consistent view object
  * instead of re-deriving the same conditions inline.
  */
 
@@ -32,7 +33,7 @@ export interface PlaybackRawState {
 }
 
 // ---------------------------------------------------------------------------
-// Output: a single derived view consumed by Roundtable (and Stage for gating)
+// Output: a single derived view consumed by the caption model (and Stage for gating)
 // ---------------------------------------------------------------------------
 
 export type PlaybackPhase =
@@ -124,7 +125,7 @@ export function computePlaybackView(raw: PlaybackRawState): PlaybackView {
     phase = 'idle';
   }
 
-  // ---- sourceText (without userMessage — Roundtable overlays that locally) ----
+  // ---- sourceText (without userMessage — the caption model overlays that locally) ----
   let sourceText: string;
   if (liveSpeech) {
     sourceText = liveSpeech;

@@ -94,5 +94,12 @@ export interface PlaybackEngineCallbacks {
   /** Get current playback speed multiplier (e.g. 1, 1.5, 2) */
   getPlaybackSpeed?: () => number;
 
+  /**
+   * The agent narrating the lecture (the classroom's teacher). Lecture actions
+   * carry no agent of their own; this names who performs them, e.g. in the
+   * whiteboard's "… is drawing" chip. Null or absent: the chip names the teacher.
+   */
+  getLectureAgentId?: () => string | null;
+
   onComplete?: () => void;
 }

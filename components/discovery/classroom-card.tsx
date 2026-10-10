@@ -140,13 +140,30 @@ export function ClassroomCard({
     >
       {/* Thumbnail — large radius. A course sits on white with a hairline
           ring; a course still being generated shows a still slide outline. */}
+      {/* Also the card's keyboard target (the card itself is a div, not a
+          link): Enter / Space open it like a click. Not while the delete
+          confirmation, whose buttons sit inside it, is up. */}
       <div
         ref={thumbRef}
+        role={confirmingDelete ? undefined : 'button'}
+        tabIndex={confirmingDelete ? undefined : 0}
+        aria-label={
+          confirmingDelete
+            ? undefined
+            : pendingCourse
+              ? `${t('workspace.viewGenerationProgress')}: ${classroom.name}`
+              : t('classroom.openCourse', { name: classroom.name })
+        }
+        onKeyDown={(e) => {
+          if (confirmingDelete || e.target !== e.currentTarget) return;
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          onClick();
+        }}
         className={cn(
           'relative w-full aspect-[16/9] rounded-2xl overflow-hidden transition-transform duration-200 group-hover:scale-[1.02]',
-          pendingCourse
-            ? 'bg-slate-100 dark:bg-slate-800/80'
-            : 'bg-white ring-1 ring-line dark:bg-slate-800/80',
+          'outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          pendingCourse ? 'bg-subtle dark:bg-card' : 'bg-white ring-1 ring-line dark:bg-card',
         )}
       >
         {slide && thumbWidth > 0 ? (
@@ -163,7 +180,7 @@ export function ClassroomCard({
           <ThumbnailSkeleton static />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-100 to-blue-100 dark:from-violet-900/30 dark:to-blue-900/30 flex items-center justify-center">
+            <div className="size-12 rounded-2xl bg-gradient-to-br from-primary-2 to-blue-100 dark:from-accent-soft dark:to-blue-900/30 flex items-center justify-center">
               <span className="text-xl opacity-50">📄</span>
             </div>
           </div>
@@ -174,7 +191,7 @@ export function ClassroomCard({
             data-testid="course-mode-badge"
             className={cn(
               'absolute bottom-2 left-2 z-10 inline-flex h-[22px] items-center gap-1 rounded-full px-2 text-[11px] font-semibold',
-              'bg-white/92 shadow-sm backdrop-blur-sm dark:bg-slate-900/80',
+              'bg-card/92 shadow-sm backdrop-blur-sm dark:bg-card/80',
               isTaskEngineMode
                 ? 'text-warning ring-1 ring-warning/30'
                 : 'text-interactive ring-1 ring-interactive/25',

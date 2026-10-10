@@ -7,7 +7,7 @@ import { AvatarDisplay } from '@/components/ui/avatar-display';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
-import { DEFAULT_USER_AVATAR } from '@/components/roundtable/constants';
+import { DEFAULT_USER_AVATAR } from '@/lib/constants/avatar-fallbacks';
 import type { PlaybackView } from '@/lib/playback';
 import type { Participant } from '@/lib/types/roundtable';
 

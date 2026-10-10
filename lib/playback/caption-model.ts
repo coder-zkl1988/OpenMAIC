@@ -2,14 +2,14 @@
  * Caption model — who is speaking now, what they say and what the classroom
  * is doing, derived from the PlaybackView plus the local "you just asked"
  * overlay. One pure function feeds every surface that shows the current line
- * (the roundtable bubble, the presentation overlay, later the caption strip).
+ * (the caption strip, the presentation overlay).
  */
 
 import {
   DEFAULT_STUDENT_AVATAR,
   DEFAULT_TEACHER_AVATAR,
   DEFAULT_USER_AVATAR,
-} from '@/components/roundtable/constants';
+} from '@/lib/constants/avatar-fallbacks';
 import type { Participant } from '@/lib/types/roundtable';
 import type { PlaybackView } from './derived-state';
 
@@ -130,7 +130,7 @@ function getCaptionStatus(
 
 /**
  * Describe a resolved view: the speaker's name and avatar and a stable key.
- * The presentation overlay calls this directly on a view the roundtable
+ * The presentation overlay calls this directly on a view the caption model
  * already resolved.
  */
 export function describeCaptionSpeaker(

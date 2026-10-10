@@ -101,14 +101,14 @@ test.describe('Classroom complete adaptive layout', () => {
     // bar's counter is localized ("Page 1 / 4", "第 1 / 4 页"): match the numbers.
     await classroom.goto(classroomId);
     await classroom.waitForLoaded();
-    const pageCounter = page.getByTestId('page-counter');
-    await expect(pageCounter).toHaveText(/\b1\s*\/\s*4\b/, { timeout: 10_000 });
+    const pageCounter = classroom.pageCounter;
+    await expect(pageCounter).toHaveText(ClassroomPage.pageCounterText(1, 4), { timeout: 10_000 });
 
     // Advance past the last (3rd) scene into the completion slot.
     const nextScene = page.getByRole('button', { name: 'Next scene' });
     for (const pageNumber of [2, 3, 4]) {
       await nextScene.click();
-      await expect(pageCounter).toHaveText(new RegExp(`\\b${pageNumber}\\s*/\\s*4\\b`));
+      await expect(pageCounter).toHaveText(ClassroomPage.pageCounterText(pageNumber, 4));
     }
     const complete = page.locator('section[aria-label="Course complete"]');
     await expect(complete).toBeVisible();

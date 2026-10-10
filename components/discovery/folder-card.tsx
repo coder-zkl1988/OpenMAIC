@@ -173,13 +173,25 @@ export function FolderCard({
         if (stageId) onDropCourse(stageId);
       }}
     >
+      {/* The card's keyboard target: Enter / Space open the folder like a
+          click, except while the inline delete confirmation is up. */}
       <div
         ref={thumbRef}
+        role={confirmingDelete ? undefined : 'button'}
+        tabIndex={confirmingDelete ? undefined : 0}
+        aria-label={confirmingDelete ? undefined : t('classroom.openFolder', { name: folder.name })}
+        onKeyDown={(e) => {
+          if (confirmingDelete || editing || e.target !== e.currentTarget) return;
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          onOpen();
+        }}
         className={cn(
-          'relative w-full aspect-[16/9] rounded-2xl bg-gradient-to-br from-violet-50 to-blue-50 dark:from-violet-900/20 dark:to-blue-900/20 overflow-hidden transition-transform duration-200 group-hover:scale-[1.02] ring-1',
+          'relative w-full aspect-[16/9] rounded-2xl bg-gradient-to-br from-accent-soft to-blue-50 dark:to-blue-900/20 overflow-hidden transition-transform duration-200 group-hover:scale-[1.02] ring-1',
+          'outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
           dropActive
-            ? 'ring-2 ring-violet-500 ring-offset-2 ring-offset-background scale-[1.03]'
-            : 'ring-violet-200/50 dark:ring-violet-800/40',
+            ? 'ring-2 ring-primary ring-offset-2 ring-offset-background scale-[1.03]'
+            : 'ring-accent-line/50',
         )}
       >
         {hasCovers ? (
@@ -187,8 +199,8 @@ export function FolderCard({
         ) : courseCount === 0 ? (
           // Truly empty folder: folder icon.
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-            <div className="size-14 rounded-2xl bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
-              <Folder className="size-7 text-violet-500 dark:text-violet-300" />
+            <div className="size-14 rounded-2xl bg-primary-2 dark:bg-accent-soft flex items-center justify-center">
+              <Folder className="size-7 text-primary-5 dark:text-accent-text" />
             </div>
           </div>
         ) : (
@@ -196,18 +208,18 @@ export function FolderCard({
           // distinct from the empty-folder icon, so it does not read as empty.
           <div className="absolute inset-0 flex items-center justify-center">
             <div
-              className="w-[60%] aspect-[16/9] rounded-xl bg-violet-200/60 dark:bg-violet-800/30 shadow-md ring-1 ring-violet-300/30 dark:ring-violet-700/30"
+              className="w-[60%] aspect-[16/9] rounded-xl bg-primary-2/80 dark:bg-accent-line/30 shadow-md ring-1 ring-accent-line/40"
               style={{ transform: 'translate(-3%, 2%)' }}
             />
             <div
-              className="absolute w-[60%] aspect-[16/9] rounded-xl bg-violet-300/50 dark:bg-violet-700/20 shadow-md ring-1 ring-violet-300/30 dark:ring-violet-700/30"
+              className="absolute w-[60%] aspect-[16/9] rounded-xl bg-primary-3/60 dark:bg-accent-line/20 shadow-md ring-1 ring-accent-line/40"
               style={{ transform: 'translate(3%, -1%)' }}
             />
           </div>
         )}
 
         {dropActive && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-violet-500/20 backdrop-blur-[2px]">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-primary-5/20 backdrop-blur-[2px]">
             <Folder className="size-8 text-white drop-shadow" />
           </div>
         )}
@@ -432,7 +444,7 @@ function CoverStack({
             }}
           >
             {thumbWidth > 0 && (
-              <div className="aspect-[16/9] w-full rounded-xl overflow-hidden shadow-md ring-1 ring-black/5 bg-slate-200 dark:bg-slate-700">
+              <div className="aspect-[16/9] w-full rounded-xl overflow-hidden shadow-md ring-1 ring-black/5 bg-subtle">
                 <SlideThumbnail
                   slide={cover}
                   size={Math.round((thumbWidth * widthPct) / 100)}

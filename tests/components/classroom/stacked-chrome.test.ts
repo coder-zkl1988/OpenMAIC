@@ -196,16 +196,19 @@ describe('SceneSidebar variant="grid" (the 场景 tab)', () => {
     expect(onSceneSelect).toHaveBeenCalledTimes(3);
   });
 
-  it('keeps the desktop sidebar rows as they were (no button role)', () => {
+  it('keeps the desktop sidebar a list, with keyboard-reachable rows (a11y sweep)', () => {
     useStageStore.setState({ scenes: [scene('s1', 'slide', 0)], currentSceneId: 's1' });
     act(() =>
       root.render(
         createElement(SceneSidebar, { collapsed: false, onCollapseChange: () => undefined }),
       ),
     );
-    const item = container.querySelector('[data-testid="scene-item"]')!;
-    expect(item.getAttribute('role')).toBeNull();
-    expect(item.hasAttribute('tabindex')).toBe(false);
+    const item = container.querySelector('[data-testid="scene-item"]')! as HTMLElement;
+    expect(item.getAttribute('role')).toBe('button');
+    expect(item.getAttribute('tabindex')).toBe('0');
+    expect(item.getAttribute('aria-current')).toBe('page');
+    // The thumbnail is decoration of the named row
+    expect(item.querySelector('[inert]')).not.toBeNull();
     expect(container.querySelector('[data-testid="scene-list"]')!.className).not.toContain(
       'grid-cols-2',
     );

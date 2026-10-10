@@ -74,7 +74,7 @@ const GRID_FALLBACK_THUMB = 160;
 const RAIL_WIDTH = 64;
 // 44px numbered rail targets (TabletLandscape.dc.html), tinted by scene type
 const RAIL_ITEM_CLASS =
-  'flex size-11 shrink-0 items-center justify-center rounded-[10px] text-sm font-bold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 cursor-pointer';
+  'flex size-11 shrink-0 items-center justify-center rounded-[10px] text-sm font-bold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer';
 const RAIL_ACTIVE_CLASS =
   'bg-primary-1 text-accent-text ring-[1.5px] ring-inset ring-primary-3 dark:bg-accent-soft dark:ring-accent-line';
 const RAIL_TYPE_CLASS: Record<SceneType, string> = {
@@ -201,23 +201,24 @@ export function SceneSidebar({
     }
   };
 
-  // The grid is a touch surface: its items are real (focusable) buttons, named
-  // like the rail's (not after the thumbnail's slide text). The desktop sidebar
-  // keeps its plain clickable rows.
-  const gridItemProps = (onActivate: () => void, current: boolean, label: string) =>
-    grid
-      ? {
-          role: 'button' as const,
-          tabIndex: 0,
-          'aria-label': label,
-          'aria-current': current ? ('page' as const) : undefined,
-          onKeyDown: (event: React.KeyboardEvent) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            event.preventDefault();
-            onActivate();
-          },
-        }
-      : {};
+  // Items are real (focusable) buttons in the grid and the desktop list alike,
+  // named like the rail's (not after the thumbnail's slide text), so the
+  // scenes are reachable from the keyboard. The click handler stays on the row.
+  const itemProps = (onActivate: () => void, current: boolean, label: string) => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    'aria-label': label,
+    'aria-current': current ? ('page' as const) : undefined,
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if (event.target !== event.currentTarget) return;
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      onActivate();
+    },
+  });
+  // Primary, like the library cards: a 50% ring-ring is ≈1.5:1 on the white
+  // sidebar, under the 3:1 a focus indicator needs
+  const ITEM_FOCUS_RING = 'outline-none focus-visible:ring-2 focus-visible:ring-primary';
 
   if (variant === 'rail') {
     // The next generating page and the course-complete page as compact icons
@@ -400,15 +401,11 @@ export function SceneSidebar({
             key={scene.id}
             data-testid="scene-item"
             onClick={() => selectScene(scene.id)}
-            {...gridItemProps(
-              () => selectScene(scene.id),
-              isActive,
-              sceneLabel(index, scene.title),
-            )}
+            {...itemProps(() => selectScene(scene.id), isActive, sceneLabel(index, scene.title))}
             className={cn(
               'group relative rounded-[10px] transition-all duration-200 cursor-pointer flex flex-col gap-1 p-1.5',
               isActive ? ACTIVE_ITEM_CLASS : 'hover:bg-subtle',
-              grid && 'outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+              ITEM_FOCUS_RING,
             )}
           >
             {/* Scene Header */}
@@ -431,12 +428,12 @@ export function SceneSidebar({
               </div>
             </div>
 
-            {/* Thumbnail (in the grid it is decoration of the named tile: an
-                interactive scene's iframe must not add a tab stop inside it) */}
+            {/* Thumbnail: decoration of the named item (an interactive
+                scene's iframe must not add a tab stop inside it) */}
             <div
-              aria-hidden={grid || undefined}
-              inert={grid || undefined}
-              className="relative aspect-video w-full rounded overflow-hidden bg-white dark:bg-gray-800 ring-1 ring-black/[0.06] dark:ring-white/5"
+              aria-hidden
+              inert
+              className="relative aspect-video w-full rounded overflow-hidden bg-white dark:bg-card ring-1 ring-black/[0.06] dark:ring-white/5"
             >
               <div className="absolute inset-0 flex items-center justify-center">
                 {isSlide && slideContent ? (
@@ -512,7 +509,7 @@ export function SceneSidebar({
                   </div>
                 ) : scene.type === 'pbl' ? (
                   /* PBL: kanban board with 3 columns */
-                  <div className="w-full h-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/20 p-1.5 flex flex-col">
+                  <div className="w-full h-full bg-gradient-to-br from-blue-50 to-blue-100/60 dark:from-blue-950/30 dark:to-blue-950/20 p-1.5 flex flex-col">
                     <div className="flex items-center gap-1 mb-1.5">
                       <div className="w-1.5 h-1.5 rounded bg-blue-300 dark:bg-blue-600" />
                       <div className="h-1 w-8 bg-blue-200/60 dark:bg-blue-700/30 rounded-full" />
@@ -547,7 +544,7 @@ export function SceneSidebar({
                   </div>
                 ) : (
                   /* Fallback */
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-500">
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-subtle text-icon-muted">
                     <Icon className="w-4 h-4" />
                     <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">
                       {scene.type}
@@ -558,9 +555,9 @@ export function SceneSidebar({
                 {isSlide && (
                   <div
                     className={cn(
-                      'absolute inset-0 bg-purple-500/0 transition-colors',
+                      'absolute inset-0 bg-transparent transition-colors',
                       isActive
-                        ? 'bg-purple-500/0'
+                        ? 'bg-transparent'
                         : 'group-hover:bg-black/5 dark:group-hover:bg-white/5',
                     )}
                   />
@@ -591,13 +588,14 @@ export function SceneSidebar({
               // A failed page holds its own retry button instead
               {...(isFailed
                 ? {}
-                : gridItemProps(
+                : itemProps(
                     () => selectScene(PENDING_SCENE_ID),
                     isActive,
                     `${sceneLabel(scenes.length, outline.title)} · ${status}`,
                   ))}
               className={cn(
                 'group relative rounded-[10px] flex flex-col gap-1 p-1.5 transition-all duration-200',
+                ITEM_FOCUS_RING,
                 isFailed ? 'opacity-100 cursor-default' : 'cursor-pointer hover:bg-subtle',
                 !isFailed && !isActive && 'opacity-60',
                 isActive && !isFailed && cn(ACTIVE_ITEM_CLASS, 'opacity-100'),
@@ -635,7 +633,7 @@ export function SceneSidebar({
                   'relative aspect-video w-full rounded overflow-hidden ring-1',
                   isFailed
                     ? 'bg-red-50/30 dark:bg-red-950/10 ring-red-100 dark:ring-red-900/20'
-                    : 'bg-gray-100 dark:bg-gray-800 ring-black/5 dark:ring-white/5',
+                    : 'bg-subtle ring-black/5 dark:ring-white/5',
                 )}
               >
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
@@ -675,17 +673,17 @@ export function SceneSidebar({
                     <>
                       <div
                         className={cn(
-                          'h-2 w-3/5 bg-gray-200 dark:bg-gray-700 rounded',
+                          'h-2 w-3/5 bg-line-strong rounded',
                           !isPaused && 'animate-pulse',
                         )}
                       />
                       <div
                         className={cn(
-                          'h-1.5 w-2/5 bg-gray-200 dark:bg-gray-700 rounded',
+                          'h-1.5 w-2/5 bg-line-strong rounded',
                           !isPaused && 'animate-pulse',
                         )}
                       />
-                      <span className="text-[9px] font-medium text-gray-400 dark:text-gray-500 mt-0.5">
+                      <span className="text-[9px] font-medium text-fg-tertiary mt-0.5">
                         {status}
                       </span>
                     </>
@@ -708,13 +706,14 @@ export function SceneSidebar({
             <div
               key="course-complete-slot"
               onClick={() => selectScene(PENDING_SCENE_ID)}
-              {...gridItemProps(
+              {...itemProps(
                 () => selectScene(PENDING_SCENE_ID),
                 isActive,
                 t('stage.courseComplete'),
               )}
               className={cn(
                 'group relative rounded-[10px] flex flex-col gap-1 p-1.5 transition-all duration-200 cursor-pointer hover:bg-amber-50/60 dark:hover:bg-amber-900/10',
+                ITEM_FOCUS_RING,
                 !isActive && 'opacity-80',
                 isActive &&
                   'bg-amber-50 dark:bg-amber-900/20 ring-1 ring-amber-200 dark:ring-amber-700 opacity-100',
@@ -801,15 +800,15 @@ export function SceneSidebar({
         width: displayWidth,
         transition: isDraggingRef.current ? 'none' : 'width 0.3s ease',
       }}
-      className="bg-white/85 dark:bg-slate-900/85 border-r border-line flex flex-col shrink-0 z-20 relative overflow-visible"
+      className="bg-white/85 dark:bg-card/85 border-r border-line flex flex-col shrink-0 z-20 relative overflow-visible"
     >
       {/* Drag handle */}
       {!collapsed && (
         <div
           onMouseDown={handleDragStart}
-          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-50 group hover:bg-purple-400/30 dark:hover:bg-purple-600/30 active:bg-purple-500/40 dark:active:bg-purple-500/40 transition-colors"
+          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize z-50 group hover:bg-accent-line/30 active:bg-primary-5/40 transition-colors"
         >
-          <div className="absolute right-0.5 top-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-purple-400 dark:group-hover:bg-purple-500 transition-colors" />
+          <div className="absolute right-0.5 top-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-line-strong group-hover:bg-primary-4 dark:group-hover:bg-primary-5 transition-colors" />
         </div>
       )}
 
@@ -822,7 +821,9 @@ export function SceneSidebar({
           )}
         >
           <button
+            type="button"
             onClick={() => router.push('/')}
+            aria-label={t('generation.backToHome')}
             className="flex min-w-0 items-center gap-2 cursor-pointer rounded-[10px] px-1.5 -mx-1.5 py-1 -my-1 hover:bg-subtle active:scale-[0.97] transition-all duration-150"
             title={t('generation.backToHome')}
           >

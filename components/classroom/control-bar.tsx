@@ -559,6 +559,7 @@ export function ControlBar({
         {/* Labeled whiteboard toggle (touch: the 44px icon button) */}
         <button
           type="button"
+          data-testid="whiteboard-toggle"
           onClick={onToggleWhiteboard}
           aria-pressed={whiteboardOpen}
           aria-label={touch ? t('stage.whiteboardToggle') : undefined}

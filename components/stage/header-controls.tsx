@@ -77,7 +77,7 @@ function ExportMenuItem({
       {description ? (
         <div>
           <div>{label}</div>
-          <div className="text-[11px] text-gray-400 dark:text-gray-500">{description}</div>
+          <div className="text-[11px] text-fg-tertiary">{description}</div>
         </div>
       ) : (
         <span>{label}</span>
@@ -106,7 +106,7 @@ interface HeaderControlsProps {
 
 /** 26px icon button inside the 32px settings pill (Classroom.dc.html). */
 const PILL_ICON_BUTTON =
-  'size-[26px] flex items-center justify-center rounded-full text-icon hover:bg-white dark:hover:bg-gray-700 hover:text-fg hover:shadow-sm transition-all group';
+  'size-[26px] flex items-center justify-center rounded-full text-icon hover:bg-card dark:hover:bg-subtle hover:text-fg hover:shadow-sm transition-all group';
 
 /**
  * The 32×18 Pro switch: a 1px transparent border plus 1px padding around the
@@ -195,21 +195,21 @@ export function HeaderControls({
           title={canExport ? undefined : t('export.mediaPending')}
           className="cursor-pointer gap-2.5"
         >
-          <FileDown className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
+          <FileDown className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />
           <span>{t('export.pptx')}</span>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="min-w-[240px]">
           <ExportMenuItem
             disabled={!canExport}
             onSelect={() => exportPPTX({ includePlaceholders: true })}
-            icon={<FileDown className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
+            icon={<FileDown className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
             label={t('export.withPlaceholders')}
             description={t('export.withPlaceholdersDesc')}
           />
           <ExportMenuItem
             disabled={!canExport}
             onSelect={() => exportPPTX({ includePlaceholders: false })}
-            icon={<FileDown className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
+            icon={<FileDown className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
             label={t('export.slidesOnly')}
             description={t('export.slidesOnlyDesc')}
           />
@@ -221,26 +221,24 @@ export function HeaderControls({
           title={canExport ? undefined : t('export.mediaPending')}
           className="cursor-pointer gap-2.5"
         >
-          <Package className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
+          <Package className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />
           <div>
             <div>{t('export.resourcePack')}</div>
-            <div className="text-[11px] text-gray-400 dark:text-gray-500">
-              {t('export.resourcePackDesc')}
-            </div>
+            <div className="text-[11px] text-fg-tertiary">{t('export.resourcePackDesc')}</div>
           </div>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="min-w-[240px]">
           <ExportMenuItem
             disabled={!canExport}
             onSelect={() => exportResourcePack({ includePlaceholders: true })}
-            icon={<Package className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
+            icon={<Package className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
             label={t('export.packWithPlaceholders')}
             description={t('export.withPlaceholdersDesc')}
           />
           <ExportMenuItem
             disabled={!canExport}
             onSelect={() => exportResourcePack({ includePlaceholders: false })}
-            icon={<Package className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
+            icon={<Package className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
             label={t('export.packSlidesOnly')}
           />
         </DropdownMenuSubContent>
@@ -249,7 +247,7 @@ export function HeaderControls({
         disabled={!canExport || isExportingZip}
         onSelect={exportClassroomZip}
         title={canExport ? undefined : t('export.mediaPending')}
-        icon={<Archive className="w-4 h-4 text-gray-400 shrink-0" />}
+        icon={<Archive className="w-4 h-4 text-icon-muted shrink-0" />}
         label={t('export.classroomZip')}
         description={t('export.classroomZipDesc')}
       />
@@ -263,12 +261,10 @@ export function HeaderControls({
           title={canExport ? undefined : t('export.mediaPending')}
           className="cursor-pointer gap-2.5"
         >
-          <FileCode className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
+          <FileCode className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />
           <div>
             <div>{t('export.html')}</div>
-            <div className="text-[11px] text-gray-400 dark:text-gray-500">
-              {t('export.htmlDesc')}
-            </div>
+            <div className="text-[11px] text-fg-tertiary">{t('export.htmlDesc')}</div>
           </div>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="min-w-[240px]">
@@ -280,7 +276,7 @@ export function HeaderControls({
               key={variant}
               disabled={!canExport || isExportingHtml}
               onSelect={() => exportStandaloneHtml({ includeNarration: variant === 'narration' })}
-              icon={<FileCode className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
+              icon={<FileCode className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
               label={t(variant === 'narration' ? 'export.htmlWithNarration' : 'export.htmlSilent')}
               description={t(
                 variant === 'narration' ? 'export.htmlWithNarrationDesc' : 'export.htmlSilentDesc',
@@ -295,26 +291,21 @@ export function HeaderControls({
           title={canExport ? undefined : t('export.mediaPending')}
           className="cursor-pointer gap-2.5"
         >
-          <NotebookText className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
+          <NotebookText className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />
           <span>{t('export.script')}</span>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="min-w-[240px]">
           <ExportMenuItem
             disabled={!canExport || isExportingScript}
             onSelect={exportScriptMd}
-            icon={<NotebookText className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
+            icon={<NotebookText className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
             label={t('export.scriptMd')}
             description={t('export.scriptMdDesc')}
           />
           <ExportMenuItem
             disabled={!canExport || isExportingScript}
             onSelect={exportScriptDocx}
-            icon={
-              <NotebookText
-                className="w-4 h-4 text-gray-400 dark:text-gray-500"
-                aria-hidden="true"
-              />
-            }
+            icon={<NotebookText className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
             label={t('export.scriptDocx')}
             description={t('export.scriptDocxDesc')}
           />
@@ -324,9 +315,9 @@ export function HeaderControls({
         <ExportMenuItem
           disabled={!canExport}
           onSelect={() => setVideoDialogOpen(true)}
-          className="border-t border-gray-200 dark:border-gray-700"
+          className="border-t border-line"
           title={canExport ? undefined : t('export.mediaPending')}
-          icon={<Film className="w-4 h-4 text-gray-400 shrink-0" />}
+          icon={<Film className="w-4 h-4 text-icon-muted shrink-0" />}
           label={t('export.video')}
           description={t('export.videoDesc')}
         />
@@ -513,7 +504,7 @@ export function HeaderControls({
   // the vertical centre anchor identically too.
   return (
     <div className="flex items-center gap-2.5">
-      <div className="shrink-0 flex items-center gap-0.5 h-8 px-1 rounded-full border border-line bg-white/70 dark:bg-gray-800/60">
+      <div className="shrink-0 flex items-center gap-0.5 h-8 px-1 rounded-full border border-line bg-white/70 dark:bg-card/60">
         {/* Language — Radix DropdownMenu so its menu portals to body
             and never gets clipped by an ancestor's overflow-hidden. */}
         <LanguageSwitcher size="sm" />
@@ -533,8 +524,7 @@ export function HeaderControls({
               onSelect={() => setTheme('light')}
               className={cn(
                 'cursor-pointer gap-2',
-                theme === 'light' &&
-                  'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+                theme === 'light' && 'bg-accent-soft text-accent-text',
               )}
             >
               <Sun className="w-4 h-4" />
@@ -544,8 +534,7 @@ export function HeaderControls({
               onSelect={() => setTheme('dark')}
               className={cn(
                 'cursor-pointer gap-2',
-                theme === 'dark' &&
-                  'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+                theme === 'dark' && 'bg-accent-soft text-accent-text',
               )}
             >
               <Moon className="w-4 h-4" />
@@ -555,8 +544,7 @@ export function HeaderControls({
               onSelect={() => setTheme('system')}
               className={cn(
                 'cursor-pointer gap-2',
-                theme === 'system' &&
-                  'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+                theme === 'system' && 'bg-accent-soft text-accent-text',
               )}
             >
               <Monitor className="w-4 h-4" />
@@ -586,7 +574,7 @@ export function HeaderControls({
         <label
           className={cn(
             'shrink-0 inline-flex items-center gap-2.5 h-8 pl-3 pr-2.5 rounded-full border transition-colors duration-200',
-            'bg-white/70 dark:bg-gray-800/60',
+            'bg-white/70 dark:bg-card/60',
             proChecked ? 'border-accent-line' : 'border-line',
             !canEdit && mode !== 'edit'
               ? 'opacity-60 cursor-not-allowed'
@@ -633,7 +621,7 @@ export function HeaderControls({
             className={cn(
               'shrink-0 size-8 flex items-center justify-center rounded-full transition-all',
               canExport && !anyExporting
-                ? 'text-icon hover:bg-white dark:hover:bg-gray-700 hover:text-fg hover:shadow-sm'
+                ? 'text-icon hover:bg-card dark:hover:bg-subtle hover:text-fg hover:shadow-sm'
                 : 'text-icon-muted cursor-not-allowed opacity-50',
             )}
             aria-label={exportLabel}
