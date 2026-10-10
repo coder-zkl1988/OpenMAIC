@@ -337,8 +337,6 @@
     "discussion": "Diskussion",
     "join": "Mitmachen",
     "skip": "Überspringen",
-    "pause": "Pausieren",
-    "resume": "Fortsetzen",
     "offerLabel": "{{name}} möchte eine Diskussion beginnen",
     "autoSkipHint": "Wird in {{seconds}} Sekunden automatisch übersprungen"
   },
@@ -367,18 +365,32 @@
       "lecturing": "Erklärt",
       "paused": "Pausiert – du bist dran",
       "answering": "Antwortet",
-      "discussing": "Diskutiert"
+      "discussing": "Diskutiert",
+      "resumeIn": "Unterricht geht in {{seconds}} s weiter",
+      "answeringYou": "Beantwortet deine Frage"
     },
     "composer": {
       "raiseHand": "Melden",
-      "raiseHandHint": "Melden: Schreib deine Frage, die Lehrkraft antwortet nach diesem Satz",
+      "raiseHandHint": "Melden: Die Lehrkraft ruft dich nach diesem Satz auf",
       "raiseHandInLiveSession": "Während der Fragerunde kannst du direkt sprechen",
       "lowerHand": "Senken",
       "lowerHandHint": "Hand senken und Frage zurückziehen",
       "cuePlaceholder": "Frage sprechen oder eingeben",
       "cueStatus": "Du bist dran · Unterricht pausiert",
       "send": "Senden",
-      "cancelRecording": "Aufnahme abbrechen"
+      "cancelRecording": "Aufnahme abbrechen",
+      "handRaised": "Gemeldet · du bist nach diesem Satz dran",
+      "handRaisedStep": "Gemeldet · du bist nach diesem Schritt dran",
+      "raisedPlaceholder": "Du kannst deine Frage schon aufschreiben...",
+      "followUpPlaceholder": "Nachfrage stellen...",
+      "handLowered": "Hand gesenkt"
+    },
+    "handRaise": {
+      "raised": "Du hast dich gemeldet",
+      "aheadOfDiscussion": "Du hast dich gemeldet – die Diskussion von {{name}} kommt nach dir",
+      "calledBy": "{{name}} bittet dich zu sprechen",
+      "pendingQuestion": "In der Warteschlange · Antwort nach diesem Satz",
+      "pendingQuestionStep": "In der Warteschlange · Antwort nach diesem Schritt"
     },
     "participants": {
       "label": "Teilnehmende",
@@ -894,7 +906,6 @@
     "discussionEnded": "Diskussion beendet",
     "qaEnded": "Fragerunde beendet",
     "thinking": "Denkt nach",
-    "yourTurn": "Du bist dran",
     "stopDiscussion": "Diskussion beenden",
     "stopQA": "Fragerunde beenden",
     "softClosing": "Diskussion fortsetzen",
@@ -908,7 +919,6 @@
     "voiceInputDisabled": "Spracheingabe deaktiviert",
     "textInput": "Texteingabe",
     "stopRecording": "Aufnahme beenden",
-    "startRecording": "Aufnahme starten",
     "handRaisedQueued": "Hand gehoben – die Lehrkraft antwortet nach diesem Satz",
     "handRaisedQueuedStep": "Hand gehoben – die Lehrkraft antwortet nach diesem Schritt",
     "handRaisedDelivered": "Deine Frage wurde gesendet",

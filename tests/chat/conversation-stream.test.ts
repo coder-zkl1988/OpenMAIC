@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ConversationStream,
+  HandRaiseStreamStatus,
   buildConversationStream,
   type ConversationStreamItem,
 } from '@/components/chat/conversation-stream';
@@ -12,7 +13,11 @@ import type { Scene } from '@/lib/types/stage';
 vi.mock('@/lib/hooks/use-i18n', () => ({
   useI18n: () => ({
     t: (key: string, options?: Record<string, unknown>) =>
-      options && 'n' in options ? `${key}:${options.n}` : key,
+      options && 'n' in options
+        ? `${key}:${options.n}`
+        : options && 'name' in options
+          ? `${key}:${options.name}`
+          : key,
   }),
 }));
 
@@ -182,5 +187,42 @@ describe('ConversationStream', () => {
     const html = render([session('qa', { createdAt: 1, sceneId: 'scene-a', status: 'active' })]);
     expect(html).not.toContain('aria-expanded');
     expect(html).not.toContain('<button');
+  });
+});
+
+describe('HandRaiseStreamStatus', () => {
+  const render = (props: Parameters<typeof HandRaiseStreamStatus>[0]) =>
+    renderToStaticMarkup(createElement(HandRaiseStreamStatus, props));
+
+  it('renders nothing without a hand, a queued question or a call', () => {
+    expect(render({ handState: null, pendingQuestion: null, cueSpeaker: null })).toBe('');
+  });
+
+  it('marks a raised hand, and names the discussion a called hand jumped ahead of', () => {
+    expect(render({ handState: 'raised' })).toContain('stage.handRaise.raised');
+    // Only once called: the discussion is then queued behind the learner
+    expect(render({ handState: 'raised', deferredDiscussionAgentName: 'Kai' })).not.toContain(
+      'aheadOfDiscussion',
+    );
+    expect(render({ handState: 'called', deferredDiscussionAgentName: 'Kai' })).toContain(
+      'stage.handRaise.aheadOfDiscussion:Kai',
+    );
+  });
+
+  it('shows a queued question as a dashed pending bubble with its wait', () => {
+    const html = render({ pendingQuestion: { text: 'Why green?' } });
+    expect(html).toContain('data-testid="stream-pending-question"');
+    expect(html).toContain('border-dashed');
+    expect(html).toContain('Why green?');
+    expect(html).toContain('stage.handRaise.pendingQuestion');
+    expect(render({ pendingQuestion: { text: 'Why?', waitsFor: 'step' } })).toContain(
+      'stage.handRaise.pendingQuestionStep',
+    );
+  });
+
+  it('says who asks the learner to speak', () => {
+    const html = render({ cueSpeaker: { name: 'Ms. Li', avatar: '/avatars/teacher.png' } });
+    expect(html).toContain('data-testid="stream-cue"');
+    expect(html).toContain('stage.handRaise.calledBy:Ms. Li');
   });
 });

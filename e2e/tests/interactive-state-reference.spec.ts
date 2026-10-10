@@ -95,7 +95,7 @@ test('actual classroom component reference samples declared area state on send w
   const sending = await frame.locator('script[data-maic-observation]').textContent();
   await page.getByRole('heading', { name: 'Slider experiment' }).click();
   await page.keyboard.press('T');
-  const input = page.getByPlaceholder('Type your message...', { exact: true });
+  const input = page.getByTestId('classroom-composer').locator('textarea');
   await expect(input).toBeVisible();
   await input.fill('What is the current value and last drawn value?');
   const requestPromise = page.waitForRequest('**/api/chat/pi');
@@ -192,7 +192,7 @@ test('missing AbortSignal.any still sends the classroom question without state',
   ).toEqual({ any: 'undefined', uuid: 'function', digest: 'function' });
   await page.getByRole('heading', { name: 'Slider experiment' }).click();
   await page.keyboard.press('T');
-  const input = page.getByPlaceholder('Type your message...', { exact: true });
+  const input = page.getByTestId('classroom-composer').locator('textarea');
   await input.fill('What is the current value?');
   const request = page.waitForRequest('**/api/chat/pi', { timeout: 10000 });
   await input.press('Enter');

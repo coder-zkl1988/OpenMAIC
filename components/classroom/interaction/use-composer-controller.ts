@@ -75,6 +75,8 @@ export interface UseComposerControllerOptions {
   onMessageSend?: (message: string) => MessageSendResult;
   /** A question went out now (not queued): show it until the answer starts */
   onUserMessage?: (text: string) => void;
+  /** A question went out, now or queued (not blocked): the input is done with it */
+  onSent?: () => void;
   /** Which input opened: voice must pause narration (the mic would record it); text need not */
   onInputActivate?: (kind: 'text' | 'voice') => void;
   onUserInputActivity?: (kind: InputActivityKind) => void;
@@ -108,6 +110,7 @@ export function useComposerController({
   canSendMessage,
   onMessageSend,
   onUserMessage,
+  onSent,
   onInputActivate,
   onUserInputActivity,
   onClearElementReference,
@@ -148,8 +151,9 @@ export function useComposerController({
     (text: string, result: MessageSendResult) => {
       if (result !== 'queued') onUserMessage?.(text);
       setSendCooldown(true);
+      onSent?.();
     },
-    [onUserMessage, setSendCooldown],
+    [onSent, onUserMessage, setSendCooldown],
   );
 
   const voice = useVoiceInput({

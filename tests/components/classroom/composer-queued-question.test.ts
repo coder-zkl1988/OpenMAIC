@@ -222,6 +222,30 @@ describe('Composer: raised hand (queued question), activation and voice', () => 
     expect(button('stage.composer.send')!.disabled).toBe(false);
   });
 
+  it('tells the owner a send went out, and when a question becomes the learner line', async () => {
+    const onSent = vi.fn();
+    const onUserMessage = vi.fn();
+    // Raised: the box empties, but the line waits for delivery
+    await render({ onSent, onUserMessage });
+    typeAndSend(QUESTION);
+    expect(onSent).toHaveBeenCalledOnce();
+    expect(onUserMessage).not.toHaveBeenCalled();
+    await setQueued('queued');
+    await setQueued('delivered');
+    expect(onUserMessage).toHaveBeenCalledExactlyOnceWith(QUESTION);
+
+    // Sent now: both at once; a blocked send is neither
+    await render({ speakingAgentId: 'agent-1', onMessageSend: vi.fn(() => undefined) });
+    typeAndSend('Right now');
+    expect(onSent).toHaveBeenCalledTimes(2);
+    expect(onUserMessage).toHaveBeenLastCalledWith('Right now');
+    await render({ speakingAgentId: 'agent-2', onMessageSend: vi.fn(() => 'blocked' as const) });
+    await render({ speakingAgentId: 'agent-3' });
+    typeAndSend('Blocked');
+    expect(onSent).toHaveBeenCalledTimes(2);
+    expect(onUserMessage).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps a live region mounted before the hand goes up, then announces it', async () => {
     await render();
     const status = liveRegion();

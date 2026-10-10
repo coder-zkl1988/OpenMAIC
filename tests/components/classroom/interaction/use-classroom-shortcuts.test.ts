@@ -23,8 +23,8 @@ describe('useClassroomShortcuts', () => {
   }
 
   /** Dispatch on `target` (bubbling to window); returns the event and its stopPropagation spy */
-  function press(key: string, target: EventTarget = window) {
-    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  function press(key: string, target: EventTarget = window, init: KeyboardEventInit = {}) {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
     const stopPropagation = vi.spyOn(event, 'stopPropagation');
     act(() => {
       target.dispatchEvent(event);
@@ -116,5 +116,27 @@ describe('useClassroomShortcuts', () => {
     render({ enabled: false });
     press('t');
     expect(latest).toHaveBeenCalledOnce();
+  });
+
+  it('leaves Space to a focused control (举手, a dock toggle) instead of pausing', () => {
+    render({ isInLiveFlow: true });
+    const button = document.createElement('button');
+    container.appendChild(button);
+    const { event } = press(' ', button);
+    expect(options.onToggleLivePause).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('ignores H with Ctrl / Cmd / Alt and while the key repeats', () => {
+    const toggleHand = vi.fn();
+    render({ toggleHand });
+    press('h', window, { ctrlKey: true });
+    press('h', window, { metaKey: true });
+    press('h', window, { altKey: true });
+    const { event: held } = press('h', window, { repeat: true });
+    expect(toggleHand).not.toHaveBeenCalled();
+    expect(held.defaultPrevented).toBe(false);
+    press('h');
+    expect(toggleHand).toHaveBeenCalledOnce();
   });
 });

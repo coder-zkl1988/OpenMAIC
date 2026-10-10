@@ -24,9 +24,12 @@ export interface FocusTarget {
   focus: () => void;
 }
 
+/** How often the progress bar reads the audio player (~10 Hz is smooth enough for 3px) */
+export const SPEECH_PROGRESS_INTERVAL_MS = 100;
+
 /**
  * Polls how far the line in flight has been spoken (0..1, engine
- * getSpeechProgress) once per frame while `active`; null otherwise.
+ * getSpeechProgress) while `active`, about ten times a second; null otherwise.
  */
 export function useSpeechProgress(
   getProgress: (() => number | null) | undefined,
@@ -39,8 +42,13 @@ export function useSpeechProgress(
   useEffect(() => {
     if (!polling) return;
     let frame = 0;
-    const tick = () => {
-      setProgress(getProgress());
+    let lastRead = -Infinity;
+    // Frame-aligned, but the player is read (and React re-renders) at ~10 Hz
+    const tick = (time: number) => {
+      if (time - lastRead >= SPEECH_PROGRESS_INTERVAL_MS) {
+        lastRead = time;
+        setProgress(getProgress());
+      }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -71,6 +79,10 @@ export interface UseQueuedQuestionEffectsOptions {
   focusTargetRef: RefObject<FocusTarget | null>;
   /** A text-less raised hand (engine getHandState) */
   handState?: HandState | null;
+  /** What the bare hand waits for: the line in flight (default) or another step */
+  handWaitsFor?: 'sentence' | 'step';
+  /** The learner holds the floor (a called hand, or the director's cue): announced */
+  isCueUser?: boolean;
   /** Engine getSpeechProgress: polled for the "hand raised" progress while something waits */
   getSpeechProgress?: () => number | null;
 }
@@ -89,6 +101,8 @@ export function useQueuedQuestionEffects({
   onReturned,
   focusTargetRef,
   handState,
+  handWaitsFor,
+  isCueUser,
   getSpeechProgress,
 }: UseQueuedQuestionEffectsOptions) {
   const { t } = useI18n();
@@ -154,32 +168,72 @@ export function useQueuedQuestionEffects({
   }, [focusTargetRef, isSendCooldown]);
 
   const isQueued = queuedQuestion?.status === 'queued';
+  const isHandRaised = handState === 'raised';
+  const isHandCalled = handState === 'called';
   // What the teacher finishes first: the line in flight or another step
   const label = t(
     queuedQuestion?.waitsFor === 'step'
       ? 'roundtable.handRaisedQueuedStep'
       : 'roundtable.handRaisedQueued',
   );
+  // A bare hand: the learner is called (not answered) once it is over
+  const handLabel = t(
+    handWaitsFor === 'step' ? 'stage.composer.handRaisedStep' : 'stage.composer.handRaised',
+  );
+
+  // One-shot outcomes. The owner keeps the last question's status for the
+  // whole session, so the region must not fall back to a stale 'delivered' /
+  // 'cancelled' once a later hand or cue clears; each outcome shows until the
+  // next hand, question or cue goes up.
+  const isSomethingUp = !!handState || isQueued || !!isCueUser;
+  // A question went out: announced for that id only (not one restored on mount)
+  const deliveredId = queuedQuestion?.status === 'delivered' ? queuedQuestion.id : null;
+  const [seenDeliveredId, setSeenDeliveredId] = useState<number | null>(deliveredId);
+  const [deliveredShown, setDeliveredShown] = useState(false);
+  // The learner took the hand or the waiting question down (放下 / 撤回). Only
+  // their own action says so: a scene switch or exit also cancels a question
+  // and must not be announced as "hand lowered".
+  const [handLowered, setHandLowered] = useState<'pending' | 'shown' | null>(null);
+  if (deliveredId !== null && deliveredId !== seenDeliveredId) {
+    setSeenDeliveredId(deliveredId);
+    setDeliveredShown(true);
+    setHandLowered(null);
+  }
+  if (deliveredShown && isSomethingUp) setDeliveredShown(false);
+  if (handLowered === 'pending' && !handState && !isQueued) setHandLowered('shown');
+  if (handLowered === 'shown' && isSomethingUp) setHandLowered(null);
+  const announceHandLowered = useCallback(() => setHandLowered('pending'), []);
+
   // Always mounted, so it announces: a live region that appears together with
   // its text is often not read out
   const liveText = isQueued
     ? label
-    : queuedQuestion?.status === 'delivered'
-      ? t('roundtable.handRaisedDelivered')
-      : '';
+    : isHandRaised
+      ? handLabel
+      : isHandCalled || isCueUser
+        ? t('stage.composer.cueStatus')
+        : deliveredShown
+          ? t('roundtable.handRaisedDelivered')
+          : handLowered === 'shown'
+            ? t('stage.composer.handLowered')
+            : '';
 
-  const speechProgress = useSpeechProgress(getSpeechProgress, isQueued || handState === 'raised');
+  const speechProgress = useSpeechProgress(getSpeechProgress, isQueued || isHandRaised);
 
   return {
     isQueued,
     label,
+    /** The bare hand's status: 已举手 · 讲完这句就请你发言 (or "this step") */
+    handLabel,
     liveText,
+    /** The learner lowered a bare hand: the live region says so */
+    announceHandLowered,
     /** The always-mounted sr-only status; also where focus parks during the cooldown */
     statusRef,
     /** Attach to the queued pill so its unmount can tell whether it held focus */
     pillRef,
-    isHandRaised: handState === 'raised',
-    isHandCalled: handState === 'called',
+    isHandRaised,
+    isHandCalled,
     /** 0..1 of the line the raised hand waits for (null when not polled) */
     speechProgress,
   };

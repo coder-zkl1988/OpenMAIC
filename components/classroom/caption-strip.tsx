@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { AvatarDisplay } from '@/components/ui/avatar-display';
 import type { AudioIndicatorState } from '@/components/roundtable/audio-indicator';
+import { useSoftCloseCountdown } from '@/components/chat/use-soft-close-countdown';
 import {
   buildCaptionModel,
   describeCaptionSpeaker,
@@ -17,6 +18,11 @@ export interface CaptionStripProps extends Omit<CaptionModelInput, 'names' | 'us
   /** Discussion TTS state of `audioAgentId` (a spinner while its audio is generated) */
   readonly audioIndicatorState?: AudioIndicatorState;
   readonly audioAgentId?: string | null;
+  /**
+   * A Q&A or discussion that interrupted the lecture is soft-closing: the
+   * lecture resumes by itself at this time ('5 秒后继续讲课')
+   */
+  readonly lectureResumeDeadline?: number;
   readonly className?: string;
 }
 
@@ -74,6 +80,7 @@ function LoadingDots() {
 export function CaptionStrip({
   audioIndicatorState,
   audioAgentId,
+  lectureResumeDeadline,
   className,
   ...input
 }: CaptionStripProps) {
@@ -89,9 +96,22 @@ export function CaptionStrip({
     ? caption
     : describeCaptionSpeaker('teacher', { participants: input.participants, names });
 
-  const statusKey = CAPTION_STATUS_LABEL_KEYS[caption.status];
-  const isSpeaking = SPEAKING_STATUSES.includes(caption.status);
-  const showDots = caption.isLoading || (caption.status === 'thinking' && !caption.text);
+  const resumeSeconds = useSoftCloseCountdown(lectureResumeDeadline);
+  // The soft close's countdown back to the lecture replaces the status
+  const statusText =
+    resumeSeconds !== undefined
+      ? t('stage.caption.resumeIn', { seconds: resumeSeconds })
+      : CAPTION_STATUS_LABEL_KEYS[caption.status]
+        ? t(CAPTION_STATUS_LABEL_KEYS[caption.status]!)
+        : null;
+  const isSpeaking = resumeSeconds === undefined && SPEAKING_STATUSES.includes(caption.status);
+  // The learner's question is with the director: say so instead of dots
+  const isAnsweringYou =
+    caption.status === 'thinking' && !caption.text && input.sessionType === 'qa';
+  const showDots =
+    !isAnsweringYou && (caption.isLoading || (caption.status === 'thinking' && !caption.text));
+  // Waiting for the learner (a called hand, the director's cue): the line rests
+  const isWaitingForLearner = caption.view.phase === 'cueUser';
   const isGeneratingAudio =
     audioIndicatorState === 'generating' &&
     !!input.speakingAgentId &&
@@ -117,25 +137,36 @@ export function CaptionStrip({
         className,
       )}
     >
-      <span className="relative size-9 shrink-0 overflow-hidden rounded-full border-2 border-background ring-2 ring-primary">
+      <span
+        className={cn(
+          'relative size-9 shrink-0 overflow-hidden rounded-full',
+          // The primary ring marks a voice in progress; at rest (paused, or
+          // counting down to the lecture) the avatar gets a plain hairline
+          caption.status === 'paused' || resumeSeconds !== undefined
+            ? 'ring-1 ring-line'
+            : 'border-2 border-background ring-2 ring-primary',
+        )}
+      >
         {speaker.avatar && <AvatarDisplay src={speaker.avatar} alt="" />}
       </span>
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex h-4 items-center gap-2">
           <span className="truncate text-xs font-semibold text-fg-secondary">{speaker.name}</span>
-          {statusKey && (
+          {statusText && (
             <span
               data-testid="caption-status"
               className={cn(
                 'inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold',
-                caption.status === 'paused' ? 'text-fg-tertiary' : 'text-accent-text',
+                caption.status === 'paused' || resumeSeconds !== undefined
+                  ? 'text-fg-tertiary'
+                  : 'text-accent-text',
               )}
             >
               {isSpeaking && <Wave />}
-              {caption.status === 'paused' && (
+              {caption.status === 'paused' && resumeSeconds === undefined && (
                 <Pause aria-hidden="true" className="size-2.5 fill-current stroke-none" />
               )}
-              {t(statusKey)}
+              {statusText}
             </span>
           )}
           {isGeneratingAudio && (
@@ -148,13 +179,18 @@ export function CaptionStrip({
         </div>
         {showDots ? (
           <LoadingDots />
+        ) : isAnsweringYou ? (
+          <p data-testid="caption-text" className="text-[15px] leading-[1.6] text-fg-tertiary">
+            {t('stage.caption.answeringYou')}
+          </p>
         ) : (
           <p
             ref={tailRef}
             data-testid="caption-text"
             data-overflow={followTail ? 'tail' : 'clamp'}
             className={cn(
-              'whitespace-pre-wrap break-words text-[15px] leading-[1.6] text-fg',
+              'whitespace-pre-wrap break-words text-[15px] leading-[1.6]',
+              isWaitingForLearner ? 'text-fg-tertiary' : 'text-fg',
               // 2 × 1.6em: the latest two lines stay in view as text streams in
               followTail ? 'max-h-[3.2em] overflow-hidden' : 'line-clamp-2',
             )}

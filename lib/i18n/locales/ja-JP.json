@@ -337,8 +337,6 @@
     "discussion": "ディスカッション",
     "join": "参加する",
     "skip": "スキップ",
-    "pause": "一時停止",
-    "resume": "再開",
     "offerLabel": "{{name}} がディスカッションを始めようとしています",
     "autoSkipHint": "{{seconds}} 秒後に自動的にスキップします"
   },
@@ -367,18 +365,32 @@
       "lecturing": "説明中",
       "paused": "一時停止中・あなたの番です",
       "answering": "回答中",
-      "discussing": "ディスカッション中"
+      "discussing": "ディスカッション中",
+      "resumeIn": "{{seconds}} 秒後に授業を再開",
+      "answeringYou": "あなたの質問に回答しています"
     },
     "composer": {
       "raiseHand": "挙手",
-      "raiseHandHint": "挙手して質問：質問を書くと、先生がこの文を話し終えた後に答えます",
+      "raiseHandHint": "挙手：先生がこの文を話し終えたらあなたを指名します",
       "raiseHandInLiveSession": "Q&A 中はそのまま発言できます",
       "lowerHand": "手を下ろす",
       "lowerHandHint": "手を下ろして質問を取り消す",
       "cuePlaceholder": "質問を話すか入力してください",
       "cueStatus": "あなたの番です · 授業は一時停止中",
       "send": "送信",
-      "cancelRecording": "録音をキャンセル"
+      "cancelRecording": "録音をキャンセル",
+      "handRaised": "挙手中 · この文が終わったら指名されます",
+      "handRaisedStep": "挙手中 · このステップが終わったら指名されます",
+      "raisedPlaceholder": "先に質問を書いておけます...",
+      "followUpPlaceholder": "続けて質問する...",
+      "handLowered": "手を下ろしました"
+    },
+    "handRaise": {
+      "raised": "手を挙げました",
+      "aheadOfDiscussion": "手を挙げました。{{name}} のディスカッションはあなたの後です",
+      "calledBy": "{{name}} があなたを指名しました",
+      "pendingQuestion": "待機中 · この文が終わったら回答します",
+      "pendingQuestionStep": "待機中 · このステップが終わったら回答します"
     },
     "participants": {
       "label": "参加者",
@@ -895,7 +907,6 @@
     "qaEnded": "Q&Aが終了しました",
     "softClosing": "話し合いを続ける",
     "thinking": "思考中",
-    "yourTurn": "あなたの番です",
     "stopDiscussion": "ディスカッションを終了",
     "stopQA": "質疑応答を終了",
     "autoPlay": "自動再生",
@@ -908,7 +919,6 @@
     "voiceInputDisabled": "音声入力無効",
     "textInput": "テキスト入力",
     "stopRecording": "録音を停止",
-    "startRecording": "録音を開始",
     "handRaisedQueued": "挙手しました · この一文が終わったら先生が答えます",
     "handRaisedQueuedStep": "挙手しました · この手順が終わったら先生が答えます",
     "handRaisedDelivered": "質問を送信しました",

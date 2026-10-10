@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { Hand, MessageSquare } from 'lucide-react';
 import type { ChatSession } from '@/lib/types/chat';
 import type { Scene } from '@/lib/types/stage';
+import type { HandState } from '@/lib/playback';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import { AvatarDisplay } from '@/components/ui/avatar-display';
 import { ChatSessionComponent } from './chat-session';
 
 /** A page divider '第 N 页 · 场景标题' or one Q&A / discussion session */
@@ -201,5 +203,76 @@ export function ConversationStream({
         {trailing}
       </div>
     </div>
+  );
+}
+
+interface HandRaiseStreamStatusProps {
+  /** The bare raised hand (engine getHandState) */
+  readonly handState?: HandState | null;
+  /** A question waiting for the current line: its pending bubble */
+  readonly pendingQuestion?: {
+    readonly text: string;
+    readonly waitsFor?: 'sentence' | 'step';
+  } | null;
+  /** The agent whose discussion a called hand jumped ahead of */
+  readonly deferredDiscussionAgentName?: string;
+  /** Who handed the floor to the learner (a called hand, or the director's cue) */
+  readonly cueSpeaker?: { readonly name: string; readonly avatar: string } | null;
+}
+
+/**
+ * The stream's hand-raise rows (HandRaiseFlow.dc.html, Classroom.dc.html),
+ * after the latest session: '你举手了' (or '你举手了，X 的讨论排在你之后'
+ * when the hand jumped ahead of a discussion), the dashed pending bubble of a
+ * queued question ('排队中 · 老师讲完这句就回答') and the call
+ * ('AI教师 请你发言'). Visual only: the composer's live region announces the
+ * same transitions.
+ */
+export function HandRaiseStreamStatus({
+  handState,
+  pendingQuestion,
+  deferredDiscussionAgentName,
+  cueSpeaker,
+}: HandRaiseStreamStatusProps) {
+  const { t } = useI18n();
+  return (
+    <>
+      {handState && (
+        <div
+          data-testid="stream-hand-raised"
+          className="flex items-center justify-center gap-1.5 text-center text-[11px] font-semibold text-warning"
+        >
+          <Hand aria-hidden="true" className="size-3 shrink-0" />
+          {handState === 'called' && deferredDiscussionAgentName
+            ? t('stage.handRaise.aheadOfDiscussion', { name: deferredDiscussionAgentName })
+            : t('stage.handRaise.raised')}
+        </div>
+      )}
+      {pendingQuestion && (
+        <div data-testid="stream-pending-question" className="flex flex-col items-end gap-1">
+          <p className="max-w-[78%] whitespace-pre-wrap break-words rounded-[14px] rounded-tr-[4px] border border-dashed border-accent-text/60 bg-accent-soft px-3 py-2 text-sm leading-[1.6] text-accent-hover dark:text-accent-text">
+            {pendingQuestion.text}
+          </p>
+          <span className="text-[11px] text-fg-tertiary">
+            {t(
+              pendingQuestion.waitsFor === 'step'
+                ? 'stage.handRaise.pendingQuestionStep'
+                : 'stage.handRaise.pendingQuestion',
+            )}
+          </span>
+        </div>
+      )}
+      {cueSpeaker && (
+        <div
+          data-testid="stream-cue"
+          className="flex items-center justify-center gap-1.5 text-xs font-semibold text-fg-secondary"
+        >
+          <span className="relative size-[18px] shrink-0 overflow-hidden rounded-full">
+            <AvatarDisplay src={cueSpeaker.avatar} alt="" />
+          </span>
+          {t('stage.handRaise.calledBy', { name: cueSpeaker.name })}
+        </div>
+      )}
+    </>
   );
 }

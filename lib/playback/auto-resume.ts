@@ -43,9 +43,21 @@ export interface AutoResumeArgs {
  */
 export function shouldAutoResumeLecture(args: AutoResumeArgs): boolean {
   if (args.source !== 'soft_close_confirmed' && args.source !== 'soft_close_timeout') return false;
+  if (args.engineMode !== 'idle') return false;
+  return willResumeAfterSoftClose(args);
+}
+
+/**
+ * The part of shouldAutoResumeLecture that is already known while a session
+ * soft-closes: whether its end will hand back to the interrupted lecture. The
+ * caption's "N 秒后继续讲课" countdown uses it, so it never promises a
+ * resume the cleanup will refuse.
+ */
+export function willResumeAfterSoftClose(
+  args: Omit<AutoResumeArgs, 'source' | 'engineMode'>,
+): boolean {
   if (!args.hadLectureInterruption) return false;
   if (args.endReason !== 'user_done' && args.endReason !== 'back_to_lesson') return false;
-  if (args.engineMode !== 'idle') return false;
   if ((args.isExhausted && !args.lectureCompletionPending) || args.playbackCompleted) return false;
   return true;
 }

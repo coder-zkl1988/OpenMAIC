@@ -337,8 +337,6 @@
     "discussion": "Thảo luận",
     "join": "Tham gia",
     "skip": "Bỏ qua",
-    "pause": "Tạm dừng",
-    "resume": "Tiếp tục",
     "offerLabel": "{{name}} muốn bắt đầu thảo luận",
     "autoSkipHint": "Tự động bỏ qua sau {{seconds}} giây"
   },
@@ -367,18 +365,32 @@
       "lecturing": "Đang giảng",
       "paused": "Đã tạm dừng, đến lượt bạn nói",
       "answering": "Đang trả lời",
-      "discussing": "Đang thảo luận"
+      "discussing": "Đang thảo luận",
+      "resumeIn": "Tiếp tục bài giảng sau {{seconds}} giây",
+      "answeringYou": "Đang trả lời câu hỏi của bạn"
     },
     "composer": {
       "raiseHand": "Giơ tay",
-      "raiseHandHint": "Giơ tay hỏi: viết câu hỏi, giáo viên sẽ trả lời sau câu này",
+      "raiseHandHint": "Giơ tay: giáo viên sẽ mời bạn phát biểu khi hết câu này",
       "raiseHandInLiveSession": "Trong phần hỏi đáp bạn có thể nói ngay",
       "lowerHand": "Hạ tay",
       "lowerHandHint": "Hạ tay và rút lại câu hỏi",
       "cuePlaceholder": "Nói hoặc nhập câu hỏi của bạn",
       "cueStatus": "Đến lượt bạn nói · lớp học đang tạm dừng",
       "send": "Gửi",
-      "cancelRecording": "Hủy ghi âm"
+      "cancelRecording": "Hủy ghi âm",
+      "handRaised": "Đã giơ tay · đến lượt bạn khi hết câu này",
+      "handRaisedStep": "Đã giơ tay · đến lượt bạn khi xong bước này",
+      "raisedPlaceholder": "Bạn có thể viết câu hỏi trước...",
+      "followUpPlaceholder": "Hỏi tiếp...",
+      "handLowered": "Đã hạ tay"
+    },
+    "handRaise": {
+      "raised": "Bạn đã giơ tay",
+      "aheadOfDiscussion": "Bạn đã giơ tay, phần thảo luận của {{name}} xếp sau bạn",
+      "calledBy": "{{name}} mời bạn phát biểu",
+      "pendingQuestion": "Đang chờ · sẽ trả lời khi hết câu này",
+      "pendingQuestionStep": "Đang chờ · sẽ trả lời khi xong bước này"
     },
     "participants": {
       "label": "Thành viên",
@@ -894,7 +906,6 @@
     "discussionEnded": "Thảo luận đã kết thúc",
     "qaEnded": "Phần hỏi đáp đã kết thúc",
     "thinking": "Đang suy nghĩ",
-    "yourTurn": "Đến lượt bạn",
     "stopDiscussion": "Dừng thảo luận",
     "stopQA": "Kết thúc hỏi đáp",
     "softClosing": "Tiếp tục thảo luận",
@@ -908,7 +919,6 @@
     "voiceInputDisabled": "Đã tắt nhập bằng giọng nói",
     "textInput": "Nhập bằng chữ",
     "stopRecording": "Dừng ghi âm",
-    "startRecording": "Bắt đầu ghi âm",
     "handRaisedQueued": "Đã giơ tay · Giảng viên sẽ trả lời sau câu này",
     "handRaisedQueuedStep": "Đã giơ tay · Giảng viên sẽ trả lời sau bước này",
     "handRaisedDelivered": "Đã gửi câu hỏi của bạn",

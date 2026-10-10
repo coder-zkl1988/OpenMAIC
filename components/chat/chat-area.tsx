@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { SessionType } from '@/lib/types/chat';
-import type { DiscussionRequest } from '@/components/roundtable';
+import type { DiscussionRequest } from '@/lib/types/roundtable';
 import type { Action } from '@/lib/types/action';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
@@ -43,7 +43,7 @@ interface ChatAreaProps {
   onCueUser?: (fromAgentId?: string, prompt?: string) => void;
   onLiveSessionError?: () => void;
   onSoftCloseSession?: (payload: SessionCleanupPayload) => void;
-  onSoftClosingChange?: (softClosing: boolean, deadline?: number) => void;
+  onSoftClosingChange?: (softClosing: boolean, deadline?: number, endReason?: string) => void;
   onStopSession?: (payload: SessionCleanupPayload) => void;
   onSegmentSealed?: (
     messageId: string,
@@ -211,6 +211,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       onSoftClosingChange?.(
         Boolean(softClosingChatSession),
         softClosingChatSession?.softCloseDeadline,
+        softClosingChatSession?.endReason,
       );
     }, [softClosingChatSession, onSoftClosingChange]);
 

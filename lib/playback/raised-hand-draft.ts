@@ -3,6 +3,9 @@
  * change, Pro mode) is kept per classroom in sessionStorage — it survives a
  * reload in the same tab — and put back into the input on the next visit.
  * Best effort: storage may be unavailable (private mode, blocked site data).
+ *
+ * Text only: a bare raised hand (举手 without a question) has nothing to give
+ * back, so it is never saved — and an empty text is refused here as well.
  */
 
 interface StoredRaisedHandDraft {

@@ -185,6 +185,51 @@ test.describe('Classroom Interaction', () => {
     await expect(textarea).toBeFocused();
   });
 
+  test('fullscreen: T opens the dock composer, Escape closes it and keeps fullscreen', async ({
+    page,
+  }) => {
+    const classroom = new ClassroomPage(page);
+    await classroom.goto(stageId);
+    await classroom.waitForLoaded();
+
+    const isFullscreen = () => page.evaluate(() => document.fullscreenElement !== null);
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await expect.poll(isFullscreen).toBe(true);
+
+    // The panel is collapsed; the one composer now lives in the dock's card,
+    // hidden until T
+    const card = page.getByTestId('presentation-composer-card');
+    await expect(page.getByTestId('presentation-dock')).toBeVisible();
+    await expect(card).toHaveAttribute('data-visible', 'false');
+    await expect(page.getByTestId('classroom-composer')).toHaveCount(1);
+
+    await page.keyboard.press('T');
+    await expect(card).toBeVisible();
+    const textarea = card.getByPlaceholder('Type your message...', { exact: true });
+    await expect(textarea).toBeFocused();
+    await page.keyboard.type('Why is it green?');
+
+    // Escape closes the card, not fullscreen; the draft is kept
+    await page.keyboard.press('Escape');
+    await expect(card).toHaveAttribute('data-visible', 'false');
+    await expect.poll(isFullscreen).toBe(true);
+    await page.keyboard.press('T');
+    await expect(textarea).toBeFocused();
+    await expect(textarea).toHaveValue('Why is it green?');
+
+    // Escape again closes the card; once more leaves fullscreen, and the
+    // composer (with its draft) is back in the panel
+    await page.keyboard.press('Escape');
+    await expect(card).toHaveAttribute('data-visible', 'false');
+    await page.keyboard.press('Escape');
+    await expect.poll(isFullscreen).toBe(false);
+    const panelTextarea = page
+      .getByTestId('classroom-composer')
+      .getByPlaceholder('Type your message...', { exact: true });
+    await expect(panelTextarea).toBeVisible();
+    await expect(panelTextarea).toHaveValue('Why is it green?');
+  });
+
   test('keeps body spacing stable for header menus and settings modal', async ({ page }) => {
     const classroom = new ClassroomPage(page);
     await classroom.goto(stageId);

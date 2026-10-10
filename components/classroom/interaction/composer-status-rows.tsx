@@ -4,9 +4,14 @@ import { useId, type Ref } from 'react';
 import { useI18n } from '@/lib/hooks/use-i18n';
 
 interface ComposerStatusRowsProps {
-  /** A question waits for the current line (a raised hand) */
+  /**
+   * A raised hand waits for the current line: a question (its text), or a
+   * bare hand ('' — the row then shows the label alone)
+   */
   readonly queuedText?: string | null;
-  /** What it waits for: 已举手 · 老师讲完这句就回答你 (or "this step") */
+  /** 'hand': a bare hand, called rather than answered at the boundary */
+  readonly queuedKind?: 'question' | 'hand';
+  /** What it waits for: 已举手 · 老师讲完这句就回答你, 已举手 · 讲完这句就请你发言 (or "this step") */
   readonly queuedLabel: string;
   /** 0..1 of the line the question waits for; null hides the bar */
   readonly speechProgress?: number | null;
@@ -22,13 +27,15 @@ function Dot() {
 }
 
 /**
- * The status rows above the composer (Classroom.dc.html): the raised hand
- * '已举手 · 老师讲完这句就回答你' with 撤回 and the line's progress, or the
- * cue '轮到你发言了 · 课堂已暂停'. Visual only — the composer's always-mounted
- * live region announces the raised hand.
+ * The status rows above the composer (Classroom.dc.html, HandRaiseFlow.dc.html):
+ * the raised hand — '已举手 · 老师讲完这句就回答你' with the question, or a bare
+ * hand's '已举手 · 讲完这句就请你发言' — with 撤回 and the line's progress, or
+ * the cue '轮到你发言了 · 课堂已暂停'. Visual only — the composer's
+ * always-mounted live region announces the raised hand, the call and 撤回.
  */
 export function ComposerStatusRows({
   queuedText,
+  queuedKind = 'question',
   queuedLabel,
   speechProgress,
   onCancelQueued,
@@ -45,6 +52,7 @@ export function ComposerStatusRows({
       <div
         ref={queuedRowRef}
         data-testid="composer-queued-question"
+        data-kind={queuedKind}
         className="mx-1 mb-2.5"
         onClick={(event) => event.stopPropagation()}
       >
@@ -57,9 +65,13 @@ export function ComposerStatusRows({
           >
             {queuedLabel}
           </span>
-          <span title={queuedText} className="min-w-0 flex-1 truncate text-fg-tertiary">
-            {queuedText}
-          </span>
+          {queuedText ? (
+            <span title={queuedText} className="min-w-0 flex-1 truncate text-fg-tertiary">
+              {queuedText}
+            </span>
+          ) : (
+            <span className="flex-1" />
+          )}
           <button
             type="button"
             aria-describedby={labelId}

@@ -110,3 +110,57 @@ describe('ProactiveCard inline variant (the 发起讨论 card in the stream)', (
     expect(onSkip).toHaveBeenCalledOnce();
   });
 });
+
+describe('ProactiveCard portal variant (the 发起讨论 card over the fullscreen dock)', () => {
+  let container: HTMLDivElement;
+  let fullscreen: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    container = document.createElement('div');
+    fullscreen = document.createElement('div');
+    document.body.append(container, fullscreen);
+    root = createRoot(container);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    fullscreen.remove();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('renders the same card inside the given container, with no pause toggle', () => {
+    const anchor = document.createElement('div');
+    container.appendChild(anchor);
+    const onSkip = vi.fn<() => void>();
+    act(() =>
+      root.render(
+        createElement(ProactiveCard, {
+          action,
+          mode: 'playback',
+          agentName: '显眼包',
+          anchorRef: { current: anchor },
+          portalContainer: fullscreen,
+          onSkip,
+          onListen: vi.fn(),
+        }),
+      ),
+    );
+    // Positioned on the next frame, against the anchor
+    act(() => vi.advanceTimersByTime(32));
+
+    const card = fullscreen.querySelector('[data-testid="proactive-card-portal"]');
+    expect(card).not.toBeNull();
+    expect(container.querySelector('[data-testid="proactive-card-portal"]')).toBeNull();
+    expect(card?.getAttribute('role')).toBe('group');
+    expect(card?.textContent).toContain('Why are leaves green?');
+    expect(card?.querySelectorAll('button')).toHaveLength(2);
+    expect(card?.textContent).not.toContain('proactiveCard.pause');
+
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS + 500));
+    expect(onSkip).toHaveBeenCalledOnce();
+  });
+});

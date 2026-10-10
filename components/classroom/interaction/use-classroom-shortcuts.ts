@@ -17,6 +17,8 @@ export interface UseClassroomShortcutsOptions {
   /** V, when speech input is available */
   toggleVoice: () => void;
   canUseVoice: boolean;
+  /** H: raise or lower the hand */
+  toggleHand?: () => void;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -25,10 +27,29 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || !!element?.isContentEditable;
 }
 
+/** Controls that Space activates (a focused 举手 must raise the hand, not pause) */
+export const SPACE_ACTIVATED_CONTROLS = [
+  'button',
+  'a[href]',
+  'summary',
+  '[role="button"]',
+  '[role="switch"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="tab"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+].join(', ');
+
+export function isSpaceActivatedTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(SPACE_ACTIVATED_CONTROLS) !== null;
+}
+
 /**
  * Classroom interaction keys on window (#255): T = the text composer, V = voice,
- * Escape = close the composer, Space = pause/resume the live answer (only
- * during a Q&A / discussion — the stage owns Space for lecture play/pause).
+ * H = raise / lower the hand, Escape = close the composer, Space =
+ * pause/resume the live answer (only during a Q&A / discussion — the stage
+ * owns Space for lecture play/pause).
  */
 export function useClassroomShortcuts(options: UseClassroomShortcutsOptions) {
   const { enabled = true } = options;
@@ -54,12 +75,16 @@ export function useClassroomShortcuts(options: UseClassroomShortcutsOptions) {
 
       // Skip other shortcuts when user is typing in an input, textarea, or contentEditable
       if (isTypingTarget(e.target)) return;
+      // Letter shortcuts leave browser / OS combos (Ctrl+H, Cmd+T, ...) alone
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       switch (e.key) {
         case ' ':
         case 'Spacebar':
           // Only handle during live flow (QA/Discussion)
           if (!current.isInLiveFlow) return;
+          // A focused control keeps Space for its own activation
+          if (isSpaceActivatedTarget(e.target)) return;
           e.preventDefault(); // Prevent page scroll
           current.onToggleLivePause();
           break;
@@ -74,6 +99,14 @@ export function useClassroomShortcuts(options: UseClassroomShortcutsOptions) {
         case 'V':
           e.preventDefault();
           if (current.canUseVoice) current.toggleVoice();
+          break;
+
+        case 'h':
+        case 'H':
+          // Holding the key must not flap the hand up and down
+          if (!current.toggleHand || e.repeat) return;
+          e.preventDefault();
+          current.toggleHand();
           break;
 
         default:

@@ -22,7 +22,7 @@ const PRESENTATION_BUBBLE_WIDTH = 'w-[min(420px,calc(100vw-3rem))]';
 
 interface PresentationSpeechOverlayProps {
   readonly playbackView: PlaybackView;
-  readonly participants: Participant[];
+  readonly participants: readonly Participant[];
   readonly speakingAgentId: string | null;
   readonly isTopicPending: boolean;
   readonly userAvatar?: string;
@@ -69,7 +69,7 @@ export function buildPresentationBubbleModel({
   userAvatar,
 }: {
   playbackView: PlaybackView;
-  participants: Participant[];
+  participants: readonly Participant[];
   speakingAgentId: string | null;
   isTopicPending: boolean;
   fallbackTeacherName: string;

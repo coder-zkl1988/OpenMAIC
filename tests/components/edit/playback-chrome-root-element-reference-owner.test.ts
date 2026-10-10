@@ -5,6 +5,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  /** Agents the registry knows by id (getAgent) */
+  registryAgents: {} as Record<string, { name: string }>,
   sendMessage: vi.fn(),
   whiteboardOpen: false,
   runtimeProjection: null as {
@@ -12,8 +14,16 @@ const mocks = vi.hoisted(() => ({
     lastSeq: number | null;
     whiteboard: import('@/lib/types/stage').Whiteboard | null;
   } | null,
-  // The fullscreen roundtable (mounted only while presenting)
-  roundtableProps: undefined as Record<string, unknown> | undefined,
+  // The fullscreen dock (mounted only while presenting) and its handle
+  presentationDockProps: undefined as Record<string, unknown> | undefined,
+  dockOpenText: vi.fn(),
+  dockToggleVoice: vi.fn(),
+  dockContinueText: vi.fn(),
+  dockClose: vi.fn(),
+  dockShowUserMessage: vi.fn(),
+  dockCloseAfterSend: vi.fn(),
+  // How many times the (one) composer mounted
+  composerMounts: 0,
   // The interaction panel's composer, participants and inline discussion card
   composerProps: undefined as Record<string, unknown> | undefined,
   participantsProps: undefined as Record<string, unknown> | undefined,
@@ -33,11 +43,16 @@ const mocks = vi.hoisted(() => ({
           progress?: { atBoundary?: boolean },
         ) => void;
         onUserInterrupt?: (text: string) => void;
+        onHandCalled?: (call: {
+          atBoundary: boolean;
+          deferredDiscussion?: { id: string; question: string; agentId?: string };
+        }) => void;
         onComplete?: () => void;
         onDiscussionEnd?: () => void;
       }
     | undefined,
   startLecture: vi.fn(),
+  pauseBuffer: vi.fn(),
   endSession: vi.fn(),
   engineStop: vi.fn(),
   engineStart: vi.fn(),
@@ -48,6 +63,12 @@ const mocks = vi.hoisted(() => ({
   queueUserInterrupt: vi.fn(),
   // The engine refuses to queue (waiting on a discussion trigger)
   queueRefused: false,
+  // A bare raised hand (engine getHandState) and its spies
+  handState: null as 'raised' | 'called' | null,
+  raiseHand: vi.fn(),
+  lowerHand: vi.fn(),
+  attachQuestion: vi.fn(),
+  engineResume: vi.fn(),
   cancelQueuedInterrupt: vi.fn(),
   flushQueuedInterrupt: vi.fn(),
   enginePause: vi.fn(),
@@ -66,6 +87,7 @@ const mocks = vi.hoisted(() => ({
   focusComposer: vi.fn(),
   toggleVoice: vi.fn(),
   dismissComposer: vi.fn(),
+  toggleHand: vi.fn(),
   switchToTab: vi.fn(),
   confirmDiscussion: vi.fn(),
   skipDiscussion: vi.fn(),
@@ -244,23 +266,43 @@ vi.mock('@/components/canvas/canvas-area', async () => {
     },
   };
 });
-vi.mock('@/components/roundtable', () => ({
-  Roundtable: (props: Record<string, unknown>) => {
-    mocks.roundtableProps = props;
-    return null;
-  },
-}));
+// The fullscreen dock: its handle, and the card that adopts the composer's slot
+vi.mock('@/components/classroom/presentation-dock', async () => {
+  const React = await import('react');
+  return {
+    PresentationDock: (props: Record<string, unknown>) => {
+      mocks.presentationDockProps = props;
+      React.useImperativeHandle(props.dockRef as React.Ref<unknown>, () => ({
+        openText: mocks.dockOpenText,
+        toggleVoice: mocks.dockToggleVoice,
+        continueText: mocks.dockContinueText,
+        close: mocks.dockClose,
+        showUserMessage: mocks.dockShowUserMessage,
+        closeAfterSend: mocks.dockCloseAfterSend,
+      }));
+      return React.createElement(
+        'div',
+        { 'data-testid': 'presentation-dock' },
+        props.composerSlot as React.ReactNode,
+      );
+    },
+  };
+});
 // The panel composer: a send button and the reference chip it shows
 vi.mock('@/components/classroom/interaction/composer', async () => {
   const React = await import('react');
   return {
     Composer: (props: Record<string, unknown>) => {
       mocks.composerProps = props;
+      React.useEffect(() => {
+        mocks.composerMounts += 1;
+      }, []);
       React.useImperativeHandle(props.composerRef as React.Ref<unknown>, () => ({
         openTextInput: mocks.openTextInput,
         focus: mocks.focusComposer,
         toggleVoice: mocks.toggleVoice,
         dismiss: mocks.dismissComposer,
+        toggleHand: mocks.toggleHand,
       }));
       const pill = props.elementReferencePill as
         | { sceneLabel: string; displaySummary: string; elementType: string }
@@ -351,7 +393,7 @@ vi.mock('@/components/chat/chat-area', async () => {
         stopActiveSession: vi.fn(),
         continueActiveSoftClosingSession: vi.fn(),
         getActiveSessionType: vi.fn(),
-        pauseBuffer: vi.fn(),
+        pauseBuffer: mocks.pauseBuffer,
         resumeBuffer: vi.fn(),
         resumeActiveSession: vi.fn(),
       }));
@@ -367,7 +409,11 @@ vi.mock('@/components/chat/chat-area', async () => {
   };
 });
 
-vi.mock('@/lib/playback', () => ({
+vi.mock('@/lib/playback', async () => ({
+  // The pure resume rule runs for real: the caption countdown must agree with it
+  willResumeAfterSoftClose: (
+    await vi.importActual<typeof import('@/lib/playback/auto-resume')>('@/lib/playback/auto-resume')
+  ).willResumeAfterSoftClose,
   PlaybackEngine: class {
     constructor(
       _scenes: unknown,
@@ -385,11 +431,53 @@ vi.mock('@/lib/playback', () => ({
     }
     stop() {
       mocks.queuedText = null;
+      mocks.handState = null;
       mocks.engineStop();
+    }
+    raiseHand() {
+      mocks.raiseHand();
+      if (mocks.engineMode === 'live' || mocks.handState || mocks.queuedText !== null) return false;
+      if (mocks.engineMode === 'playing') {
+        mocks.handState = 'raised';
+      } else {
+        // Paused or idle: called at once
+        mocks.handState = 'called';
+        mocks.engineOptions?.onHandCalled?.({ atBoundary: false });
+      }
+      return true;
+    }
+    attachQuestion(text: string) {
+      mocks.attachQuestion(text);
+      if (mocks.handState !== 'raised') return false;
+      mocks.handState = null;
+      mocks.queuedText = text;
+      return true;
+    }
+    lowerHand() {
+      mocks.lowerHand();
+      if (!mocks.handState) return false;
+      const wasCalled = mocks.handState === 'called';
+      mocks.handState = null;
+      if (wasCalled && mocks.engineMode === 'paused') this.resume();
+      return true;
+    }
+    getHandState() {
+      return mocks.handState;
+    }
+    resume() {
+      mocks.engineResume();
+      mocks.handState = null;
+      mocks.engineMode = 'playing';
+      mocks.engineOptions?.onModeChange?.('playing');
     }
     queueUserInterrupt(text: string) {
       mocks.queueUserInterrupt(text);
-      if (mocks.engineMode !== 'playing' || mocks.queueRefused || mocks.queuedText !== null) {
+      if (
+        mocks.engineMode !== 'playing' ||
+        mocks.queueRefused ||
+        mocks.queuedText !== null ||
+        mocks.handState !== null
+      ) {
         return false;
       }
       mocks.queuedText = text;
@@ -402,10 +490,19 @@ vi.mock('@/lib/playback', () => ({
       mocks.cancelQueuedInterrupt();
       const text = mocks.queuedText;
       mocks.queuedText = null;
+      if (mocks.handState === 'raised') mocks.handState = null;
       return text;
     }
     flushQueuedInterrupt() {
       mocks.flushQueuedInterrupt();
+      if (mocks.handState === 'raised') {
+        // A bare hand is called now: the engine pauses mid-line
+        mocks.handState = 'called';
+        mocks.engineMode = 'paused';
+        mocks.engineOptions?.onModeChange?.('paused');
+        mocks.engineOptions?.onHandCalled?.({ atBoundary: false });
+        return true;
+      }
       const text = mocks.queuedText;
       if (text === null) return false;
       this.handleUserInterrupt(text);
@@ -443,6 +540,7 @@ vi.mock('@/lib/playback', () => ({
     }
     handleUserInterrupt(text: string) {
       mocks.queuedText = null;
+      mocks.handState = null;
       mocks.handleUserInterrupt(text);
       mocks.engineOptions?.onUserInterrupt?.(text);
     }
@@ -531,7 +629,7 @@ vi.mock('@/lib/orchestration/registry/store', () => ({
   agentsToParticipants: () => [],
   useAgentRegistry: Object.assign(
     (selector: (state: { agents: Record<string, unknown> }) => unknown) => selector({ agents: {} }),
-    { getState: () => ({ getAgent: () => undefined }) },
+    { getState: () => ({ getAgent: (id: string) => mocks.registryAgents[id] }) },
   ),
 }));
 vi.mock('@/lib/hooks/use-asr-available', () => ({ useASRAvailable: () => true }));
@@ -551,17 +649,30 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
   let root: Root;
 
   beforeEach(() => {
+    mocks.registryAgents = {};
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     mocks.whiteboardOpen = false;
     mocks.runtimeProjection = null;
     stageState.stage.whiteboard = [];
     mocks.sendMessage.mockReset();
     mocks.sendMessage.mockResolvedValue(undefined);
-    mocks.roundtableProps = undefined;
+    mocks.presentationDockProps = undefined;
+    mocks.composerMounts = 0;
+    for (const spy of [
+      mocks.dockOpenText,
+      mocks.dockToggleVoice,
+      mocks.dockContinueText,
+      mocks.dockClose,
+      mocks.dockShowUserMessage,
+      mocks.dockCloseAfterSend,
+    ]) {
+      spy.mockReset();
+    }
     mocks.composerProps = undefined;
     mocks.participantsProps = undefined;
     mocks.proactiveProps = undefined;
     mocks.focusComposer.mockReset();
+    mocks.openTextInput.mockReset();
     mocks.toggleVoice.mockReset();
     mocks.dismissComposer.mockReset();
     mocks.switchToTab.mockReset();
@@ -588,9 +699,16 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.queuedText = null;
     mocks.queueUserInterrupt.mockReset();
     mocks.queueRefused = false;
+    mocks.handState = null;
+    mocks.raiseHand.mockReset();
+    mocks.lowerHand.mockReset();
+    mocks.attachQuestion.mockReset();
+    mocks.engineResume.mockReset();
+    mocks.toggleHand.mockReset();
     mocks.cancelQueuedInterrupt.mockReset();
     mocks.flushQueuedInterrupt.mockReset();
     mocks.enginePause.mockReset();
+    mocks.pauseBuffer.mockReset();
     mocks.lectureCompletionPending = false;
     mocks.engineExhausted = false;
     mocks.speechInFlight = true;
@@ -1339,6 +1457,20 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       expect(mocks.enginePause).toHaveBeenCalledOnce();
     });
 
+    it('voice freezes the lecture text with the audio, like the pause button', async () => {
+      mocks.engineMode = 'idle';
+      await renderOwner();
+      // Start the lecture so it has a session whose text reveal can freeze
+      await act(async () => {
+        await (mocks.canvasProps?.onPlayPause as () => Promise<void>)();
+      });
+      mocks.engineMode = 'playing';
+      mocks.pauseBuffer.mockClear();
+      act(() => (mocks.composerProps?.onInputActivate as (kind: 'voice') => void)('voice'));
+      expect(mocks.enginePause).toHaveBeenCalledOnce();
+      expect(mocks.pauseBuffer).toHaveBeenCalledWith('lecture-1');
+    });
+
     it('keeps playing while typing, but pauses for voice and in live Q&A', async () => {
       mocks.engineMode = 'playing';
       await renderOwner();
@@ -1973,13 +2105,17 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       });
     }
 
-    it('mounts participants and the composer in the panel, never the roundtable outside fullscreen', async () => {
+    it('mounts participants and the composer in the panel, never the dock outside fullscreen', async () => {
       await renderOwner();
       expect(mocks.chatAreaProps?.header).toBeTruthy();
       expect(mocks.chatAreaProps?.footer).toBeTruthy();
       expect(mocks.participantsProps).toBeDefined();
       expect(mocks.composerProps).toBeDefined();
-      expect(mocks.roundtableProps).toBeUndefined();
+      expect(mocks.presentationDockProps).toBeUndefined();
+      // The one composer sits in the panel's footer slot
+      expect(
+        container.querySelector('[data-testid="composer-slot"] [data-testid="send"]'),
+      ).not.toBeNull();
       // The transient end flash is gone: the stream keeps persistent markers
       expect(mocks.composerProps).not.toHaveProperty('showEndFlash');
     });
@@ -2080,6 +2216,489 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       act(() => (mocks.proactiveProps?.onListen as () => void)());
       expect(mocks.confirmDiscussion).toHaveBeenCalledOnce();
       act(() => (mocks.proactiveProps?.onSkip as () => void)());
+      expect(mocks.skipDiscussion).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('a bare raised hand (举手 without a question)', () => {
+    type ComposerHandProp = {
+      state: 'raised' | 'called' | null;
+      waitsFor?: 'sentence' | 'step';
+      onRaise: () => boolean;
+      onLower: () => boolean;
+    };
+    const composerHand = () => mocks.composerProps?.hand as ComposerHandProp;
+
+    function pressKey(key: string) {
+      act(() => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+        );
+      });
+    }
+
+    /** The line ends: the engine pauses at the boundary and calls the learner */
+    function callAtBoundary(deferredDiscussion?: {
+      id: string;
+      question: string;
+      agentId?: string;
+    }) {
+      mocks.handState = 'called';
+      mocks.engineMode = 'paused';
+      act(() => {
+        mocks.engineOptions?.onModeChange?.('paused');
+        mocks.engineOptions?.onHandCalled?.({
+          atBoundary: true,
+          ...(deferredDiscussion ? { deferredDiscussion } : {}),
+        });
+      });
+    }
+
+    async function raiseWhilePlaying() {
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      let raised = false;
+      act(() => {
+        raised = composerHand().onRaise();
+      });
+      expect(raised).toBe(true);
+    }
+
+    it('raises through the composer, waits for the line, and is never kept as a draft', async () => {
+      await raiseWhilePlaying();
+      expect(mocks.raiseHand).toHaveBeenCalledOnce();
+      expect(composerHand()).toMatchObject({ state: 'raised', waitsFor: 'sentence' });
+      expect(mocks.participantsProps?.userHandRaised).toBe(true);
+      // Typing does not pause the lecture, and neither does a raised hand
+      expect(mocks.enginePause).not.toHaveBeenCalled();
+      expect(mocks.composerProps?.isCueUser).toBe(false);
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+      // Leaving the page with only a hand up leaves no draft behind
+      act(() => window.dispatchEvent(new Event('pagehide')));
+      expect(window.sessionStorage.getItem('openmaic:raised-hand-draft:stage-1')).toBeNull();
+      await remountOwner();
+      expect(window.sessionStorage.getItem('openmaic:raised-hand-draft:stage-1')).toBeNull();
+    });
+
+    it('words the wait by what is in flight', async () => {
+      mocks.speechInFlight = false;
+      await raiseWhilePlaying();
+      expect(composerHand().waitsFor).toBe('step');
+    });
+
+    it('onHandCalled cues the learner: the panel opens on 互动 and the composer takes focus', async () => {
+      settingsState.chatAreaCollapsed = true;
+      await raiseWhilePlaying();
+      expect(settingsState.setChatAreaCollapsed).not.toHaveBeenCalled();
+
+      callAtBoundary();
+      expect(composerHand().state).toBe('called');
+      expect(mocks.composerProps?.isCueUser).toBe(true);
+      expect(captionElementProps()?.isCueUser).toBe(true);
+      expect(mocks.participantsProps?.userHandRaised).toBe(true);
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(false);
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+      // Quietly: focusing must not count as opening the input
+      expect(mocks.openTextInput).toHaveBeenCalledOnce();
+      expect(mocks.focusComposer).not.toHaveBeenCalled();
+    });
+
+    it('does not steal focus from where the learner is busy outside the panel', async () => {
+      await raiseWhilePlaying();
+      const elsewhere = document.createElement('input');
+      document.body.appendChild(elsewhere);
+      try {
+        elsewhere.focus();
+        mocks.openTextInput.mockClear();
+        callAtBoundary();
+        expect(mocks.composerProps?.isCueUser).toBe(true);
+        expect(mocks.openTextInput).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(elsewhere);
+      } finally {
+        elsewhere.remove();
+      }
+    });
+
+    it('放下 after the call resumes the lecture at once and ends the cue', async () => {
+      await raiseWhilePlaying();
+      callAtBoundary();
+      let lowered = false;
+      act(() => {
+        lowered = composerHand().onLower();
+      });
+      expect(lowered).toBe(true);
+      expect(mocks.lowerHand).toHaveBeenCalledOnce();
+      expect(mocks.engineResume).toHaveBeenCalledOnce();
+      expect(composerHand().state).toBeNull();
+      expect(mocks.composerProps?.isCueUser).toBe(false);
+    });
+
+    it('撤回 before the boundary withdraws the hand and the lecture plays on', async () => {
+      await raiseWhilePlaying();
+      act(() => {
+        composerHand().onLower();
+      });
+      expect(mocks.lowerHand).toHaveBeenCalledOnce();
+      expect(mocks.engineResume).not.toHaveBeenCalled();
+      expect(mocks.enginePause).not.toHaveBeenCalled();
+      expect(composerHand().state).toBeNull();
+      expect(mocks.participantsProps?.userHandRaised).toBe(false);
+    });
+
+    it('a question typed while the hand waits rides on it (attachQuestion), as a draft', async () => {
+      await raiseWhilePlaying();
+      click('send');
+      expect(mocks.attachQuestion).toHaveBeenCalledExactlyOnceWith('Explain this');
+      expect(mocks.queueUserInterrupt).not.toHaveBeenCalled();
+      expect(mocks.handleUserInterrupt).not.toHaveBeenCalled();
+      expect(mocks.lastSendResult).toBe('queued');
+      expect(composerHand().state).toBeNull();
+      expect(mocks.composerProps?.queuedQuestion).toMatchObject({
+        text: 'Explain this',
+        status: 'queued',
+      });
+      // Now there is text to give back: it is kept like any raised question
+      act(() => window.dispatchEvent(new Event('pagehide')));
+      expect(window.sessionStorage.getItem('openmaic:raised-hand-draft:stage-1')).toContain(
+        'Explain this',
+      );
+
+      // Delivered at the same boundary, like any queued question
+      mocks.queuedText = null;
+      act(() => mocks.engineOptions?.onUserInterrupt?.('Explain this'));
+      expect(mocks.sendMessage).toHaveBeenCalledOnce();
+      expect(mocks.sendMessage.mock.calls[0][0]).toBe('Explain this');
+      expect(mocks.composerProps?.queuedQuestion).toMatchObject({ status: 'delivered' });
+    });
+
+    it('a question sent once called goes out at once and ends the call', async () => {
+      await raiseWhilePlaying();
+      callAtBoundary();
+      click('send');
+      expect(mocks.handleUserInterrupt).toHaveBeenCalledExactlyOnceWith('Explain this');
+      expect(mocks.sendMessage).toHaveBeenCalledOnce();
+      expect(composerHand().state).toBeNull();
+    });
+
+    it('pause with a raised hand calls the learner immediately', async () => {
+      await raiseWhilePlaying();
+      await act(async () => {
+        await (mocks.canvasProps?.onPlayPause as () => Promise<void>)();
+      });
+      expect(mocks.flushQueuedInterrupt).toHaveBeenCalledOnce();
+      expect(mocks.enginePause).not.toHaveBeenCalled();
+      expect(composerHand().state).toBe('called');
+      expect(mocks.composerProps?.isCueUser).toBe(true);
+
+      // Play again: the lecture resumes and the hand's turn is over
+      await act(async () => {
+        await (mocks.canvasProps?.onPlayPause as () => Promise<void>)();
+      });
+      expect(mocks.engineResume).toHaveBeenCalledOnce();
+      expect(composerHand().state).toBeNull();
+    });
+
+    it('while paused or idle the learner is called at once', async () => {
+      mocks.engineMode = 'paused';
+      await renderOwner();
+      act(() => {
+        composerHand().onRaise();
+      });
+      expect(composerHand().state).toBe('called');
+      expect(mocks.openTextInput).toHaveBeenCalledOnce();
+    });
+
+    it('voice with a raised hand calls it now (the mic would record the line) and keeps the recording', async () => {
+      await raiseWhilePlaying();
+      act(() => (mocks.composerProps?.onInputActivate as (kind: 'voice') => void)('voice'));
+      expect(mocks.flushQueuedInterrupt).toHaveBeenCalledOnce();
+      expect(mocks.enginePause).not.toHaveBeenCalled();
+      expect(composerHand().state).toBe('called');
+      expect(mocks.openTextInput).not.toHaveBeenCalled();
+    });
+
+    it('names the discussion the hand jumped ahead of, and hands it back when offered again', async () => {
+      mocks.registryAgents = { 'default-1': { name: 'Kai' } };
+      await raiseWhilePlaying();
+      const trigger: { id: string; question: string; agentId?: string } = {
+        id: 'trigger-1',
+        question: 'Why green?',
+      };
+      callAtBoundary(trigger);
+      // The agent is picked now, so the card offered later names the same one
+      expect(trigger.agentId).toBe('default-1');
+      expect(mocks.participantsProps?.discussionAgentId).toBe('default-1');
+      // The row names whose discussion now waits behind the learner
+      expect(container.querySelector('[data-testid="stream-hand-raised"]')?.textContent).toBe(
+        'stage.handRaise.aheadOfDiscussion',
+      );
+      expect(container.querySelector('[data-testid="stream-cue"]')?.textContent).toContain(
+        'stage.handRaise.calledBy',
+      );
+
+      act(() => {
+        composerHand().onLower();
+      });
+      const options = mocks.engineOptions as unknown as {
+        onProactiveShow: (trigger: Record<string, unknown>) => void;
+      };
+      act(() => options.onProactiveShow(trigger));
+      expect(mocks.proactiveProps).toMatchObject({ action: { agentId: 'default-1' } });
+      expect(container.querySelector('[data-testid="stream-hand-raised"]')).toBeNull();
+    });
+
+    it('shows the queued question as a pending bubble in the stream', async () => {
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      expect(container.querySelector('[data-testid="stream-pending-question"]')).toBeNull();
+      click('send');
+      const bubble = container.querySelector('[data-testid="stream-pending-question"]');
+      expect(bubble?.textContent).toContain('Explain this');
+      expect(bubble?.textContent).toContain('stage.handRaise.pendingQuestion');
+    });
+
+    it('H raises or lowers through the composer, opening a collapsed panel', async () => {
+      settingsState.chatAreaCollapsed = true;
+      await renderOwner();
+      pressKey('h');
+      expect(mocks.toggleHand).toHaveBeenCalledOnce();
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(false);
+    });
+
+    it('counts the caption down to the lecture while an interrupting Q&A soft-closes', async () => {
+      await renderOwner();
+      const onSoftClosingChange = () =>
+        mocks.chatAreaProps?.onSoftClosingChange as (
+          soft: boolean,
+          deadline?: number,
+          endReason?: string,
+        ) => void;
+      act(() => onSoftClosingChange()(true, 12_345, 'back_to_lesson'));
+      // No lecture to go back to: no countdown
+      expect(captionElementProps()?.lectureResumeDeadline).toBeUndefined();
+
+      mocks.lectureCompletionPending = true; // the fake engine's hasLectureInterruption
+      act(() => onSoftClosingChange()(true, 12_345, 'back_to_lesson'));
+      expect(captionElementProps()?.lectureResumeDeadline).toBe(12_345);
+      act(() => onSoftClosingChange()(false));
+      expect(captionElementProps()?.lectureResumeDeadline).toBeUndefined();
+
+      // A close that will not hand back to the lecture (the learner said
+      // goodbye, or no reason yet) promises no resume
+      act(() => onSoftClosingChange()(true, 12_345, 'user_goodbye'));
+      expect(captionElementProps()?.lectureResumeDeadline).toBeUndefined();
+      act(() => onSoftClosingChange()(true, 12_345));
+      expect(captionElementProps()?.lectureResumeDeadline).toBeUndefined();
+      act(() => onSoftClosingChange()(true, 12_345, 'user_done'));
+      expect(captionElementProps()?.lectureResumeDeadline).toBe(12_345);
+    });
+
+    it('reveals a collapsed panel on 互动 for a discussion offer, as for a cue', async () => {
+      settingsState.chatAreaCollapsed = true;
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      const options = mocks.engineOptions as unknown as {
+        onProactiveShow: (trigger: Record<string, unknown>) => void;
+      };
+      act(() => options.onProactiveShow({ id: 'trigger-2', question: 'Why?', agentId: 'a' }));
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(false);
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+    });
+  });
+
+  describe('fullscreen: the presentation dock holds the one composer', () => {
+    let fullscreenElement: Element | null = null;
+
+    function pressKey(key: string) {
+      act(() => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+        );
+      });
+    }
+
+    async function togglePresentation() {
+      await act(async () => {
+        await (mocks.controlBarProps?.onTogglePresentation as () => Promise<void>)();
+      });
+    }
+
+    beforeEach(() => {
+      fullscreenElement = null;
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        get: () => fullscreenElement,
+      });
+      HTMLElement.prototype.requestFullscreen = vi.fn(function (this: HTMLElement) {
+        // The element asked for fullscreen gets it
+        return Promise.resolve(this).then((element) => {
+          fullscreenElement = element;
+          document.dispatchEvent(new Event('fullscreenchange'));
+        });
+      });
+      document.exitFullscreen = vi.fn(async () => {
+        fullscreenElement = null;
+        document.dispatchEvent(new Event('fullscreenchange'));
+      });
+      settingsState.setSidebarCollapsed.mockReset();
+    });
+
+    afterEach(() => {
+      Reflect.deleteProperty(document, 'fullscreenElement');
+      Reflect.deleteProperty(HTMLElement.prototype, 'requestFullscreen');
+      Reflect.deleteProperty(document, 'exitFullscreen');
+    });
+
+    it('moves the composer into the dock and back without remounting it, restoring the panels', async () => {
+      await renderOwner();
+      expect(mocks.composerMounts).toBe(1);
+
+      await togglePresentation();
+      expect(fullscreenElement).not.toBeNull();
+      expect(mocks.presentationDockProps).toBeDefined();
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(true);
+      expect(settingsState.setSidebarCollapsed).toHaveBeenCalledWith(true);
+      // One composer, now in the dock's card: no second instance to react to
+      // a returned or restored raised hand
+      expect(container.querySelectorAll('[data-testid="send"]')).toHaveLength(1);
+      expect(
+        container.querySelector('[data-testid="presentation-dock"] [data-testid="send"]'),
+      ).not.toBeNull();
+      expect(mocks.composerMounts).toBe(1);
+      expect(mocks.composerProps?.className).toContain('p-0');
+      // The control bar floats inside the dock
+      const controlBar = mocks.presentationDockProps?.controlBar as {
+        props?: Record<string, unknown>;
+      };
+      expect(controlBar.props?.variant).toBe('floating');
+
+      settingsState.setChatAreaCollapsed.mockClear();
+      await togglePresentation();
+      expect(fullscreenElement).toBeNull();
+      expect(container.querySelector('[data-testid="presentation-dock"]')).toBeNull();
+      expect(container.querySelectorAll('[data-testid="send"]')).toHaveLength(1);
+      expect(mocks.composerMounts).toBe(1);
+      // The panels come back as they were (both open here); an open panel
+      // takes the composer as it is
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(false);
+      expect(settingsState.setSidebarCollapsed).toHaveBeenLastCalledWith(false);
+      expect(mocks.dismissComposer).not.toHaveBeenCalled();
+    });
+
+    it('drops a recording on the way out when the panel goes back collapsed', async () => {
+      settingsState.chatAreaCollapsed = true;
+      await renderOwner();
+      await togglePresentation();
+      await togglePresentation();
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenLastCalledWith(true);
+      expect(mocks.dismissComposer).toHaveBeenCalledOnce();
+    });
+
+    it("routes T, V, Escape and the stream's continue to the dock; S and C do nothing", async () => {
+      await renderOwner();
+      await togglePresentation();
+      settingsState.setChatAreaCollapsed.mockClear();
+      settingsState.setSidebarCollapsed.mockClear();
+      mocks.openTextInput.mockClear();
+
+      pressKey('t');
+      expect(mocks.dockOpenText).toHaveBeenCalledOnce();
+      expect(mocks.focusComposer).not.toHaveBeenCalled();
+      pressKey('v');
+      expect(mocks.dockToggleVoice).toHaveBeenCalledOnce();
+      expect(mocks.toggleVoice).not.toHaveBeenCalled();
+      // Fullscreen keeps both panels collapsed: no reveal, no S / C
+      pressKey('s');
+      pressKey('c');
+      expect(settingsState.setChatAreaCollapsed).not.toHaveBeenCalled();
+      expect(settingsState.setSidebarCollapsed).not.toHaveBeenCalled();
+
+      act(() => (mocks.chatAreaProps?.onSoftCloseContinued as () => void)());
+      expect(mocks.dockContinueText).toHaveBeenCalledOnce();
+      expect(mocks.openTextInput).not.toHaveBeenCalled();
+
+      // Composing (the dock's open card): Escape closes it and stays in fullscreen
+      act(() =>
+        (mocks.presentationDockProps?.onInteractionChange as (active: boolean) => void)(true),
+      );
+      pressKey('Escape');
+      expect(mocks.dockClose).toHaveBeenCalledOnce();
+      expect(document.exitFullscreen).not.toHaveBeenCalled();
+      expect(fullscreenElement).not.toBeNull();
+
+      // Not composing: Escape leaves fullscreen
+      act(() =>
+        (mocks.presentationDockProps?.onInteractionChange as (active: boolean) => void)(false),
+      );
+      await act(async () => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+        await Promise.resolve();
+      });
+      expect(mocks.dockClose).toHaveBeenCalledOnce();
+      expect(document.exitFullscreen).toHaveBeenCalledOnce();
+    });
+
+    it("hands the composer's line, its sends and the raised hand to the dock", async () => {
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      await togglePresentation();
+
+      act(() => (mocks.composerProps?.onInteractionChange as (active: boolean) => void)(true));
+      expect(mocks.presentationDockProps?.isComposing).toBe(true);
+
+      click('send');
+      expect(mocks.lastSendResult).toBe('queued');
+      expect(mocks.presentationDockProps?.hasRaisedHand).toBe(true);
+
+      act(() => (mocks.composerProps?.onSent as () => void)());
+      expect(mocks.dockCloseAfterSend).toHaveBeenCalledOnce();
+
+      // A bare hand keeps the card up too, and its call cues the dock
+      act(() => (mocks.composerProps?.onCancelQueuedQuestion as () => void)());
+      expect(mocks.presentationDockProps?.hasRaisedHand).toBe(false);
+      act(() => {
+        (mocks.composerProps?.hand as { onRaise: () => boolean }).onRaise();
+      });
+      expect(mocks.presentationDockProps?.hasRaisedHand).toBe(true);
+      mocks.handState = 'called';
+      mocks.engineMode = 'paused';
+      act(() => mocks.engineOptions?.onHandCalled?.({ atBoundary: true }));
+      expect(mocks.presentationDockProps?.isCueUser).toBe(true);
+      expect(mocks.dockContinueText).toHaveBeenCalledOnce();
+      act(() => (mocks.composerProps?.onUserMessage as (text: string) => void)('Explain this'));
+      expect(mocks.dockShowUserMessage).toHaveBeenCalledExactlyOnceWith('Explain this');
+    });
+
+    it('offers a discussion over the dock, portaled into the fullscreen element', async () => {
+      mocks.engineMode = 'paused';
+      await renderOwner();
+      await togglePresentation();
+      mocks.switchToTab.mockClear();
+
+      const options = mocks.engineOptions as unknown as {
+        onProactiveShow: (trigger: Record<string, unknown>) => void;
+      };
+      act(() =>
+        options.onProactiveShow({ id: 'trigger-1', question: 'Why green?', agentId: 'agent-2' }),
+      );
+      // Not in the (collapsed) stream: over the dock
+      expect(mocks.proactiveProps).toBeUndefined();
+      expect(mocks.switchToTab).not.toHaveBeenCalled();
+      expect(mocks.presentationDockProps?.discussionRequest).toMatchObject({
+        topic: 'Why green?',
+        agentId: 'agent-2',
+      });
+      const portalRef = mocks.presentationDockProps?.portalContainerRef as {
+        current: Element | null;
+      };
+      expect(portalRef.current).toBe(fullscreenElement);
+
+      act(() => (mocks.presentationDockProps?.onDiscussionStart as () => void)());
+      expect(mocks.confirmDiscussion).toHaveBeenCalledOnce();
+      act(() => (mocks.presentationDockProps?.onDiscussionSkip as () => void)());
       expect(mocks.skipDiscussion).toHaveBeenCalledOnce();
     });
   });

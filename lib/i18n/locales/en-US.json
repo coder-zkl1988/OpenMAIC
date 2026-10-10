@@ -337,8 +337,6 @@
     "discussion": "Discussion",
     "join": "Join",
     "skip": "Skip",
-    "pause": "Pause",
-    "resume": "Resume",
     "offerLabel": "{{name}} wants to start a discussion",
     "autoSkipHint": "Skips automatically in {{seconds}} seconds"
   },
@@ -367,18 +365,32 @@
       "lecturing": "Explaining",
       "paused": "Paused, your turn to speak",
       "answering": "Answering",
-      "discussing": "Discussing"
+      "discussing": "Discussing",
+      "resumeIn": "Lecture resumes in {{seconds}}s",
+      "answeringYou": "Answering your question"
     },
     "composer": {
       "raiseHand": "Raise hand",
-      "raiseHandHint": "Raise your hand: write your question and the teacher answers after this sentence",
+      "raiseHandHint": "Raise your hand: the teacher calls on you after this sentence",
       "raiseHandInLiveSession": "You can speak directly during Q&A",
       "lowerHand": "Lower",
       "lowerHandHint": "Lower your hand and take the question back",
       "cuePlaceholder": "Say or type your question",
       "cueStatus": "Your turn to speak · class is paused",
       "send": "Send",
-      "cancelRecording": "Cancel recording"
+      "cancelRecording": "Cancel recording",
+      "handRaised": "Hand raised · you're up when this sentence ends",
+      "handRaisedStep": "Hand raised · you're up when this step ends",
+      "raisedPlaceholder": "You can write your question first...",
+      "followUpPlaceholder": "Ask a follow-up...",
+      "handLowered": "Hand lowered"
+    },
+    "handRaise": {
+      "raised": "You raised your hand",
+      "aheadOfDiscussion": "You raised your hand; {{name}}'s discussion comes after you",
+      "calledBy": "{{name}} asks you to speak",
+      "pendingQuestion": "Queued · answered when this sentence ends",
+      "pendingQuestionStep": "Queued · answered when this step ends"
     },
     "participants": {
       "label": "Participants",
@@ -894,7 +906,6 @@
     "discussionEnded": "Discussion ended",
     "qaEnded": "Q&A ended",
     "thinking": "Thinking",
-    "yourTurn": "Your turn",
     "stopDiscussion": "Stop Discussion",
     "stopQA": "Stop Q&A",
     "softClosing": "Continue discussion",
@@ -908,7 +919,6 @@
     "voiceInputDisabled": "Voice input disabled",
     "textInput": "Text input",
     "stopRecording": "Stop recording",
-    "startRecording": "Start recording",
     "handRaisedQueued": "Hand raised — the teacher will answer after this sentence",
     "handRaisedQueuedStep": "Hand raised — the teacher will answer after this step",
     "handRaisedDelivered": "Your question has been sent",

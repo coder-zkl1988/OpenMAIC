@@ -337,8 +337,6 @@
     "discussion": "讨论",
     "join": "加入讨论",
     "skip": "跳过",
-    "pause": "暂停",
-    "resume": "继续",
     "offerLabel": "{{name}} 发起讨论",
     "autoSkipHint": "{{seconds}} 秒后自动跳过"
   },
@@ -367,18 +365,32 @@
       "lecturing": "讲解中",
       "paused": "已暂停，等你发言",
       "answering": "回答中",
-      "discussing": "讨论中"
+      "discussing": "讨论中",
+      "resumeIn": "{{seconds}} 秒后继续讲课",
+      "answeringYou": "正在回答你的问题"
     },
     "composer": {
       "raiseHand": "举手",
-      "raiseHandHint": "举手提问：写下问题，老师讲完这句就回答你",
+      "raiseHandHint": "举手提问：老师讲完当前这句后请你发言",
       "raiseHandInLiveSession": "问答中可直接发言",
       "lowerHand": "放下",
       "lowerHandHint": "放下手，撤回提问",
       "cuePlaceholder": "说出或输入你的问题",
       "cueStatus": "轮到你发言了 · 课堂已暂停",
       "send": "发送",
-      "cancelRecording": "取消录音"
+      "cancelRecording": "取消录音",
+      "handRaised": "已举手 · 讲完这句就请你发言",
+      "handRaisedStep": "已举手 · 这一步结束就请你发言",
+      "raisedPlaceholder": "可以先写下问题...",
+      "followUpPlaceholder": "继续追问...",
+      "handLowered": "已放下手"
+    },
+    "handRaise": {
+      "raised": "你举手了",
+      "aheadOfDiscussion": "你举手了，{{name}} 的讨论排在你之后",
+      "calledBy": "{{name}} 请你发言",
+      "pendingQuestion": "排队中 · 老师讲完这句就回答",
+      "pendingQuestionStep": "排队中 · 老师完成当前步骤就回答"
     },
     "participants": {
       "label": "课堂成员",
@@ -894,7 +906,6 @@
     "discussionEnded": "讨论已结束",
     "qaEnded": "问答已结束",
     "thinking": "思考中",
-    "yourTurn": "轮到你发言了",
     "stopDiscussion": "结束讨论",
     "stopQA": "结束问答",
     "softClosing": "继续讨论",
@@ -908,7 +919,6 @@
     "voiceInputDisabled": "语音输入已禁用",
     "textInput": "文字输入",
     "stopRecording": "停止录音",
-    "startRecording": "开始录音",
     "handRaisedQueued": "已举手 · 老师讲完这句就回答你",
     "handRaisedQueuedStep": "已举手 · 老师完成当前步骤就回答你",
     "handRaisedDelivered": "你的问题已发送",

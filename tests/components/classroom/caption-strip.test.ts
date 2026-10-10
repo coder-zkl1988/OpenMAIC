@@ -82,6 +82,8 @@ describe('CaptionStrip', () => {
   const status = () => container.querySelector('[data-testid="caption-status"]');
   const text = () => container.querySelector('[data-testid="caption-text"]');
   const name = () => strip().querySelector('span.truncate')?.textContent;
+  /** The speaker avatar (the strip's first child) */
+  const avatar = () => strip().firstElementChild as HTMLElement;
 
   it('shows the teacher lecturing with the wave', () => {
     render({ engineMode: 'playing', lectureSpeech: 'Photosynthesis turns light into sugar.' });
@@ -92,6 +94,8 @@ describe('CaptionStrip', () => {
     // The wave's four bars
     expect(status()?.querySelectorAll('i')).toHaveLength(4);
     expect(text()?.textContent).toBe('Photosynthesis turns light into sugar.');
+    // A voice in progress: the primary ring
+    expect(avatar().className).toContain('ring-primary');
   });
 
   it.each([
@@ -105,9 +109,12 @@ describe('CaptionStrip', () => {
     expect(status()?.querySelector('i')).toBeNull();
     // Nobody owns the line while the learner is cued: the teacher stays
     expect(name()).toBe('Ms. Li');
+    // At rest: a hairline, not the speaking ring
+    expect(avatar().className).toContain('ring-line');
+    expect(avatar().className).not.toContain('ring-primary');
   });
 
-  it('shows thinking dots before the first words of an answer', () => {
+  it('says 正在回答你的问题 before the first words of a Q&A answer, dots for a discussion', () => {
     render({
       engineMode: 'live',
       chatIsStreaming: true,
@@ -116,7 +123,54 @@ describe('CaptionStrip', () => {
     });
     expect(strip().getAttribute('data-status')).toBe('thinking');
     expect(status()?.textContent).toBe('roundtable.thinking');
+    expect(text()?.textContent).toBe('stage.caption.answeringYou');
+    expect(text()?.className).toContain('text-fg-tertiary');
+
+    render({
+      engineMode: 'live',
+      chatIsStreaming: true,
+      sessionType: 'discussion',
+      thinkingState: { stage: 'director' },
+    });
+    expect(strip().getAttribute('data-status')).toBe('thinking');
     expect(text()).toBeNull();
+  });
+
+  it('greys the resting line while a called hand waits for the learner (HandRaiseFlow step 2)', () => {
+    render({ engineMode: 'paused', isCueUser: true, lectureSpeech: 'Where were we?' });
+    expect(status()?.textContent).toBe('stage.caption.paused');
+    expect(status()?.querySelector('svg')).not.toBeNull();
+    expect(text()?.className).toContain('text-fg-tertiary');
+
+    // A plain pause keeps the line in full colour
+    render({ engineMode: 'paused', lectureSpeech: 'Where were we?' });
+    expect(text()?.className).toContain('text-fg');
+    expect(text()?.className).not.toContain('text-fg-tertiary');
+  });
+
+  it('counts down to the lecture while a Q&A that interrupted it soft-closes (step 4)', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 0, 1, 12, 0, 0));
+      render(
+        { engineMode: 'live', sessionType: 'qa', liveSpeech: 'That is why leaves are green.' },
+        { lectureResumeDeadline: Date.now() + 5000 },
+      );
+      expect(status()?.textContent).toBe('stage.caption.resumeIn');
+      // No wave: nobody is speaking any more
+      expect(status()?.querySelector('i')).toBeNull();
+      expect(status()?.className).toContain('text-fg-tertiary');
+      expect(avatar().className).toContain('ring-line');
+
+      render({
+        engineMode: 'live',
+        sessionType: 'qa',
+        liveSpeech: 'That is why leaves are green.',
+      });
+      expect(status()?.textContent).toBe('stage.caption.answering');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('names the answering student and maps answering / discussing', () => {

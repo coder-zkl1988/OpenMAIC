@@ -337,8 +337,6 @@
     "discussion": "نقاش",
     "join": "انضمام",
     "skip": "تخطي",
-    "pause": "إيقاف مؤقت",
-    "resume": "استئناف",
     "offerLabel": "{{name}} يريد بدء نقاش",
     "autoSkipHint": "سيتم التخطي تلقائيًا بعد {{seconds}} ثوانٍ"
   },
@@ -367,18 +365,32 @@
       "lecturing": "يشرح الآن",
       "paused": "متوقف مؤقتًا، حان دورك للتحدث",
       "answering": "يجيب",
-      "discussing": "يناقش"
+      "discussing": "يناقش",
+      "resumeIn": "يُستأنف الدرس بعد {{seconds}} ث",
+      "answeringYou": "يجيب عن سؤالك"
     },
     "composer": {
       "raiseHand": "رفع اليد",
-      "raiseHandHint": "ارفع يدك: اكتب سؤالك وسيجيب المعلم بعد انتهاء هذه الجملة",
+      "raiseHandHint": "ارفع يدك: سيمنحك المعلم الكلمة بعد انتهاء هذه الجملة",
       "raiseHandInLiveSession": "يمكنك التحدث مباشرة أثناء الأسئلة",
       "lowerHand": "إنزال",
       "lowerHandHint": "أنزل يدك واسحب السؤال",
       "cuePlaceholder": "قل سؤالك أو اكتبه",
       "cueStatus": "حان دورك للتحدث · الدرس متوقف مؤقتًا",
       "send": "إرسال",
-      "cancelRecording": "إلغاء التسجيل"
+      "cancelRecording": "إلغاء التسجيل",
+      "handRaised": "يدك مرفوعة · سيأتي دورك بعد هذه الجملة",
+      "handRaisedStep": "يدك مرفوعة · سيأتي دورك بعد هذه الخطوة",
+      "raisedPlaceholder": "يمكنك كتابة سؤالك مسبقًا...",
+      "followUpPlaceholder": "اطرح سؤال متابعة...",
+      "handLowered": "تم إنزال اليد"
+    },
+    "handRaise": {
+      "raised": "رفعت يدك",
+      "aheadOfDiscussion": "رفعت يدك، ونقاش {{name}} يأتي بعدك",
+      "calledBy": "{{name}} يطلب منك التحدث",
+      "pendingQuestion": "في الانتظار · سيُجاب بعد هذه الجملة",
+      "pendingQuestionStep": "في الانتظار · سيُجاب بعد هذه الخطوة"
     },
     "participants": {
       "label": "المشاركون",
@@ -895,7 +907,6 @@
     "qaEnded": "انتهت الأسئلة والأجوبة",
     "softClosing": "متابعة النقاش",
     "thinking": "يفكر",
-    "yourTurn": "دورك",
     "stopDiscussion": "إيقاف النقاش",
     "stopQA": "إنهاء الأسئلة",
     "autoPlay": "تشغيل تلقائي",
@@ -908,7 +919,6 @@
     "voiceInputDisabled": "الإدخال الصوتي معطّل",
     "textInput": "إدخال نصي",
     "stopRecording": "إيقاف التسجيل",
-    "startRecording": "بدء التسجيل",
     "handRaisedQueued": "رفعت يدك — سيجيبك المعلم بعد انتهاء هذه الجملة",
     "handRaisedQueuedStep": "رفعت يدك — سيجيبك المعلم بعد انتهاء هذه الخطوة",
     "handRaisedDelivered": "تم إرسال سؤالك",

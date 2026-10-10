@@ -337,8 +337,6 @@
     "discussion": "Debate",
     "join": "Unirme",
     "skip": "Omitir",
-    "pause": "Pausar",
-    "resume": "Reanudar",
     "offerLabel": "{{name}} quiere iniciar un debate",
     "autoSkipHint": "Se omitirá automáticamente en {{seconds}} segundos"
   },
@@ -367,18 +365,32 @@
       "lecturing": "Explicando",
       "paused": "En pausa, es tu turno de hablar",
       "answering": "Respondiendo",
-      "discussing": "Debatiendo"
+      "discussing": "Debatiendo",
+      "resumeIn": "La clase continúa en {{seconds}} s",
+      "answeringYou": "Respondiendo tu pregunta"
     },
     "composer": {
       "raiseHand": "Levantar la mano",
-      "raiseHandHint": "Levanta la mano: escribe tu pregunta y el profesor responderá al terminar esta frase",
+      "raiseHandHint": "Levanta la mano: el profesor te dará la palabra al terminar esta frase",
       "raiseHandInLiveSession": "Durante las preguntas puedes hablar directamente",
       "lowerHand": "Bajar",
       "lowerHandHint": "Bajar la mano y retirar la pregunta",
       "cuePlaceholder": "Di o escribe tu pregunta",
       "cueStatus": "Es tu turno · clase en pausa",
       "send": "Enviar",
-      "cancelRecording": "Cancelar grabación"
+      "cancelRecording": "Cancelar grabación",
+      "handRaised": "Mano levantada · te toca al terminar esta frase",
+      "handRaisedStep": "Mano levantada · te toca al terminar este paso",
+      "raisedPlaceholder": "Puedes escribir tu pregunta antes...",
+      "followUpPlaceholder": "Haz una pregunta de seguimiento...",
+      "handLowered": "Mano bajada"
+    },
+    "handRaise": {
+      "raised": "Levantaste la mano",
+      "aheadOfDiscussion": "Levantaste la mano; el debate de {{name}} va después de ti",
+      "calledBy": "{{name}} te da la palabra",
+      "pendingQuestion": "En cola · se responde al terminar esta frase",
+      "pendingQuestionStep": "En cola · se responde al terminar este paso"
     },
     "participants": {
       "label": "Participantes",
@@ -894,7 +906,6 @@
     "discussionEnded": "Discusión finalizada",
     "qaEnded": "Preguntas y respuestas finalizadas",
     "thinking": "Pensando",
-    "yourTurn": "Tu turno",
     "stopDiscussion": "Detener discusión",
     "stopQA": "Terminar preguntas",
     "softClosing": "Continuar discusión",
@@ -908,7 +919,6 @@
     "voiceInputDisabled": "Entrada de voz deshabilitada",
     "textInput": "Entrada de texto",
     "stopRecording": "Detener grabación",
-    "startRecording": "Iniciar grabación",
     "handRaisedQueued": "Mano levantada: el docente te responderá al terminar esta frase",
     "handRaisedQueuedStep": "Mano levantada: el docente te responderá al terminar este paso",
     "handRaisedDelivered": "Tu pregunta se envió",

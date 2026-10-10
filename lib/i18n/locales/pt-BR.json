@@ -337,8 +337,6 @@
     "discussion": "Discussão",
     "join": "Entrar",
     "skip": "Pular",
-    "pause": "Pausar",
-    "resume": "Continuar",
     "offerLabel": "{{name}} quer iniciar uma discussão",
     "autoSkipHint": "Será pulado automaticamente em {{seconds}} segundos"
   },
@@ -780,18 +778,32 @@
       "lecturing": "Explicando",
       "paused": "Pausado, sua vez de falar",
       "answering": "Respondendo",
-      "discussing": "Discutindo"
+      "discussing": "Discutindo",
+      "resumeIn": "A aula continua em {{seconds}} s",
+      "answeringYou": "Respondendo sua pergunta"
     },
     "composer": {
       "raiseHand": "Levantar a mão",
-      "raiseHandHint": "Levante a mão: escreva sua pergunta e o professor responde ao fim desta frase",
+      "raiseHandHint": "Levante a mão: o professor chama você ao fim desta frase",
       "raiseHandInLiveSession": "Durante as perguntas você pode falar diretamente",
       "lowerHand": "Abaixar",
       "lowerHandHint": "Abaixar a mão e retirar a pergunta",
       "cuePlaceholder": "Fale ou digite sua pergunta",
       "cueStatus": "Sua vez de falar · aula pausada",
       "send": "Enviar",
-      "cancelRecording": "Cancelar gravação"
+      "cancelRecording": "Cancelar gravação",
+      "handRaised": "Mão levantada · sua vez ao fim desta frase",
+      "handRaisedStep": "Mão levantada · sua vez ao fim desta etapa",
+      "raisedPlaceholder": "Você pode escrever sua pergunta antes...",
+      "followUpPlaceholder": "Faça uma pergunta de acompanhamento...",
+      "handLowered": "Mão abaixada"
+    },
+    "handRaise": {
+      "raised": "Você levantou a mão",
+      "aheadOfDiscussion": "Você levantou a mão; a discussão de {{name}} vem depois de você",
+      "calledBy": "{{name}} pede que você fale",
+      "pendingQuestion": "Na fila · resposta ao fim desta frase",
+      "pendingQuestionStep": "Na fila · resposta ao fim desta etapa"
     },
     "participants": {
       "label": "Participantes",
@@ -895,7 +907,6 @@
     "qaEnded": "Perguntas e respostas encerradas",
     "softClosing": "Continuar discussão",
     "thinking": "Pensando",
-    "yourTurn": "Sua vez",
     "stopDiscussion": "Encerrar Discussão",
     "stopQA": "Encerrar perguntas",
     "autoPlay": "Reprodução automática",
@@ -908,7 +919,6 @@
     "voiceInputDisabled": "Entrada por voz desativada",
     "textInput": "Entrada por texto",
     "stopRecording": "Parar gravação",
-    "startRecording": "Iniciar gravação",
     "handRaisedQueued": "Mão levantada — o professor responde ao terminar esta frase",
     "handRaisedQueuedStep": "Mão levantada — o professor responde ao terminar esta etapa",
     "handRaisedDelivered": "Sua pergunta foi enviada",
