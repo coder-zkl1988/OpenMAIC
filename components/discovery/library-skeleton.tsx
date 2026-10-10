@@ -9,15 +9,15 @@ const SKELETON_FOLDERS = 2;
 const SKELETON_COURSES = 6;
 
 /** The pulse the course cards use while their thumbnail loads. */
-const PULSE = 'animate-pulse bg-slate-200/70 dark:bg-slate-700/50';
+const PULSE = 'animate-pulse bg-line';
 
 /**
  * Placeholder for the home library while its course and folder lists load.
  *
  * It mirrors the loaded layout exactly: the same grid, and tiles built from
- * the ClassroomCard / FolderCard boxes (a 16:9 thumbnail and a title row whose
- * height comes from the same text styles), so the real cards replace it
- * without moving anything.
+ * the ClassroomCard / FolderCard boxes (a 16:9 thumbnail and a title / meta
+ * row whose height comes from the same text styles), so the real cards
+ * replace it without moving anything.
  */
 export function LibrarySkeleton() {
   const { t } = useI18n();
@@ -38,7 +38,13 @@ export function LibrarySkeleton() {
 function SkeletonTile({ folder = false }: { folder?: boolean }) {
   return (
     <div aria-hidden data-skeleton-tile={folder ? 'folder' : 'course'}>
-      <div className="relative w-full aspect-[16/9] rounded-2xl bg-slate-100 dark:bg-slate-800/80 overflow-hidden">
+      <div
+        className={
+          folder
+            ? 'relative w-full aspect-[16/9] rounded-2xl bg-subtle dark:bg-card overflow-hidden'
+            : 'relative w-full aspect-[16/9] rounded-2xl bg-white ring-1 ring-line dark:bg-card overflow-hidden'
+        }
+      >
         {folder ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className={`size-14 rounded-2xl ${PULSE}`} />
@@ -47,17 +53,20 @@ function SkeletonTile({ folder = false }: { folder?: boolean }) {
           <ThumbnailSkeleton />
         )}
       </div>
-      <div className="mt-2.5 px-1 flex items-center gap-2">
-        {/* Same type styles as the real badge and title, with transparent
-            text, so the row is exactly as tall as a loaded card's. */}
-        <span
-          className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium text-transparent select-none ${PULSE}`}
-        >
-          00 · 00/00
-        </span>
-        <p className="font-medium text-[15px] min-w-0 flex-1 text-transparent select-none">
-          <span className={`inline-block w-3/4 rounded-md ${PULSE}`}>&nbsp;</span>
-        </p>
+      {/* The cards' title row: a one-line title, the meta line under it and
+          the 32px ⋯ slot. Same type styles as the real title and meta, with
+          transparent text, so the row is exactly as tall as a loaded card's
+          (whose title fits one line). */}
+      <div className="mt-2.5 pl-1 flex items-start gap-1">
+        <div className="flex-1 min-w-0">
+          <p className="text-[15px] leading-[22px] font-medium text-transparent select-none">
+            <span className={`inline-block w-3/4 rounded-md ${PULSE}`}>&nbsp;</span>
+          </p>
+          <p className="mt-0.5 text-xs leading-[18px] text-transparent select-none">
+            <span className={`inline-block w-1/3 rounded ${PULSE}`}>&nbsp;</span>
+          </p>
+        </div>
+        <span className="size-8 shrink-0" />
       </div>
     </div>
   );

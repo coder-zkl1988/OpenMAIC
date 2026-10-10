@@ -7,9 +7,12 @@ import {
   FileCode,
   FileDown,
   Film,
+  Languages,
   Loader2,
   Monitor,
   Moon,
+  MoreHorizontal,
+  MoreVertical,
   NotebookText,
   Package,
   Settings,
@@ -17,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import { supportedLocales } from '@/lib/i18n';
 import { useTheme } from '@/lib/hooks/use-theme';
 import { useStageStore } from '@/lib/store';
 import { useMediaGenerationStore } from '@/lib/store/media-generation';
@@ -34,6 +38,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -72,7 +77,7 @@ function ExportMenuItem({
       {description ? (
         <div>
           <div>{label}</div>
-          <div className="text-[11px] text-gray-400 dark:text-gray-500">{description}</div>
+          <div className="text-[11px] text-fg-tertiary">{description}</div>
         </div>
       ) : (
         <span>{label}</span>
@@ -89,13 +94,33 @@ interface HeaderControlsProps {
   readonly showGlobalControls?: boolean;
   readonly showCourseActions?: boolean;
   /**
-   * `default` — the chunky h-9 pill used in the playback Stage Header.
-   * `compact` — slightly tighter padding for embedding in CommandBar's
-   * right slot (Pro mode chrome already eats height, so the pill backs
-   * off ring weight / blur to keep the CommandBar quiet).
+   * `inline` (desktop): the settings pill, the Pro pill and the export
+   * button. `overflow` (tablet and narrower, TabletLandscape.dc.html): one
+   * 44px ⋯ menu holding language, theme, settings, the Pro switch row and
+   * the export submenu.
    */
-  readonly variant?: 'default' | 'compact';
+  readonly variant?: 'inline' | 'overflow';
+  /** The ⋯ trigger's glyph; the phone header uses the vertical ⋮ */
+  readonly overflowIcon?: 'horizontal' | 'vertical';
 }
+
+/** 26px icon button inside the 32px settings pill (Classroom.dc.html). */
+const PILL_ICON_BUTTON =
+  'size-[26px] flex items-center justify-center rounded-full text-icon hover:bg-card dark:hover:bg-subtle hover:text-fg hover:shadow-sm transition-all group';
+
+/**
+ * The 32×18 Pro switch: a 1px transparent border plus 1px padding around the
+ * 16px thumb, so the thumb travels 12px (shadcn's default thumb travel is
+ * 16px for its 36px track). The unchecked track is the line-strong stroke.
+ */
+const PRO_SWITCH_CLASS =
+  'h-[18px] w-8 border px-px shadow-none data-[state=unchecked]:bg-line-strong [&[data-state=checked]>span]:translate-x-3 [&>span]:shadow-sm';
+
+/** 44px rows in the ⋯ menu: touch targets on tablet */
+const OVERFLOW_ROW_CLASS = 'min-h-11 cursor-pointer gap-2.5';
+
+/** Selected theme / locale row */
+const SELECTED_ROW_CLASS = 'bg-accent-soft text-accent-text';
 
 /**
  * Stage-level global controls: language picker, theme picker, settings
@@ -117,9 +142,10 @@ export function HeaderControls({
   onToggleEditMode,
   showGlobalControls = true,
   showCourseActions = true,
-  variant = 'default',
+  variant = 'inline',
+  overflowIcon = 'horizontal',
 }: HeaderControlsProps) {
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [videoDialogOpen, setVideoDialogOpen] = useState(false);
@@ -155,23 +181,317 @@ export function HeaderControls({
   // Only read while the menu is open: the scan walks every scene's actions.
   const htmlHasPlaybackMedia = exportMenuOpen && classroomHasPlaybackMedia(scenes);
 
-  const compact = variant === 'compact';
   const proChecked = proModeActive ?? mode === 'edit';
+
+  // The export entries, shared by the desktop export menu and the ⋯ menu's
+  // export submenu
+  const exportMenuItems = (
+    <>
+      {/* PPTX and Resource Pack: choose per export whether quiz,
+          interactive and PBL scenes get placeholder slides. */}
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger
+          disabled={!canExport}
+          title={canExport ? undefined : t('export.mediaPending')}
+          className="cursor-pointer gap-2.5"
+        >
+          <FileDown className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />
+          <span>{t('export.pptx')}</span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="min-w-[240px]">
+          <ExportMenuItem
+            disabled={!canExport}
+            onSelect={() => exportPPTX({ includePlaceholders: true })}
+            icon={<FileDown className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
+            label={t('export.withPlaceholders')}
+            description={t('export.withPlaceholdersDesc')}
+          />
+          <ExportMenuItem
+            disabled={!canExport}
+            onSelect={() => exportPPTX({ includePlaceholders: false })}
+            icon={<FileDown className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
+            label={t('export.slidesOnly')}
+            description={t('export.slidesOnlyDesc')}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger
+          disabled={!canExport}
+          title={canExport ? undefined : t('export.mediaPending')}
+          className="cursor-pointer gap-2.5"
+        >
+          <Package className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />
+          <div>
+            <div>{t('export.resourcePack')}</div>
+            <div className="text-[11px] text-fg-tertiary">{t('export.resourcePackDesc')}</div>
+          </div>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="min-w-[240px]">
+          <ExportMenuItem
+            disabled={!canExport}
+            onSelect={() => exportResourcePack({ includePlaceholders: true })}
+            icon={<Package className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
+            label={t('export.packWithPlaceholders')}
+            description={t('export.withPlaceholdersDesc')}
+          />
+          <ExportMenuItem
+            disabled={!canExport}
+            onSelect={() => exportResourcePack({ includePlaceholders: false })}
+            icon={<Package className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
+            label={t('export.packSlidesOnly')}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      <ExportMenuItem
+        disabled={!canExport || isExportingZip}
+        onSelect={exportClassroomZip}
+        title={canExport ? undefined : t('export.mediaPending')}
+        icon={<Archive className="w-4 h-4 text-icon-muted shrink-0" />}
+        label={t('export.classroomZip')}
+        description={t('export.classroomZipDesc')}
+      />
+      {/* Standalone HTML: choose per export whether narration audio and
+          video clips are embedded. The option that fits the classroom
+          comes first: with narration and video when the classroom has narration
+          audio or slide video. */}
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger
+          disabled={!canExport}
+          title={canExport ? undefined : t('export.mediaPending')}
+          className="cursor-pointer gap-2.5"
+        >
+          <FileCode className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />
+          <div>
+            <div>{t('export.html')}</div>
+            <div className="text-[11px] text-fg-tertiary">{t('export.htmlDesc')}</div>
+          </div>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="min-w-[240px]">
+          {(htmlHasPlaybackMedia
+            ? (['narration', 'silent'] as const)
+            : (['silent', 'narration'] as const)
+          ).map((variant) => (
+            <ExportMenuItem
+              key={variant}
+              disabled={!canExport || isExportingHtml}
+              onSelect={() => exportStandaloneHtml({ includeNarration: variant === 'narration' })}
+              icon={<FileCode className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
+              label={t(variant === 'narration' ? 'export.htmlWithNarration' : 'export.htmlSilent')}
+              description={t(
+                variant === 'narration' ? 'export.htmlWithNarrationDesc' : 'export.htmlSilentDesc',
+              )}
+            />
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger
+          disabled={!canExport}
+          title={canExport ? undefined : t('export.mediaPending')}
+          className="cursor-pointer gap-2.5"
+        >
+          <NotebookText className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />
+          <span>{t('export.script')}</span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="min-w-[240px]">
+          <ExportMenuItem
+            disabled={!canExport || isExportingScript}
+            onSelect={exportScriptMd}
+            icon={<NotebookText className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
+            label={t('export.scriptMd')}
+            description={t('export.scriptMdDesc')}
+          />
+          <ExportMenuItem
+            disabled={!canExport || isExportingScript}
+            onSelect={exportScriptDocx}
+            icon={<NotebookText className="w-4 h-4 text-icon-muted shrink-0" aria-hidden="true" />}
+            label={t('export.scriptDocx')}
+            description={t('export.scriptDocxDesc')}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      {videoExportEnabled && (
+        <ExportMenuItem
+          disabled={!canExport}
+          onSelect={() => setVideoDialogOpen(true)}
+          className="border-t border-line"
+          title={canExport ? undefined : t('export.mediaPending')}
+          icon={<Film className="w-4 h-4 text-icon-muted shrink-0" />}
+          label={t('export.video')}
+          description={t('export.videoDesc')}
+        />
+      )}
+    </>
+  );
 
   if (!showGlobalControls && !showCourseActions) {
     return onToggleEditMode ? (
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-          {t('stage.proMode')}
+      <div className="flex items-center gap-2.5">
+        <span className="text-xs font-semibold text-fg-secondary select-none">
+          {t('edit.proMode')}
         </span>
         <Switch
           checked={proChecked}
           onCheckedChange={onToggleEditMode}
           disabled={!canEdit}
           aria-label={proChecked ? t('stage.doneEditing') : t('stage.editCourse')}
+          className={PRO_SWITCH_CLASS}
         />
       </div>
     ) : null;
+  }
+
+  if (variant === 'overflow' && (showGlobalControls || showCourseActions)) {
+    const proDisabled = !canEdit && mode !== 'edit';
+    const ThemeIcon = theme === 'dark' ? Moon : theme === 'system' ? Monitor : Sun;
+    return (
+      <div className="flex shrink-0 items-center">
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              data-testid="header-overflow-menu"
+              aria-label={t('stage.headerMenu')}
+              title={anyExporting ? t('export.exporting') : t('stage.headerMenu')}
+              className="flex size-11 shrink-0 items-center justify-center rounded-[10px] text-icon transition-colors outline-none hover:bg-subtle hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/50 cursor-pointer"
+            >
+              {anyExporting ? (
+                <Loader2 className="size-5 animate-spin" />
+              ) : videoRendering ? (
+                // The background render's ring stays on the trigger
+                <CircularProgress value={videoRenderPercent} size={20} className="text-primary" />
+              ) : overflowIcon === 'vertical' ? (
+                <MoreVertical className="size-5" />
+              ) : (
+                <MoreHorizontal className="size-5" />
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={4} className="min-w-[240px]">
+            {showGlobalControls && (
+              <>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className={OVERFLOW_ROW_CLASS}>
+                    <Languages className="size-4 text-icon" aria-hidden="true" />
+                    <span className="flex-1">{t('settings.language')}</span>
+                    <span className="text-xs font-semibold text-fg-tertiary">
+                      {supportedLocales.find((l) => l.code === locale)?.shortLabel ?? locale}
+                    </span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-[160px]">
+                    {supportedLocales.map((l) => (
+                      <DropdownMenuItem
+                        key={l.code}
+                        onSelect={() => setLocale(l.code)}
+                        className={cn(OVERFLOW_ROW_CLASS, locale === l.code && SELECTED_ROW_CLASS)}
+                      >
+                        {l.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className={OVERFLOW_ROW_CLASS}>
+                    <ThemeIcon className="size-4 text-icon" aria-hidden="true" />
+                    <span>{t('settings.theme')}</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-[160px]">
+                    {(
+                      [
+                        ['light', Sun],
+                        ['dark', Moon],
+                        ['system', Monitor],
+                      ] as const
+                    ).map(([value, Icon]) => (
+                      <DropdownMenuItem
+                        key={value}
+                        onSelect={() => setTheme(value)}
+                        className={cn(OVERFLOW_ROW_CLASS, theme === value && SELECTED_ROW_CLASS)}
+                      >
+                        <Icon className="size-4" />
+                        {t(`settings.themeOptions.${value}`)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuItem
+                  onSelect={() => setSettingsOpen(true)}
+                  className={OVERFLOW_ROW_CLASS}
+                >
+                  <Settings className="size-4 text-icon" aria-hidden="true" />
+                  {t('settings.title')}
+                </DropdownMenuItem>
+              </>
+            )}
+
+            {/* The Pro switch row: the page's one role="switch", as on desktop */}
+            {onToggleEditMode && (
+              <>
+                {showGlobalControls && <DropdownMenuSeparator />}
+                <DropdownMenuItem
+                  role="switch"
+                  aria-checked={proChecked}
+                  aria-label={proChecked ? t('stage.doneEditing') : t('stage.editCourse')}
+                  disabled={proDisabled}
+                  title={proDisabled ? t('stage.proModeDisabledHint') : undefined}
+                  onSelect={onToggleEditMode}
+                  className={OVERFLOW_ROW_CLASS}
+                >
+                  <span
+                    className={cn(
+                      'flex-1 font-semibold',
+                      proChecked ? 'text-accent-text' : 'text-fg-secondary',
+                    )}
+                  >
+                    {t('edit.proMode')}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    data-state={proChecked ? 'checked' : 'unchecked'}
+                    className={cn(
+                      'inline-flex h-[18px] w-8 shrink-0 items-center rounded-full border border-transparent px-px transition-colors',
+                      proChecked ? 'bg-primary' : 'bg-line-strong',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'block size-4 rounded-full bg-background shadow-sm transition-transform',
+                        proChecked && 'translate-x-3',
+                      )}
+                    />
+                  </span>
+                </DropdownMenuItem>
+              </>
+            )}
+
+            {showCourseActions && (
+              <>
+                {(showGlobalControls || onToggleEditMode) && <DropdownMenuSeparator />}
+                <DropdownMenuSub onOpenChange={setExportMenuOpen}>
+                  <DropdownMenuSubTrigger
+                    disabled={!canExport || anyExporting}
+                    title={canExport ? undefined : t('export.mediaPending')}
+                    className={OVERFLOW_ROW_CLASS}
+                  >
+                    <Download className="size-4 text-icon" aria-hidden="true" />
+                    <span>{t('stage.exportMenu')}</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-[240px]">
+                    {exportMenuItems}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        {videoExportEnabled && (
+          <VideoExportDialog open={videoDialogOpen} onOpenChange={setVideoDialogOpen} />
+        )}
+      </div>
+    );
   }
 
   // Self-contained spacing so the control cluster is identical regardless of
@@ -179,30 +499,21 @@ export function HeaderControls({
   // slot (`gap-2`) would otherwise impose different inter-control spacing on
   // these fragment children, making the pill/switch/export cluster visibly
   // shift width and position across the mode swap. A fixed internal gap keeps
-  // the cluster pixel-stable; both hosts pad to `px-8`, so the right edge
-  // anchors identically too.
+  // the cluster pixel-stable; both hosts are 56px tall (`h-14`) with a 20px
+  // right padding (Header `pr-5`, CommandBar `px-5`), so the right edge and
+  // the vertical centre anchor identically too.
   return (
-    <div className="flex items-center gap-4">
-      <div
-        className={cn(
-          'shrink-0 flex items-center gap-1 backdrop-blur-md shadow-sm rounded-full',
-          compact
-            ? 'bg-zinc-100/70 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/60 px-1.5 py-1'
-            : 'bg-white/60 dark:bg-gray-800/60 border border-gray-100/50 dark:border-gray-700/50 px-2 py-1.5',
-        )}
-      >
+    <div className="flex items-center gap-2.5">
+      <div className="shrink-0 flex items-center gap-0.5 h-8 px-1 rounded-full border border-line bg-white/70 dark:bg-card/60">
         {/* Language — Radix DropdownMenu so its menu portals to body
             and never gets clipped by an ancestor's overflow-hidden. */}
-        <LanguageSwitcher />
+        <LanguageSwitcher size="sm" />
 
         {/* Theme — same Portal-backed DropdownMenu pattern. Non-modal keeps
             Radix from body scroll-locking a fixed-height classroom layout. */}
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <button
-              className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm transition-all group"
-              aria-label={t('settings.theme')}
-            >
+            <button type="button" className={PILL_ICON_BUTTON} aria-label={t('settings.theme')}>
               {theme === 'light' && <Sun className="w-4 h-4" />}
               {theme === 'dark' && <Moon className="w-4 h-4" />}
               {theme === 'system' && <Monitor className="w-4 h-4" />}
@@ -213,8 +524,7 @@ export function HeaderControls({
               onSelect={() => setTheme('light')}
               className={cn(
                 'cursor-pointer gap-2',
-                theme === 'light' &&
-                  'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+                theme === 'light' && 'bg-accent-soft text-accent-text',
               )}
             >
               <Sun className="w-4 h-4" />
@@ -224,8 +534,7 @@ export function HeaderControls({
               onSelect={() => setTheme('dark')}
               className={cn(
                 'cursor-pointer gap-2',
-                theme === 'dark' &&
-                  'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+                theme === 'dark' && 'bg-accent-soft text-accent-text',
               )}
             >
               <Moon className="w-4 h-4" />
@@ -235,8 +544,7 @@ export function HeaderControls({
               onSelect={() => setTheme('system')}
               className={cn(
                 'cursor-pointer gap-2',
-                theme === 'system' &&
-                  'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+                theme === 'system' && 'bg-accent-soft text-accent-text',
               )}
             >
               <Monitor className="w-4 h-4" />
@@ -247,8 +555,9 @@ export function HeaderControls({
 
         {/* Settings */}
         <button
+          type="button"
           onClick={() => setSettingsOpen(true)}
-          className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm transition-all group"
+          className={PILL_ICON_BUTTON}
           aria-label={t('settings.title')}
         >
           <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
@@ -264,15 +573,12 @@ export function HeaderControls({
       {onToggleEditMode && (
         <label
           className={cn(
-            'shrink-0 inline-flex items-center gap-2.5 rounded-full border shadow-sm transition-colors duration-200',
-            'bg-white/60 dark:bg-gray-800/60 backdrop-blur-md',
-            compact ? 'h-8 px-2.5' : 'h-9 px-3',
-            proChecked
-              ? 'border-violet-500/60 dark:border-violet-400/60'
-              : 'border-gray-100/50 dark:border-gray-700/50',
+            'shrink-0 inline-flex items-center gap-2.5 h-8 pl-3 pr-2.5 rounded-full border transition-colors duration-200',
+            'bg-white/70 dark:bg-card/60',
+            proChecked ? 'border-accent-line' : 'border-line',
             !canEdit && mode !== 'edit'
               ? 'opacity-60 cursor-not-allowed'
-              : 'cursor-pointer hover:border-violet-400/60 dark:hover:border-violet-500/50',
+              : 'cursor-pointer hover:border-accent-line',
           )}
           // When disabled (e.g. the course-complete placeholder), explain why
           // on hover and point the user to a real scene instead of a bare
@@ -287,10 +593,8 @@ export function HeaderControls({
         >
           <span
             className={cn(
-              'text-[11px] font-bold uppercase tracking-[0.14em] tabular-nums select-none transition-colors duration-200',
-              proChecked
-                ? 'text-violet-600 dark:text-violet-300'
-                : 'text-gray-500 dark:text-gray-400',
+              'text-xs font-semibold select-none transition-colors duration-200',
+              proChecked ? 'text-accent-text' : 'text-fg-secondary',
             )}
           >
             {t('edit.proMode')}
@@ -300,7 +604,7 @@ export function HeaderControls({
             onCheckedChange={onToggleEditMode}
             disabled={!canEdit && mode !== 'edit'}
             aria-label={proChecked ? t('stage.doneEditing') : t('stage.editCourse')}
-            className="data-[state=checked]:bg-violet-600 dark:data-[state=checked]:bg-violet-500"
+            className={PRO_SWITCH_CLASS}
           />
         </label>
       )}
@@ -315,10 +619,10 @@ export function HeaderControls({
             disabled={!canExport || anyExporting}
             title={anyExporting ? t('export.exporting') : exportLabel}
             className={cn(
-              'shrink-0 p-2 rounded-full transition-all',
+              'shrink-0 size-8 flex items-center justify-center rounded-full transition-all',
               canExport && !anyExporting
-                ? 'text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm'
-                : 'text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50',
+                ? 'text-icon hover:bg-card dark:hover:bg-subtle hover:text-fg hover:shadow-sm'
+                : 'text-icon-muted cursor-not-allowed opacity-50',
             )}
             aria-label={exportLabel}
           >
@@ -334,158 +638,7 @@ export function HeaderControls({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={8} className="min-w-[240px]">
-          {/* PPTX and Resource Pack: choose per export whether quiz,
-              interactive and PBL scenes get placeholder slides. */}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger
-              disabled={!canExport}
-              title={canExport ? undefined : t('export.mediaPending')}
-              className="cursor-pointer gap-2.5"
-            >
-              <FileDown className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
-              <span>{t('export.pptx')}</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-[240px]">
-              <ExportMenuItem
-                disabled={!canExport}
-                onSelect={() => exportPPTX({ includePlaceholders: true })}
-                icon={<FileDown className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
-                label={t('export.withPlaceholders')}
-                description={t('export.withPlaceholdersDesc')}
-              />
-              <ExportMenuItem
-                disabled={!canExport}
-                onSelect={() => exportPPTX({ includePlaceholders: false })}
-                icon={<FileDown className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
-                label={t('export.slidesOnly')}
-                description={t('export.slidesOnlyDesc')}
-              />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger
-              disabled={!canExport}
-              title={canExport ? undefined : t('export.mediaPending')}
-              className="cursor-pointer gap-2.5"
-            >
-              <Package className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
-              <div>
-                <div>{t('export.resourcePack')}</div>
-                <div className="text-[11px] text-gray-400 dark:text-gray-500">
-                  {t('export.resourcePackDesc')}
-                </div>
-              </div>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-[240px]">
-              <ExportMenuItem
-                disabled={!canExport}
-                onSelect={() => exportResourcePack({ includePlaceholders: true })}
-                icon={<Package className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
-                label={t('export.packWithPlaceholders')}
-                description={t('export.withPlaceholdersDesc')}
-              />
-              <ExportMenuItem
-                disabled={!canExport}
-                onSelect={() => exportResourcePack({ includePlaceholders: false })}
-                icon={<Package className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
-                label={t('export.packSlidesOnly')}
-              />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <ExportMenuItem
-            disabled={!canExport || isExportingZip}
-            onSelect={exportClassroomZip}
-            title={canExport ? undefined : t('export.mediaPending')}
-            icon={<Archive className="w-4 h-4 text-gray-400 shrink-0" />}
-            label={t('export.classroomZip')}
-            description={t('export.classroomZipDesc')}
-          />
-          {/* Standalone HTML: choose per export whether narration audio and
-              video clips are embedded. The option that fits the classroom
-              comes first: with narration and video when the classroom has narration
-              audio or slide video. */}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger
-              disabled={!canExport}
-              title={canExport ? undefined : t('export.mediaPending')}
-              className="cursor-pointer gap-2.5"
-            >
-              <FileCode className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
-              <div>
-                <div>{t('export.html')}</div>
-                <div className="text-[11px] text-gray-400 dark:text-gray-500">
-                  {t('export.htmlDesc')}
-                </div>
-              </div>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-[240px]">
-              {(htmlHasPlaybackMedia
-                ? (['narration', 'silent'] as const)
-                : (['silent', 'narration'] as const)
-              ).map((variant) => (
-                <ExportMenuItem
-                  key={variant}
-                  disabled={!canExport || isExportingHtml}
-                  onSelect={() =>
-                    exportStandaloneHtml({ includeNarration: variant === 'narration' })
-                  }
-                  icon={<FileCode className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />}
-                  label={t(
-                    variant === 'narration' ? 'export.htmlWithNarration' : 'export.htmlSilent',
-                  )}
-                  description={t(
-                    variant === 'narration'
-                      ? 'export.htmlWithNarrationDesc'
-                      : 'export.htmlSilentDesc',
-                  )}
-                />
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger
-              disabled={!canExport}
-              title={canExport ? undefined : t('export.mediaPending')}
-              className="cursor-pointer gap-2.5"
-            >
-              <NotebookText className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
-              <span>{t('export.script')}</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-[240px]">
-              <ExportMenuItem
-                disabled={!canExport || isExportingScript}
-                onSelect={exportScriptMd}
-                icon={
-                  <NotebookText className="w-4 h-4 text-gray-400 shrink-0" aria-hidden="true" />
-                }
-                label={t('export.scriptMd')}
-                description={t('export.scriptMdDesc')}
-              />
-              <ExportMenuItem
-                disabled={!canExport || isExportingScript}
-                onSelect={exportScriptDocx}
-                icon={
-                  <NotebookText
-                    className="w-4 h-4 text-gray-400 dark:text-gray-500"
-                    aria-hidden="true"
-                  />
-                }
-                label={t('export.scriptDocx')}
-                description={t('export.scriptDocxDesc')}
-              />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          {videoExportEnabled && (
-            <ExportMenuItem
-              disabled={!canExport}
-              onSelect={() => setVideoDialogOpen(true)}
-              className="border-t border-gray-200 dark:border-gray-700"
-              title={canExport ? undefined : t('export.mediaPending')}
-              icon={<Film className="w-4 h-4 text-gray-400 shrink-0" />}
-              label={t('export.video')}
-              description={t('export.videoDesc')}
-            />
-          )}
+          {exportMenuItems}
         </DropdownMenuContent>
       </DropdownMenu>
 

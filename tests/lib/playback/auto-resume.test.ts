@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { shouldAutoResumeLecture, type AutoResumeArgs } from '@/lib/playback/auto-resume';
+import {
+  shouldAutoResumeLecture,
+  willResumeAfterSoftClose,
+  type AutoResumeArgs,
+} from '@/lib/playback/auto-resume';
 
 const base: AutoResumeArgs = {
   source: 'soft_close_timeout',
@@ -58,5 +62,49 @@ describe('shouldAutoResumeLecture', () => {
   it('never resumes when the course is exhausted or already completed', () => {
     expect(shouldAutoResumeLecture({ ...base, isExhausted: true })).toBe(false);
     expect(shouldAutoResumeLecture({ ...base, playbackCompleted: true })).toBe(false);
+  });
+
+  it('resumes an exhausted lecture whose completion a raised hand preempted', () => {
+    expect(
+      shouldAutoResumeLecture({ ...base, isExhausted: true, lectureCompletionPending: true }),
+    ).toBe(true);
+    expect(
+      shouldAutoResumeLecture({
+        ...base,
+        isExhausted: true,
+        lectureCompletionPending: true,
+        playbackCompleted: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoResumeLecture({
+        ...base,
+        isExhausted: true,
+        lectureCompletionPending: true,
+        source: 'manual_stop',
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('willResumeAfterSoftClose', () => {
+  const pending = {
+    endReason: 'user_done',
+    hadLectureInterruption: true,
+    isExhausted: false,
+    playbackCompleted: false,
+  };
+
+  it('agrees with shouldAutoResumeLecture before the session ends', () => {
+    expect(willResumeAfterSoftClose(pending)).toBe(true);
+    expect(willResumeAfterSoftClose({ ...pending, endReason: 'back_to_lesson' })).toBe(true);
+    expect(willResumeAfterSoftClose({ ...pending, endReason: 'user_goodbye' })).toBe(false);
+    expect(willResumeAfterSoftClose({ ...pending, endReason: undefined })).toBe(false);
+    expect(willResumeAfterSoftClose({ ...pending, hadLectureInterruption: false })).toBe(false);
+    expect(willResumeAfterSoftClose({ ...pending, playbackCompleted: true })).toBe(false);
+    expect(willResumeAfterSoftClose({ ...pending, isExhausted: true })).toBe(false);
+    expect(
+      willResumeAfterSoftClose({ ...pending, isExhausted: true, lectureCompletionPending: true }),
+    ).toBe(true);
   });
 });

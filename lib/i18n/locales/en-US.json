@@ -7,7 +7,8 @@
     "errorPrefix": "Error: ",
     "loadingClassroom": "Loading classroom...",
     "retry": "Retry",
-    "close": "Close"
+    "close": "Close",
+    "switchLanguage": "Switch language"
   },
   "home": {
     "slogan": "Generative Learning in Multi-Agent Interactive Classroom",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "Classroom interaction",
+    "collapsePanel": "Collapse interaction panel",
+    "conversationLog": "Conversation history",
+    "softCloseCountdown": {
+      "qa": "Q&A ends in {{seconds}}s, then the lecture continues",
+      "discussion": "Discussion ends in {{seconds}}s, then the lecture continues"
+    },
+    "actionTag": {
+      "group": "Whiteboard actions",
+      "spotlight": "Spotlight",
+      "laser": "Laser",
+      "play_video": "Play video",
+      "discussion": "Discuss",
+      "wb_open": "Whiteboard · Open",
+      "wb_close": "Whiteboard · Close",
+      "wb_clear": "Whiteboard · Clear",
+      "wb_delete": "Whiteboard · Delete",
+      "wb_draw_text": "Whiteboard · Text",
+      "wb_draw_shape": "Whiteboard · Shape",
+      "wb_draw_chart": "Whiteboard · Chart",
+      "wb_draw_latex": "Whiteboard · Formula",
+      "wb_draw_table": "Whiteboard · Table",
+      "wb_draw_line": "Whiteboard · Line",
+      "wb_draw_code": "Whiteboard · Code",
+      "wb_edit_code": "Whiteboard · Edit code"
+    },
     "lecture": "Lecture",
     "noConversations": "No conversations",
     "startConversation": "Type a message below to begin chatting",
-    "noMessages": "No messages yet",
-    "ended": "ended",
     "unknown": "Unknown",
-    "stopDiscussion": "Stop Discussion",
-    "endQA": "End Q&A",
     "softClosing": "Continue discussion",
     "error": {
       "emptyAgentResponses": "Agents returned empty responses; discussion stopped. Try again or check your model settings.",
-      "streamInterrupted": "Stream ended unexpectedly; discussion didn't complete. Please try again."
+      "streamInterrupted": "Stream ended unexpectedly; discussion didn't complete. Please try again.",
+      "modelBusy": "The model service is currently busy. Send your message again later, or select an available model in model settings."
     },
     "elementReference": {
       "whiteboardChanged": "The referenced whiteboard element has changed or is no longer available. Select it again or remove the reference before sending.",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "Notes",
-      "chat": "Chat"
+      "chat": "Interaction",
+      "scenes": "Scenes"
     },
     "lectureNotes": {
       "empty": "Notes will appear here after lecture playback",
@@ -264,7 +289,7 @@
     },
     "badge": {
       "qa": "Q&A",
-      "discussion": "DISC",
+      "discussion": "Discussion",
       "lecture": "LEC"
     }
   },
@@ -310,8 +335,8 @@
     "discussion": "Discussion",
     "join": "Join",
     "skip": "Skip",
-    "pause": "Pause",
-    "resume": "Resume"
+    "offerLabel": "{{name}} wants to start a discussion",
+    "autoSkipHint": "Skips automatically in {{seconds}} seconds"
   },
   "voice": {
     "startListening": "Voice input",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "Current Scene",
+    "collapseSceneSidebar": "Collapse scene list",
+    "expandSceneSidebar": "Expand scene sidebar",
+    "sceneRail": "Scenes",
+    "sceneRailItem": "Page {{n}}: {{title}}",
+    "headerMenu": "More: language, theme, settings, Pro mode, export",
+    "exportMenu": "Export",
+    "expandInteractionPanel": "Expand interaction panel",
+    "pageCounter": "Page {{current}} / {{total}}",
+    "previousScene": "Previous scene",
+    "nextScene": "Next scene",
+    "play": "Play",
+    "pause": "Pause",
+    "pauseAnswer": "Pause answer",
+    "resumeAnswer": "Resume answer",
+    "playbackSpeed": "Playback speed",
+    "playbackMenu": "More: playback speed, volume, auto-play",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "volume": "Volume",
+    "whiteboardToggle": "Whiteboard",
+    "caption": {
+      "lecturing": "Explaining",
+      "paused": "Paused, your turn to speak",
+      "answering": "Answering",
+      "discussing": "Discussing",
+      "resumeIn": "Lecture resumes in {{seconds}}s",
+      "answeringYou": "Answering your question",
+      "drawing": "Writing on the board"
+    },
+    "pip": {
+      "badge": "Slides · page {{n}}",
+      "return": "Back to slides",
+      "returnLabel": "Back to slides (page {{n}})"
+    },
+    "composer": {
+      "raiseHand": "Raise hand",
+      "raiseHandHint": "Raise your hand: the teacher calls on you after this sentence",
+      "raiseHandInLiveSession": "You can speak directly during Q&A",
+      "lowerHand": "Lower",
+      "lowerHandHint": "Lower your hand and take the question back",
+      "cuePlaceholder": "Say or type your question",
+      "cueStatus": "Your turn to speak · class is paused",
+      "send": "Send",
+      "cancelRecording": "Cancel recording",
+      "handRaised": "Hand raised · you're up when this sentence ends",
+      "handRaisedStep": "Hand raised · you're up when this step ends",
+      "raisedPlaceholder": "You can write your question first...",
+      "followUpPlaceholder": "Ask a follow-up...",
+      "referencePlaceholder": "{{type}}: what would you like to ask about it?",
+      "handLowered": "Hand lowered"
+    },
+    "handRaise": {
+      "raised": "You raised your hand",
+      "aheadOfDiscussion": "You raised your hand; {{name}}'s discussion comes after you",
+      "calledBy": "{{name}} asks you to speak",
+      "pendingQuestion": "Queued · answered when this sentence ends",
+      "pendingQuestionStep": "Queued · answered when this step ends"
+    },
+    "participants": {
+      "label": "Participants",
+      "online": "{{count}} online",
+      "speaking": "Speaking",
+      "wantsToSpeak": "Wants to speak",
+      "handRaised": "Hand raised",
+      "more": "{{count}} more participants"
+    },
     "generating": "Generating...",
     "paused": "Paused",
     "generationFailed": "Generation failed",
@@ -770,13 +861,21 @@
     "readyHint": "Elements will appear here when added by AI",
     "clearSuccess": "Whiteboard cleared successfully",
     "clearError": "Failed to clear whiteboard: ",
-    "resetView": "Reset View",
     "restoreError": "Failed to restore whiteboard: ",
     "history": "History",
     "restore": "Restore",
     "noHistory": "No history yet",
     "restored": "Whiteboard restored",
-    "elementCount": "{{count}} elements"
+    "elementCount": "{{count}} elements",
+    "drawing": "{{name}} is drawing",
+    "drawingAnonymous": "Drawing on the board",
+    "zoom": "Zoom",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to window",
+    "historyWithCount": "History ({{count}})",
+    "undo": "Undo",
+    "restoreSnapshot": "Restore #{{index}}"
   },
   "quiz": {
     "title": "Quiz",
@@ -817,20 +916,21 @@
     "discussionEnded": "Discussion ended",
     "qaEnded": "Q&A ended",
     "thinking": "Thinking",
-    "yourTurn": "Your turn",
     "stopDiscussion": "Stop Discussion",
-    "softClosing": "Continue discussion",
+    "stopQA": "Stop Q&A",
     "autoPlay": "Auto-play",
     "autoPlayOff": "Stop auto-play",
     "speed": "Speed",
-    "previousLine": "Previous line",
-    "nextLine": "Next line",
-    "lineProgress": "Line {{current}} / {{total}}",
     "voiceInput": "Voice input",
     "voiceInputDisabled": "Voice input disabled",
     "textInput": "Text input",
     "stopRecording": "Stop recording",
-    "startRecording": "Start recording"
+    "handRaisedQueued": "Hand raised — the teacher will answer after this sentence",
+    "handRaisedQueuedStep": "Hand raised — the teacher will answer after this step",
+    "handRaisedDelivered": "Your question has been sent",
+    "cancelQueuedQuestion": "Cancel",
+    "queuedQuestionNotSent": "Your raised-hand question wasn't sent",
+    "queuedQuestionRestored": "Restored your unsent question"
   },
   "pbl": {
     "emptyProject": "PBL project has not been generated yet. Please create via course generation.",
@@ -1066,7 +1166,6 @@
     "yesterday": "Yesterday",
     "daysAgo": "days ago",
     "slides": "slides",
-    "nameCopied": "Name copied",
     "deleteConfirmTitle": "Delete",
     "delete": "Delete",
     "rename": "Rename",
@@ -1091,8 +1190,10 @@
     "deleteFolderTitle": "Delete folder \"{{name}}\"",
     "deleteFolderEmptyDesc": "This folder is empty. Deletion cannot be undone.",
     "deleteFolderUngroupDesc": "Courses stay in \"My courses\", just unfiled.",
+    "moreActions": "More actions",
+    "openCourse": "Open course {{name}}",
+    "openFolder": "Open folder {{name}}",
     "moveToFolder": "Move to folder",
-    "moveToFolderLabel": "Move to…",
     "ungrouped": "Ungrouped",
     "searchResults": "Search results",
     "folderCreateFailed": "Failed to create folder",
@@ -1122,6 +1223,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Failed to generate classroom, please try again",
     "requirementPlaceholder": "Tell me anything you want to learn, e.g.\n\"Teach me Python from scratch in 30 minutes\"\n\"Explain Fourier Transform on the whiteboard\"\n\"How to play the board game Avalon\"",
+    "requirementLabel": "Learning request",
     "requirementRequired": "Please enter course requirements",
     "fileTooLarge": "File too large. Please select a file smaller than 50MB",
     "courseMaterialCountLimit": "You can upload up to 5 course material files",
@@ -1256,6 +1358,7 @@
     "language": "Language",
     "languageDesc": "Select interface language",
     "theme": "Theme",
+    "themeWithCurrent": "Theme: {{theme}}",
     "themeDesc": "Select theme mode (Light/Dark/System)",
     "themeOptions": {
       "light": "Light",
@@ -2308,12 +2411,14 @@
     "title": "Profile",
     "defaultNickname": "Learner",
     "chooseAvatar": "Choose Avatar",
+    "avatarOption": "Avatar {{n}}",
     "uploadAvatar": "Upload",
     "bioPlaceholder": "Tell us about yourself — the AI teacher will personalize lessons for you...",
     "avatarHint": "Your avatar will appear in classroom discussions and chats",
     "fileTooLarge": "Image too large — please choose one under 5 MB",
     "invalidFileType": "Please select an image file",
-    "editTooltip": "Click to edit profile"
+    "editTooltip": "Click to edit profile",
+    "edit": "Edit profile"
   },
   "media": {
     "imageCapability": "Image Generation",

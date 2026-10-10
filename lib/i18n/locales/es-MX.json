@@ -7,7 +7,8 @@
     "errorPrefix": "Error: ",
     "loadingClassroom": "Cargando el aula...",
     "retry": "Reintentar",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "switchLanguage": "Cambiar idioma"
   },
   "home": {
     "slogan": "Aprendizaje generativo en un aula interactiva multiagente",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "Interacción en clase",
+    "collapsePanel": "Contraer el panel de interacción",
+    "conversationLog": "Historial de conversación",
+    "softCloseCountdown": {
+      "qa": "Las preguntas terminan en {{seconds}} s y la clase continúa",
+      "discussion": "La discusión termina en {{seconds}} s y la clase continúa"
+    },
+    "actionTag": {
+      "group": "Acciones de la pizarra",
+      "spotlight": "Foco",
+      "laser": "Puntero láser",
+      "play_video": "Reproducir video",
+      "discussion": "Debatir",
+      "wb_open": "Pizarra · Abrir",
+      "wb_close": "Pizarra · Cerrar",
+      "wb_clear": "Pizarra · Limpiar",
+      "wb_delete": "Pizarra · Eliminar",
+      "wb_draw_text": "Pizarra · Texto",
+      "wb_draw_shape": "Pizarra · Forma",
+      "wb_draw_chart": "Pizarra · Gráfico",
+      "wb_draw_latex": "Pizarra · Fórmula",
+      "wb_draw_table": "Pizarra · Tabla",
+      "wb_draw_line": "Pizarra · Línea",
+      "wb_draw_code": "Pizarra · Código",
+      "wb_edit_code": "Pizarra · Editar código"
+    },
     "lecture": "Clase",
     "noConversations": "Sin conversaciones",
     "startConversation": "Escribe un mensaje abajo para comenzar a chatear",
-    "noMessages": "Aún no hay mensajes",
-    "ended": "finalizó",
     "unknown": "Desconocido",
-    "stopDiscussion": "Detener debate",
-    "endQA": "Terminar Q&A",
     "softClosing": "Continuar debate",
     "error": {
       "emptyAgentResponses": "Los agentes devolvieron respuestas vacías; el debate se detuvo. Inténtalo de nuevo o revisa la configuración de tu modelo.",
-      "streamInterrupted": "El streaming terminó inesperadamente; el debate no se completó. Inténtalo de nuevo."
+      "streamInterrupted": "El streaming terminó inesperadamente; el debate no se completó. Inténtalo de nuevo.",
+      "modelBusy": "El servicio del modelo está saturado. Vuelve a enviar tu mensaje más tarde o elige un modelo disponible en la configuración de modelos."
     },
     "elementReference": {
       "whiteboardChanged": "El elemento del pizarrón cambió o ya no está disponible. Vuelve a seleccionarlo o quita la referencia antes de enviar.",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "Notas",
-      "chat": "Chat"
+      "chat": "Interacción",
+      "scenes": "Escenas"
     },
     "lectureNotes": {
       "empty": "Las notas aparecerán aquí después de reproducir la clase",
@@ -264,7 +289,7 @@
     },
     "badge": {
       "qa": "Q&A",
-      "discussion": "DEB",
+      "discussion": "Debate",
       "lecture": "CLASE"
     }
   },
@@ -310,8 +335,8 @@
     "discussion": "Debate",
     "join": "Unirme",
     "skip": "Omitir",
-    "pause": "Pausar",
-    "resume": "Reanudar"
+    "offerLabel": "{{name}} quiere iniciar un debate",
+    "autoSkipHint": "Se omitirá automáticamente en {{seconds}} segundos"
   },
   "voice": {
     "startListening": "Entrada de voz",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "Escena actual",
+    "collapseSceneSidebar": "Contraer lista de escenas",
+    "expandSceneSidebar": "Expandir lista de escenas",
+    "sceneRail": "Escenas",
+    "sceneRailItem": "Página {{n}}: {{title}}",
+    "headerMenu": "Más: idioma, tema, configuración, modo Pro, exportar",
+    "exportMenu": "Exportar",
+    "expandInteractionPanel": "Expandir panel de interacción",
+    "pageCounter": "Página {{current}} / {{total}}",
+    "previousScene": "Escena anterior",
+    "nextScene": "Escena siguiente",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "pauseAnswer": "Pausar respuesta",
+    "resumeAnswer": "Reanudar respuesta",
+    "playbackSpeed": "Velocidad de reproducción",
+    "playbackMenu": "Más: velocidad de reproducción, volumen, reproducción automática",
+    "mute": "Silenciar",
+    "unmute": "Activar sonido",
+    "volume": "Volumen",
+    "whiteboardToggle": "Pizarrón",
+    "caption": {
+      "lecturing": "Explicando",
+      "paused": "En pausa, es tu turno de hablar",
+      "answering": "Respondiendo",
+      "discussing": "Debatiendo",
+      "resumeIn": "La clase continúa en {{seconds}} s",
+      "answeringYou": "Respondiendo tu pregunta",
+      "drawing": "Escribiendo en el pizarrón"
+    },
+    "pip": {
+      "badge": "Diapositivas · página {{n}}",
+      "return": "Volver a las diapositivas",
+      "returnLabel": "Volver a las diapositivas (página {{n}})"
+    },
+    "composer": {
+      "raiseHand": "Levantar la mano",
+      "raiseHandHint": "Levanta la mano: el profesor te dará la palabra al terminar esta frase",
+      "raiseHandInLiveSession": "Durante las preguntas puedes hablar directamente",
+      "lowerHand": "Bajar",
+      "lowerHandHint": "Bajar la mano y retirar la pregunta",
+      "cuePlaceholder": "Di o escribe tu pregunta",
+      "cueStatus": "Es tu turno · clase en pausa",
+      "send": "Enviar",
+      "cancelRecording": "Cancelar grabación",
+      "handRaised": "Mano levantada · te toca al terminar esta frase",
+      "handRaisedStep": "Mano levantada · te toca al terminar este paso",
+      "raisedPlaceholder": "Puedes escribir tu pregunta antes...",
+      "followUpPlaceholder": "Haz una pregunta de seguimiento...",
+      "referencePlaceholder": "{{type}}: ¿qué quieres preguntar sobre esto?",
+      "handLowered": "Mano bajada"
+    },
+    "handRaise": {
+      "raised": "Levantaste la mano",
+      "aheadOfDiscussion": "Levantaste la mano; el debate de {{name}} va después de ti",
+      "calledBy": "{{name}} te da la palabra",
+      "pendingQuestion": "En cola · se responde al terminar esta frase",
+      "pendingQuestionStep": "En cola · se responde al terminar este paso"
+    },
+    "participants": {
+      "label": "Participantes",
+      "online": "{{count}} en línea",
+      "speaking": "Hablando",
+      "wantsToSpeak": "Quiere hablar",
+      "handRaised": "Mano levantada",
+      "more": "{{count}} participantes más"
+    },
     "generating": "Generando...",
     "paused": "En pausa",
     "generationFailed": "Falló la generación",
@@ -765,18 +856,26 @@
     "title": "Pizarrón interactivo",
     "open": "Abrir pizarrón",
     "clear": "Limpiar pizarrón",
-    "minimize": "Minimizar pizarrón",
+    "minimize": "Volver a las diapositivas",
     "ready": "El pizarrón está listo",
     "readyHint": "Los elementos aparecerán aquí cuando la IA los agregue",
     "clearSuccess": "El pizarrón se limpió correctamente",
     "clearError": "Error al limpiar el pizarrón: ",
-    "resetView": "Restablecer vista",
     "restoreError": "Error al restaurar el pizarrón: ",
     "history": "Historial",
     "restore": "Restaurar",
     "noHistory": "Aún no hay historial",
     "restored": "Pizarrón restaurado",
-    "elementCount": "{{count}} elementos"
+    "elementCount": "{{count}} elementos",
+    "drawing": "{{name}} está escribiendo en la pizarra",
+    "drawingAnonymous": "Escribiendo en la pizarra",
+    "zoom": "Zoom",
+    "zoomIn": "Acercar",
+    "zoomOut": "Alejar",
+    "fit": "Ajustar a la ventana",
+    "historyWithCount": "Historial ({{count}})",
+    "undo": "Deshacer",
+    "restoreSnapshot": "Restaurar #{{index}}"
   },
   "quiz": {
     "title": "Cuestionario",
@@ -817,20 +916,21 @@
     "discussionEnded": "Discusión finalizada",
     "qaEnded": "Preguntas y respuestas finalizadas",
     "thinking": "Pensando",
-    "yourTurn": "Tu turno",
     "stopDiscussion": "Detener discusión",
-    "softClosing": "Continuar discusión",
+    "stopQA": "Terminar preguntas",
     "autoPlay": "Reproducción automática",
     "autoPlayOff": "Detener reproducción automática",
     "speed": "Velocidad",
-    "previousLine": "Línea anterior",
-    "nextLine": "Línea siguiente",
-    "lineProgress": "Línea {{current}} / {{total}}",
     "voiceInput": "Entrada de voz",
     "voiceInputDisabled": "Entrada de voz deshabilitada",
     "textInput": "Entrada de texto",
     "stopRecording": "Detener grabación",
-    "startRecording": "Iniciar grabación"
+    "handRaisedQueued": "Mano levantada: el docente te responderá al terminar esta frase",
+    "handRaisedQueuedStep": "Mano levantada: el docente te responderá al terminar este paso",
+    "handRaisedDelivered": "Tu pregunta se envió",
+    "cancelQueuedQuestion": "Cancelar",
+    "queuedQuestionNotSent": "Tu pregunta con la mano levantada no se envió",
+    "queuedQuestionRestored": "Se restauró tu pregunta sin enviar"
   },
   "pbl": {
     "emptyProject": "El proyecto de ABP aún no se ha generado. Créalo desde la generación de cursos.",
@@ -1066,7 +1166,6 @@
     "yesterday": "Ayer",
     "daysAgo": "días atrás",
     "slides": "diapositivas",
-    "nameCopied": "Nombre copiado",
     "deleteConfirmTitle": "Eliminar",
     "delete": "Eliminar",
     "rename": "Renombrar",
@@ -1091,8 +1190,10 @@
     "deleteFolderTitle": "Eliminar carpeta \"{{name}}\"",
     "deleteFolderEmptyDesc": "Esta carpeta está vacía. La eliminación no se puede deshacer.",
     "deleteFolderUngroupDesc": "Los cursos se quedan en \"Mis cursos\", solo sin carpeta.",
+    "moreActions": "Más acciones",
+    "openCourse": "Abrir curso {{name}}",
+    "openFolder": "Abrir carpeta {{name}}",
     "moveToFolder": "Mover a carpeta",
-    "moveToFolderLabel": "Mover a…",
     "ungrouped": "Sin clasificar",
     "searchResults": "Resultados de búsqueda",
     "folderCreateFailed": "Error al crear la carpeta",
@@ -1122,6 +1223,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "No se pudo generar el aula, inténtalo de nuevo",
     "requirementPlaceholder": "Dime qué quieres aprender, p. ej.\n\"Enséñame Python desde cero en 30 minutos\"\n\"Explica la transformada de Fourier en el pizarrón\"\n\"Cómo jugar el juego de mesa Avalon\"",
+    "requirementLabel": "Qué quieres aprender",
     "requirementRequired": "Ingresa los requisitos del curso",
     "fileTooLarge": "Archivo demasiado grande. Selecciona uno de menos de 50 MB",
     "courseMaterialCountLimit": "Puedes subir hasta 5 archivos de material del curso",
@@ -1256,6 +1358,7 @@
     "language": "Idioma",
     "languageDesc": "Selecciona el idioma de la interfaz",
     "theme": "Tema",
+    "themeWithCurrent": "Tema: {{theme}}",
     "themeDesc": "Selecciona el modo de tema (claro/oscuro/sistema)",
     "themeOptions": {
       "light": "Claro",
@@ -2308,12 +2411,14 @@
     "title": "Perfil",
     "defaultNickname": "Aprendiz",
     "chooseAvatar": "Elegir avatar",
+    "avatarOption": "Avatar {{n}}",
     "uploadAvatar": "Subir",
     "bioPlaceholder": "Cuéntanos de ti: el maestro IA personalizará las lecciones para ti...",
     "avatarHint": "Tu avatar aparecerá en las discusiones y chats del aula",
     "fileTooLarge": "La imagen es demasiado grande; elige una de menos de 5 MB",
     "invalidFileType": "Selecciona un archivo de imagen",
-    "editTooltip": "Haz clic para editar tu perfil"
+    "editTooltip": "Haz clic para editar tu perfil",
+    "edit": "Editar perfil"
   },
   "media": {
     "imageCapability": "Generación de imágenes",

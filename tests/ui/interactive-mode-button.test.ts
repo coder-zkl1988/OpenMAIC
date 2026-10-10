@@ -18,24 +18,29 @@ function renderButton(
 }
 
 describe('InteractiveModeButton markup contract', () => {
-  it('emits explicit selected-state visual and semantic tokens', () => {
+  it('emits the pressed state on the interactive semantic tokens', () => {
     const html = renderButton(true);
 
     expect(html).toContain('aria-pressed="true"');
-    expect(html).toContain('border-cyan-400 bg-cyan-100 text-cyan-900');
-    expect(html).toContain('dark:border-cyan-200 dark:bg-cyan-400');
+    expect(html).toContain('border-interactive/40 bg-interactive-soft text-interactive');
     expect(html).toContain('lucide-check');
+    expect(html).not.toContain('lucide-atom');
   });
 
-  it('emits a distinct unselected-state token set', () => {
+  it('emits a neutral unpressed state with only the Atom icon tinted', () => {
     const html = renderButton(false);
 
     expect(html).toContain('aria-pressed="false"');
-    expect(html).toContain('border-cyan-600 bg-transparent text-cyan-700');
-    expect(html).toContain('dark:border-cyan-700 dark:text-cyan-300');
+    expect(html).toContain('border-line bg-background text-fg-secondary');
     expect(html).toContain('lucide-atom');
-    expect(html).not.toContain('bg-cyan-100');
-    expect(html).not.toContain('dark:bg-cyan-400');
+    expect(html).toMatch(/lucide-atom[^"]*text-interactive/);
+    expect(html).not.toContain('bg-interactive-soft');
+    expect(html).not.toContain('lucide-check');
+  });
+
+  it('uses no raw cyan classes in either state', () => {
+    expect(renderButton(true)).not.toMatch(/cyan-/);
+    expect(renderButton(false)).not.toMatch(/cyan-/);
   });
 
   it('forwards wrapper-injected attributes and classes to the DOM button', () => {
@@ -52,14 +57,11 @@ describe('InteractiveModeButton markup contract', () => {
     expect(html).toContain('title="Interactive mode hint"');
   });
 
-  it('limits the dark breathing animation to motion-safe environments', () => {
+  it('keeps the press feedback motion-safe and has no breathing ring', () => {
     const selectedHtml = renderButton(true);
     const unselectedHtml = renderButton(false);
 
-    expect(selectedHtml).toContain(
-      'motion-safe:dark:animate-[interactive-mode-breathe_2s_ease-in-out_infinite]',
-    );
-    expect(selectedHtml).not.toContain(' dark:animate-[interactive-mode-breathe');
+    expect(selectedHtml).not.toContain('interactive-mode-breathe');
     expect(unselectedHtml).toContain('active:scale-95');
     expect(unselectedHtml).toContain('motion-reduce:active:scale-100');
     expect(unselectedHtml).toContain('motion-reduce:transition-none');

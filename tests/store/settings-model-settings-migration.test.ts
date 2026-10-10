@@ -117,7 +117,8 @@ describe('settings store v4 → v5', () => {
         'account',
       );
       expect(blob?.state.playbackSpeed).toBe(1.25);
-      expect(blob?.version).toBe(5);
+      // Written back at the current version (v6 opens the classroom panels)
+      expect(blob?.version).toBe(6);
       expect(JSON.stringify(blob)).not.toContain('sk-');
     });
   });
@@ -165,7 +166,8 @@ describe('settings store v4 → v5', () => {
         'settings-storage',
         'account',
       );
-      expect(blob?.version).toBe(5);
+      // Written back at the current version (v6 opens the classroom panels)
+      expect(blob?.version).toBe(6);
       expect(JSON.stringify(blob?.state)).toContain('sk-kept');
     });
     expect(JSON.stringify(warn.mock.calls)).not.toContain('sk-kept');

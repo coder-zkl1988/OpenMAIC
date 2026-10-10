@@ -15,11 +15,33 @@ import { useCanvasStore } from '@/lib/store/canvas';
 import { ScreenElement } from '@/components/slide-renderer/Editor/ScreenElement';
 import { normalizeWhiteboardViewportRatio } from '@/lib/whiteboard/viewport';
 import type { PPTElement, Whiteboard } from '@openmaic/dsl';
+import { PencilLine } from 'lucide-react';
 import { useI18n } from '@/lib/hooks/use-i18n';
 
+/** Zoom bounds shared by the wheel and the header buttons (1 = fit to the card). */
+export const WHITEBOARD_MIN_ZOOM = 0.2;
+export const WHITEBOARD_MAX_ZOOM = 5;
+
 export type WhiteboardCanvasHandle = {
+  /** Fit the sheet back into the card (zoom 1, no pan), animated. */
   resetView: () => void;
+  /** Zoom around the centre of the card by `factor`, clamped to 0.2–5. No-op on an empty board. */
+  zoomBy: (factor: number) => void;
+  /** Same as resetView: 100% is the fitted sheet. */
+  fit: () => void;
 };
+
+/** Current view, reported to the header (zoom is relative to the fitted sheet). */
+export type WhiteboardViewState = {
+  zoom: number;
+  modified: boolean;
+};
+
+function clampZoom(zoom: number): number {
+  const clamped = Math.min(WHITEBOARD_MAX_ZOOM, Math.max(WHITEBOARD_MIN_ZOOM, zoom));
+  // Snap float drift (1.25 * 0.8 …) back to exactly fit, so the view reads unmodified.
+  return Math.abs(clamped - 1) < 1e-6 ? 1 : clamped;
+}
 
 type InteractiveWhiteboardCanvasProps = {
   canvasHeight: number;
@@ -29,7 +51,7 @@ type InteractiveWhiteboardCanvasProps = {
   containerScale: number;
   elements: PPTElement[];
   isClearing: boolean;
-  onViewModifiedChange?: (modified: boolean) => void;
+  onViewChange?: (view: WhiteboardViewState) => void;
   readyHintText: string;
   readyText: string;
 };
@@ -113,7 +135,7 @@ const InteractiveWhiteboardCanvas = forwardRef<
     containerScale,
     elements,
     isClearing,
-    onViewModifiedChange,
+    onViewChange,
     readyHintText,
     readyText,
   },
@@ -145,12 +167,9 @@ const InteractiveWhiteboardCanvas = forwardRef<
     [canvasWidth, canvasHeight, containerWidth, containerHeight, containerScale],
   );
 
-  const resetView = useCallback((animate: boolean) => {
-    setIsPanning(false);
+  // Ease the next transform change (button zoom / reset), not wheel or drag.
+  const animateNextView = useCallback((animate: boolean) => {
     setIsResetting(animate);
-    setViewZoom(1);
-    setPanX(0);
-    setPanY(0);
 
     if (resetTimerRef.current) {
       window.clearTimeout(resetTimerRef.current);
@@ -167,18 +186,51 @@ const InteractiveWhiteboardCanvas = forwardRef<
     }, 250);
   }, []);
 
+  const resetView = useCallback(
+    (animate: boolean) => {
+      setIsPanning(false);
+      animateNextView(animate);
+      setViewZoom(1);
+      setPanX(0);
+      setPanY(0);
+    },
+    [animateNextView],
+  );
+
+  // Zoom around the card centre: with the focal point at the centre the wheel
+  // math leaves pan unchanged, so only the pan bound needs re-clamping.
+  const zoomBy = useCallback(
+    (factor: number) => {
+      if (elements.length === 0 || !Number.isFinite(factor) || factor <= 0) {
+        return;
+      }
+      const nextZoom = clampZoom(viewZoom * factor);
+      if (nextZoom === viewZoom) {
+        return;
+      }
+      const clamped = clampPan(panX, panY, nextZoom);
+      animateNextView(true);
+      setViewZoom(nextZoom);
+      setPanX(clamped.x);
+      setPanY(clamped.y);
+    },
+    [animateNextView, clampPan, elements.length, panX, panY, viewZoom],
+  );
+
   useImperativeHandle(
     ref,
     () => ({
       resetView: () => resetView(true),
+      zoomBy,
+      fit: () => resetView(true),
     }),
-    [resetView],
+    [resetView, zoomBy],
   );
 
-  // Notify parent when view modified state changes
+  // Notify parent when the zoom level or modified state changes
   useEffect(() => {
-    onViewModifiedChange?.(isViewModified);
-  }, [isViewModified, onViewModifiedChange]);
+    onViewChange?.({ zoom: viewZoom, modified: isViewModified });
+  }, [viewZoom, isViewModified, onViewChange]);
 
   // Always-on drag/pan — no toggle needed
   const handlePointerDown = useCallback(
@@ -239,7 +291,7 @@ const InteractiveWhiteboardCanvas = forwardRef<
       const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
 
       setViewZoom((prevZoom) => {
-        const newZoom = Math.min(5, Math.max(0.2, prevZoom * zoomFactor));
+        const newZoom = clampZoom(prevZoom * zoomFactor);
 
         // Adjust pan to keep the point under the cursor stationary
         const rect = el.getBoundingClientRect();
@@ -314,6 +366,7 @@ const InteractiveWhiteboardCanvas = forwardRef<
   const canvasScreenX = (containerWidth - canvasWidth * totalScale) / 2 + panX * totalScale;
   const canvasScreenY = (containerHeight - canvasHeight * totalScale) / 2 + panY * totalScale;
   const canvasTransform = `translate(${canvasScreenX}px, ${canvasScreenY}px) scale(${totalScale})`;
+  const showReady = elements.length === 0 && !isClearing;
 
   return (
     /* Viewport — fills workspace, handles pointer events, no clipping */
@@ -331,7 +384,7 @@ const InteractiveWhiteboardCanvas = forwardRef<
     >
       {/* Bounded canvas — white background, positioned and scaled. No overflow-hidden so elements can spill into transparent space. */}
       <div
-        className="absolute bg-white shadow-2xl rounded-lg border border-gray-200 dark:border-gray-600"
+        className="absolute rounded-[10px] border border-line bg-white shadow-[0_10px_30px_-12px_rgba(0,0,0,0.15)]"
         style={{
           width: canvasWidth,
           height: canvasHeight,
@@ -342,27 +395,6 @@ const InteractiveWhiteboardCanvas = forwardRef<
           transition: isResetting ? 'transform 0.25s ease-out' : undefined,
         }}
       >
-        {/* Empty state placeholder */}
-        <AnimatePresence>
-          {elements.length === 0 && !isClearing && (
-            <motion.div
-              key="placeholder"
-              initial={{ opacity: 0 }}
-              animate={{
-                opacity: 1,
-                transition: { delay: 0.25, duration: 0.4 },
-              }}
-              exit={{ opacity: 0, transition: { duration: 0.15 } }}
-              className="absolute inset-0 flex items-center justify-center"
-            >
-              <div className="text-center text-gray-400">
-                <p className="text-lg font-medium">{readyText}</p>
-                <p className="text-sm mt-1">{readyHintText}</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Content layer — elements rendered at their raw coordinates */}
         <div className="absolute inset-0">
           <AnimatePresence mode="popLayout">
@@ -378,6 +410,41 @@ const InteractiveWhiteboardCanvas = forwardRef<
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Empty state — screen-size chrome laid over the sheet, so its type does
+          not scale with the fitted sheet or the zoom level. The sheet is white
+          in both themes, so dark mode keeps light-sheet text colours. */}
+      <AnimatePresence>
+        {showReady && (
+          <motion.div
+            key="placeholder"
+            data-testid="whiteboard-ready"
+            initial={{ opacity: 0 }}
+            animate={{
+              opacity: 1,
+              transition: { delay: 0.25, duration: 0.4 },
+            }}
+            exit={{ opacity: 0, transition: { duration: 0.15 } }}
+            className="absolute flex flex-col items-center justify-center gap-2 px-4 text-center pointer-events-none"
+            style={{
+              left: canvasScreenX,
+              top: canvasScreenY,
+              width: canvasWidth * totalScale,
+              height: canvasHeight * totalScale,
+            }}
+          >
+            <span className="mb-1 flex size-11 items-center justify-center rounded-[14px] bg-accent-soft text-primary-5">
+              <PencilLine className="size-[22px]" aria-hidden="true" />
+            </span>
+            <p className="m-0 text-[15px] font-semibold text-fg-secondary dark:text-neutral-700">
+              {readyText}
+            </p>
+            <p className="m-0 text-[13px] text-fg-tertiary dark:text-neutral-500">
+              {readyHintText}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 });
@@ -387,11 +454,11 @@ const InteractiveWhiteboardCanvas = forwardRef<
  */
 export type WhiteboardCanvasProps = {
   whiteboard?: Whiteboard | null;
-  onViewModifiedChange?: (modified: boolean) => void;
+  onViewChange?: (view: WhiteboardViewState) => void;
 };
 
 export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, WhiteboardCanvasProps>(
-  function WhiteboardCanvas({ whiteboard, onViewModifiedChange }, ref) {
+  function WhiteboardCanvas({ whiteboard, onViewChange }, ref) {
     const { t } = useI18n();
     const isClearing = useCanvasStore.use.whiteboardClearing();
     const containerRef = useRef<HTMLDivElement>(null);
@@ -446,7 +513,7 @@ export const WhiteboardCanvas = forwardRef<WhiteboardCanvasHandle, WhiteboardCan
           containerScale={containerScale}
           elements={elements}
           isClearing={isClearing}
-          onViewModifiedChange={onViewModifiedChange}
+          onViewChange={onViewChange}
           readyHintText={t('whiteboard.readyHint')}
           readyText={t('whiteboard.ready')}
         />

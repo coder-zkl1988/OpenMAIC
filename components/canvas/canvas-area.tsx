@@ -1,14 +1,20 @@
 'use client';
 
-import { useCallback, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode, type Ref } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play } from 'lucide-react';
+import {
+  GraduationCap,
+  ListChecks,
+  Loader2,
+  MousePointerClick,
+  Play,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SceneRenderer } from '@/components/stage/scene-renderer';
 import { SceneProvider } from '@/lib/contexts/scene-context';
 import { Whiteboard } from '@/components/whiteboard';
-import { CanvasToolbar } from '@/components/canvas/canvas-toolbar';
-import type { CanvasToolbarProps } from '@/components/canvas/canvas-toolbar';
 import type { Scene, StageMode } from '@/lib/types/stage';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { ClassroomCompletePageConnected } from '@/components/scene-renderers/classroom-complete';
@@ -17,11 +23,27 @@ import { useInWorkbenchPanel } from '@/lib/workbench/panel-context';
 import type { PPTElement } from '@openmaic/dsl';
 import type { WhiteboardElementReference } from '@/lib/types/chat';
 import { SlideElementPickOverlay } from '@/components/canvas/slide-element-pick-overlay';
+import {
+  CAPTION_HEIGHT,
+  CHIP_BOARD_EXTRA_HEIGHT,
+  STAGE_GAP,
+  StageColumn,
+} from '@/components/classroom/stage-column';
+import { useCanvasStore } from '@/lib/store/canvas';
 
-interface CanvasAreaProps extends CanvasToolbarProps {
+interface CanvasAreaProps {
   readonly currentScene: Scene | null;
   readonly mode: StageMode;
-  readonly hideToolbar?: boolean;
+  readonly engineState: 'idle' | 'playing' | 'paused';
+  /** A Q&A / discussion owns the slide: no click-to-play, no play hint */
+  readonly isLiveSession?: boolean;
+  readonly whiteboardOpen: boolean;
+  readonly onPlayPause: () => void;
+  /** The docked slide (PiP) was clicked: back to the slide */
+  readonly onWhiteboardClose: () => void;
+  /** 1-based page of the current scene, for the PiP's 课件 · 第 N 页 badge */
+  readonly pageNumber?: number;
+  readonly isPresenting?: boolean;
   readonly isPendingScene?: boolean;
   readonly isCourseComplete?: boolean;
   readonly isGenerationFailed?: boolean;
@@ -33,32 +55,37 @@ interface CanvasAreaProps extends CanvasToolbarProps {
   readonly onPickWhiteboardElement?: (element: PPTElement) => void;
   readonly onPickElement?: (element: PPTElement) => void;
   readonly onCancelElementPick?: () => void;
+  /** The caption strip under the slide (the shell decides when it shows) */
+  readonly caption?: ReactNode;
+  /**
+   * The stacked layouts (TabletPortrait / ClassroomPhone.dc.html): the stage
+   * sizes itself from the classroom's width (a full-width 16:9 slide plus the
+   * caption) instead of filling its host, so the interaction section below
+   * gets the rest. `phone` also swaps the board PiP for the 返回课件 chip.
+   */
+  readonly stacked?: 'stacked' | 'phone';
 }
+
+/** The stacked stage's insets: TabletPortrait 16 / 12, ClassroomPhone 12 / 8 */
+const STACKED_INSETS = {
+  stacked: { x: 16, bottom: 12 },
+  phone: { x: 12, bottom: 8 },
+} as const;
+/** Inset of the slim frame (interactive scenes, the workbench pane) */
+const FRAME_INSET = 8;
+/** The stage never takes more than this share of a short (landscape) screen */
+const STACKED_MAX_HEIGHT = '60dvh';
 
 export function CanvasArea({
   currentScene,
-  currentSceneIndex,
-  scenesCount,
   mode,
   engineState,
   isLiveSession,
-  isSoftClosing,
-  softCloseDeadline,
   whiteboardOpen,
-  sidebarCollapsed,
-  chatCollapsed,
-  onToggleSidebar,
-  onToggleChat,
-  onPrevSlide,
-  onNextSlide,
   onPlayPause,
   onWhiteboardClose,
+  pageNumber,
   isPresenting,
-  onTogglePresentation,
-  showStopDiscussion,
-  onStopDiscussion,
-  onContinueDiscussion,
-  hideToolbar,
   isPendingScene,
   isCourseComplete,
   isGenerationFailed,
@@ -69,16 +96,31 @@ export function CanvasArea({
   onPickElement,
   onPickWhiteboardElement,
   onCancelElementPick,
+  caption,
+  stacked,
 }: CanvasAreaProps) {
   const { t } = useI18n();
   const inWorkbenchPanel = useInWorkbenchPanel();
+  const isInteractive = currentScene?.type === 'interactive';
+  // The course-complete page adapts its own layout to the height it gets
+  // (compact below FULL_MIN, full above FULL_SAFE), so it takes the whole slot
+  // instead of a width-driven 16:9 box
+  const showCompletePage = !!isPendingScene && !currentScene && !!isCourseComplete;
+  // The standalone classroom lays the slide and its caption out as one column
+  // (Classroom.dc.html); a workbench pane and fullscreen keep the slim frame
+  const stageColumn = !isInteractive && !inWorkbenchPanel && !isPresenting;
   const showControls = mode === 'playback' && !whiteboardOpen;
-  const showPlayHint =
-    showControls &&
-    engineState !== 'playing' &&
-    currentScene?.type === 'slide' &&
-    !isLiveSession &&
-    !isPendingScene;
+  const sceneRef = useRef<HTMLDivElement>(null);
+
+  // The slide stays mounted while the board has its slot: a playing video
+  // pauses rather than keep playing (with sound) in the PiP, and clearing
+  // playingVideoElementId releases a play_video the engine is waiting on
+  useEffect(() => {
+    if (!whiteboardOpen) return;
+    const canvas = useCanvasStore.getState();
+    if (canvas.playingVideoElementId) canvas.pauseVideo();
+    sceneRef.current?.querySelectorAll('video').forEach((video) => video.pause());
+  }, [whiteboardOpen]);
 
   const handleSlideClick = useCallback(
     (e: React.MouseEvent) => {
@@ -104,257 +146,323 @@ export function CanvasArea({
     [showControls, isLiveSession, onPlayPause, currentScene?.type],
   );
 
-  return (
-    <div className="w-full h-full flex flex-col bg-gray-50 dark:bg-gray-900 group/canvas">
-      {/* Slide area — takes remaining space */}
-      <div
+  const board = (
+    <SceneProvider>
+      <Whiteboard
+        isOpen={whiteboardOpen}
+        elementPickActive={elementPickActive && whiteboardOpen}
+        whiteboardElementReference={whiteboardElementReference}
+        onPickElement={onPickWhiteboardElement}
+        onCancelElementPick={onCancelElementPick}
+      />
+    </SceneProvider>
+  );
+
+  const renderScene = ({ docked }: { readonly docked: boolean }) => {
+    // Held until a docked slide is back at full size (it is inert meanwhile)
+    const sceneControls = showControls && !docked;
+    const showPlayHint =
+      sceneControls &&
+      engineState !== 'playing' &&
+      currentScene?.type === 'slide' &&
+      !isLiveSession &&
+      !isPendingScene;
+
+    return (
+      <StageViewport
+        fill={isInteractive || showCompletePage}
         className={cn(
-          'flex-1 min-h-0 relative overflow-hidden flex items-center justify-center p-2 transition-colors duration-500',
-          currentScene?.type === 'interactive'
-            ? 'bg-blue-50/30 dark:bg-blue-900/10'
-            : 'bg-gray-50/30 dark:bg-gray-900/30',
+          'bg-card overflow-hidden relative',
+          sceneControls && !isLiveSession && currentScene?.type === 'slide' && 'cursor-pointer',
+          isInteractive
+            ? cn(SCENE_TRANSITION, INTERACTIVE_FRAME)
+            : currentScene?.type === 'slide'
+              ? // A docked slide clips to the PiP's real 10px corners (the stage
+                // column scales the radius up as it scales the slide down) and,
+                // as on the artboard, drops its shadow under the PiP's own ring
+                cn(
+                  'rounded-[var(--stage-scene-radius,10px)] [transition:box-shadow_700ms,background-color_700ms,border-radius_550ms_cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none',
+                  docked ? 'shadow-none' : SLIDE_SHADOW,
+                )
+              : cn(SCENE_TRANSITION, 'rounded-[10px]', SLIDE_SHADOW),
         )}
+        onClick={handleSlideClick}
+        contentRef={sceneRef}
       >
-        <StageViewport
-          workbench={inWorkbenchPanel}
-          interactive={currentScene?.type === 'interactive'}
-          className={cn(
-            'bg-white dark:bg-gray-800 shadow-2xl rounded-lg overflow-hidden relative transition-all duration-700',
-            showControls && !isLiveSession && currentScene?.type === 'slide' && 'cursor-pointer',
-            currentScene?.type === 'interactive'
-              ? 'shadow-blue-200/50 dark:shadow-blue-900/50 ring-1 ring-blue-900/5 dark:ring-blue-500/10'
-              : 'shadow-gray-200/50 dark:shadow-gray-800/50 ring-1 ring-gray-950/5 dark:ring-white/5',
-          )}
-          onClick={handleSlideClick}
-        >
-          {/* Whiteboard Layer */}
-          <div className="absolute inset-0 z-[110] pointer-events-none">
+        {/* Scene Content — a slide stays mounted while it is docked; an interactive
+            scene gives its pooled iframe up (it would paint over the board) and
+            takes it back, without a reload, once the slide slot is its own again */}
+        {currentScene && !(isInteractive && docked) && (
+          <div className="absolute inset-0">
             <SceneProvider>
-              <Whiteboard
-                isOpen={whiteboardOpen}
-                onClose={onWhiteboardClose}
-                elementPickActive={elementPickActive && whiteboardOpen}
-                whiteboardElementReference={whiteboardElementReference}
-                onPickElement={onPickWhiteboardElement}
-                onCancelElementPick={onCancelElementPick}
-              />
+              <SceneRenderer scene={currentScene} mode={mode} />
             </SceneProvider>
           </div>
+        )}
 
-          {/* Scene Content */}
-          {currentScene && !whiteboardOpen && (
-            <div className="absolute inset-0">
-              <SceneProvider>
-                <SceneRenderer scene={currentScene} mode={mode} />
-              </SceneProvider>
-            </div>
+        {elementPickActive &&
+          !docked &&
+          onPickElement &&
+          onCancelElementPick &&
+          currentScene?.type === 'slide' &&
+          currentScene.content.type === 'slide' && (
+            <SlideElementPickOverlay
+              scene={currentScene}
+              scopeRef={sceneRef}
+              onPick={onPickElement}
+              onCancel={onCancelElementPick}
+            />
           )}
 
-          {elementPickActive &&
-            !whiteboardOpen &&
-            onPickElement &&
-            onCancelElementPick &&
-            currentScene?.type === 'slide' &&
-            currentScene.content.type === 'slide' && (
-              <SlideElementPickOverlay
-                scene={currentScene}
-                onPick={onPickElement}
-                onCancel={onCancelElementPick}
-              />
-            )}
-
-          {/* Pending Scene Loading / Completion Overlay */}
-          <AnimatePresence>
-            {isPendingScene && !currentScene && isCourseComplete && (
-              <motion.div
-                key="course-complete"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-                className="absolute inset-0"
-              >
-                <ClassroomCompletePageConnected />
-              </motion.div>
-            )}
-            {isPendingScene && !currentScene && !isCourseComplete && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="absolute inset-0 z-[105] flex flex-col items-center justify-center bg-white dark:bg-gray-800"
-              >
-                {isGenerationFailed || isGenerationInterrupted ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
-                      <svg
-                        className="w-6 h-6 text-red-400 dark:text-red-500"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={1.5}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-                        />
-                      </svg>
-                    </div>
-                    <span className="text-sm text-red-500 dark:text-red-400 font-medium">
-                      {isGenerationInterrupted
-                        ? t('stage.generationInterrupted')
-                        : t('stage.generationFailed')}
-                    </span>
-                    {onRetryGeneration && !isGenerationInterrupted && (
-                      <button
-                        onClick={onRetryGeneration}
-                        className="mt-1 px-4 py-1.5 text-xs font-medium rounded-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors active:scale-95"
-                      >
-                        {t('generation.retryScene')}
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-4">
-                    {/* Spinner */}
-                    <div className="relative w-12 h-12">
-                      <div className="absolute inset-0 rounded-full border-2 border-gray-100 dark:border-gray-700" />
-                      <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-purple-500 dark:border-t-purple-400 animate-spin" />
-                    </div>
-                    {/* Text */}
-                    <motion.span
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2, duration: 0.3 }}
-                      className="text-sm text-gray-400 dark:text-gray-500 font-medium"
+        {/* Pending Scene Loading / Completion Overlay */}
+        <AnimatePresence>
+          {showCompletePage && (
+            <motion.div
+              key="course-complete"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="absolute inset-0"
+            >
+              <ClassroomCompletePageConnected />
+            </motion.div>
+          )}
+          {isPendingScene && !currentScene && !isCourseComplete && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+              className="absolute inset-0 z-[105] flex flex-col items-center justify-center bg-white dark:bg-gray-800"
+            >
+              {isGenerationFailed || isGenerationInterrupted ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
+                    <svg
+                      className="w-6 h-6 text-red-400 dark:text-red-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
                     >
-                      {t('stage.generatingNextPage')}
-                    </motion.span>
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+                      />
+                    </svg>
                   </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Scene Number Badge */}
-          {currentScene && (
-            <div className="absolute top-4 right-4 text-gray-200 dark:text-gray-700 font-black text-4xl opacity-50 pointer-events-none select-none mix-blend-multiply dark:mix-blend-screen">
-              {(currentSceneIndex + 1).toString().padStart(2, '0')}
-            </div>
+                  <span className="text-sm text-red-500 dark:text-red-400 font-medium">
+                    {isGenerationInterrupted
+                      ? t('stage.generationInterrupted')
+                      : t('stage.generationFailed')}
+                  </span>
+                  {onRetryGeneration && !isGenerationInterrupted && (
+                    <button
+                      onClick={onRetryGeneration}
+                      className="mt-1 px-4 py-1.5 text-xs font-medium rounded-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors active:scale-95"
+                    >
+                      {t('generation.retryScene')}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-4">
+                  {/* Spinner */}
+                  <div className="relative w-12 h-12">
+                    <div className="absolute inset-0 rounded-full border-2 border-gray-100 dark:border-gray-700" />
+                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-purple-500 dark:border-t-purple-400 animate-spin" />
+                  </div>
+                  {/* Text */}
+                  <motion.span
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2, duration: 0.3 }}
+                    className="text-sm text-gray-400 dark:text-gray-500 font-medium"
+                  >
+                    {t('stage.generatingNextPage')}
+                  </motion.span>
+                </div>
+              )}
+            </motion.div>
           )}
+        </AnimatePresence>
 
-          {/* Play hint — breathing button when idle or paused (slides only) */}
-          <AnimatePresence>
-            {showPlayHint && (
+        {/* Play hint — breathing button when idle or paused (slides only); the
+              control bar's play button is the labelled control */}
+        <AnimatePresence>
+          {showPlayHint && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="absolute inset-0 z-[102] flex items-center justify-center pointer-events-none"
+            >
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="absolute inset-0 z-[102] flex items-center justify-center pointer-events-none"
+                data-testid="play-hint"
+                className="opacity-50 group-hover/canvas:opacity-100 transition-opacity duration-300 pointer-events-auto cursor-pointer"
+                exit={{ pointerEvents: 'none' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPlayPause();
+                }}
               >
                 <motion.div
-                  className="opacity-50 group-hover/canvas:opacity-100 transition-opacity duration-300 pointer-events-auto cursor-pointer"
-                  exit={{ pointerEvents: 'none' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onPlayPause();
+                  initial={{ scale: 0.85 }}
+                  animate={{ scale: [1, 1.06] }}
+                  exit={{ scale: 1.15, opacity: 0 }}
+                  transition={{
+                    default: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
+                    scale: {
+                      repeat: Infinity,
+                      repeatType: 'mirror',
+                      duration: 1,
+                      ease: 'easeInOut',
+                    },
                   }}
+                  className="w-20 h-20 rounded-full bg-white/95 dark:bg-gray-800/95 flex items-center justify-center shadow-[0_4px_30px_rgba(147,51,234,0.15),inset_0_0_0_1px_rgba(233,213,255,0.5)] dark:shadow-[0_4px_30px_rgba(147,51,234,0.3),inset_0_0_0_1px_rgba(126,34,206,0.3)]"
+                  style={{ willChange: 'transform' }}
                 >
-                  <motion.div
-                    initial={{ scale: 0.85 }}
-                    animate={{ scale: [1, 1.06] }}
-                    exit={{ scale: 1.15, opacity: 0 }}
-                    transition={{
-                      default: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
-                      scale: {
-                        repeat: Infinity,
-                        repeatType: 'mirror',
-                        duration: 1,
-                        ease: 'easeInOut',
-                      },
-                    }}
-                    className="w-20 h-20 rounded-full bg-white/95 dark:bg-gray-800/95 flex items-center justify-center shadow-[0_4px_30px_rgba(147,51,234,0.15),inset_0_0_0_1px_rgba(233,213,255,0.5)] dark:shadow-[0_4px_30px_rgba(147,51,234,0.3),inset_0_0_0_1px_rgba(126,34,206,0.3)]"
-                    style={{ willChange: 'transform' }}
-                  >
-                    <Play className="w-7 h-7 text-purple-600 dark:text-purple-400 fill-purple-600/90 dark:fill-purple-400/90 ml-0.5" />
-                  </motion.div>
+                  <Play className="w-7 h-7 text-purple-600 dark:text-purple-400 fill-purple-600/90 dark:fill-purple-400/90 ml-0.5" />
                 </motion.div>
               </motion.div>
-            )}
-          </AnimatePresence>
-        </StageViewport>
-      </div>
-
-      {/* ── Canvas Toolbar — in document flow, only when not merged into roundtable ── */}
-      {!hideToolbar && (
-        <CanvasToolbar
-          className={cn(
-            'shrink-0 h-9 px-2',
-            'bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl',
-            'border-t border-gray-200/40 dark:border-gray-700/40',
+            </motion.div>
           )}
-          currentSceneIndex={currentSceneIndex}
-          scenesCount={scenesCount}
-          engineState={engineState}
-          isLiveSession={isLiveSession}
-          isSoftClosing={isSoftClosing}
-          softCloseDeadline={softCloseDeadline}
-          whiteboardOpen={whiteboardOpen}
-          sidebarCollapsed={sidebarCollapsed}
-          chatCollapsed={chatCollapsed}
-          onToggleSidebar={onToggleSidebar}
-          onToggleChat={onToggleChat}
-          onPrevSlide={onPrevSlide}
-          onNextSlide={onNextSlide}
-          onPlayPause={onPlayPause}
-          onWhiteboardClose={onWhiteboardClose}
-          isPresenting={isPresenting}
-          onTogglePresentation={onTogglePresentation}
-          showStopDiscussion={showStopDiscussion}
-          onStopDiscussion={onStopDiscussion}
-          onContinueDiscussion={onContinueDiscussion}
-        />
+        </AnimatePresence>
+      </StageViewport>
+    );
+  };
+
+  // Stacked: the slide's 16:9 at the classroom's full width (100cqw of the
+  // `classroom` container) less the insets, plus the caption row and the
+  // inset below; on a phone the board's extra chrome while it is open
+  const pipMode = stacked === 'phone' ? 'chip' : 'dock';
+  const stackedHeight = (() => {
+    if (!stacked) return undefined;
+    const inset = stageColumn
+      ? { x: STACKED_INSETS[stacked].x, y: STACKED_INSETS[stacked].bottom }
+      : { x: FRAME_INSET, y: FRAME_INSET * 2 };
+    const extra =
+      inset.y +
+      (caption ? CAPTION_HEIGHT + STAGE_GAP : 0) +
+      (pipMode === 'chip' && whiteboardOpen ? CHIP_BOARD_EXTRA_HEIGHT : 0);
+    return `min(calc((100cqw - ${inset.x * 2}px) * 9 / 16 + ${extra}px), ${STACKED_MAX_HEIGHT})`;
+  })();
+
+  return (
+    <div
+      className={cn(
+        'w-full flex flex-col items-center bg-page group/canvas',
+        !stacked && 'h-full',
+        stageColumn
+          ? stacked === 'phone'
+            ? 'px-3 pt-0 pb-2'
+            : stacked
+              ? 'px-4 pt-0 pb-3'
+              : // TabletLandscape.dc.html seats the slide right under the header
+                'px-4 pt-1 pb-4 @max-desktop/classroom:pt-0'
+          : 'p-2',
+        isInteractive && 'bg-blue-50/30 dark:bg-blue-900/10',
       )}
+      style={stackedHeight ? { height: stackedHeight } : undefined}
+    >
+      <StageColumn
+        className={cn(stageColumn && 'max-w-[1280px]')}
+        // Clip an interactive scene's shadow at its own slot, not the column's:
+        // the PiP, its focus ring and the board card's ring stay whole
+        sceneClassName={cn(isInteractive && 'overflow-hidden')}
+        boardOpen={whiteboardOpen}
+        pipKind={currentScene?.type === 'slide' ? 'slide' : 'card'}
+        pipCard={<PipSceneCard scene={currentScene} isCourseComplete={!!isCourseComplete} />}
+        pageNumber={pageNumber ?? (currentScene?.order ?? 0) + 1}
+        // A click on the PiP while it fades out must not reopen the board
+        onReturn={() => {
+          if (whiteboardOpen) onWhiteboardClose();
+        }}
+        renderScene={renderScene}
+        board={board}
+        caption={caption}
+        floatingPip={!caption && !!isPresenting}
+        pipMode={pipMode}
+      />
+    </div>
+  );
+}
+
+const SCENE_TRANSITION = 'transition-[box-shadow,background-color] duration-700';
+const INTERACTIVE_FRAME =
+  'rounded-lg shadow-2xl shadow-blue-200/50 dark:shadow-blue-900/50 ring-1 ring-blue-900/5 dark:ring-blue-500/10';
+const SLIDE_SHADOW =
+  'shadow-[0_25px_50px_-12px_rgba(229,231,235,0.6),0_0_0_1px_rgba(3,7,18,0.06)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.06)]';
+
+const PIP_SCENE_ICONS: Partial<Record<Scene['type'], LucideIcon>> = {
+  quiz: ListChecks,
+  interactive: MousePointerClick,
+  pbl: Users,
+};
+
+/** What the PiP shows for a scene that is not a slide (it does not shrink live) */
+function PipSceneCard({
+  scene,
+  isCourseComplete,
+}: {
+  readonly scene: Scene | null;
+  readonly isCourseComplete: boolean;
+}) {
+  const { t } = useI18n();
+  const Icon = scene
+    ? (PIP_SCENE_ICONS[scene.type] ?? ListChecks)
+    : isCourseComplete
+      ? GraduationCap
+      : Loader2;
+  const title = scene
+    ? scene.title || t(`edit.sceneType.${scene.type}`)
+    : isCourseComplete
+      ? t('stage.courseComplete')
+      : t('stage.generatingNextPage');
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 bg-subtle px-4 pb-5 text-center">
+      <Icon
+        className={cn(
+          'size-5 shrink-0 text-icon-muted',
+          Icon === Loader2 && 'motion-safe:animate-spin',
+        )}
+        aria-hidden="true"
+      />
+      <span className="line-clamp-2 text-xs font-semibold text-fg-secondary">{title}</span>
     </div>
   );
 }
 
 function StageViewport({
-  workbench,
-  interactive,
+  fill,
   className,
   onClick,
+  contentRef,
   children,
 }: {
-  readonly workbench: boolean;
-  readonly interactive: boolean;
+  /** Take the whole slot (interactive scenes, the course-complete page) */
+  readonly fill: boolean;
   readonly className?: string;
   readonly onClick?: (event: React.MouseEvent) => void;
+  /** The box the scene renders in (its media, the slide picker's scope) */
+  readonly contentRef?: Ref<HTMLDivElement>;
   readonly children: ReactNode;
 }) {
-  if (interactive) {
+  if (fill) {
     return (
-      <div className={cn('h-full w-full', className)} onClick={onClick}>
+      <div ref={contentRef} className={cn('h-full w-full', className)} onClick={onClick}>
         {children}
       </div>
     );
   }
-  if (!workbench) {
-    return (
-      <div
-        className={cn('aspect-[16/9] h-full max-h-full max-w-full', className)}
-        onClick={onClick}
-      >
-        {children}
-      </div>
-    );
-  }
+  // Contain-fit 16:9 in whatever the slot leaves (the caption below, a
+  // workbench pane's width): never height-driven, so the slide cannot overflow
   return (
     <ContainBox fit="contain" className={className}>
-      <div className="relative h-full w-full" onClick={onClick}>
+      <div ref={contentRef} className="relative h-full w-full" onClick={onClick}>
         {children}
       </div>
     </ContainBox>

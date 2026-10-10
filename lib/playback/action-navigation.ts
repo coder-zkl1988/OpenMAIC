@@ -59,14 +59,18 @@ export function getSpeechVisualCueStartIndex(
   return start;
 }
 
-export function canReconstructPrefixForAction(
+/**
+ * Whether every action before `actionIndex` can be rebuilt, so playback can
+ * start fresh at that action. The target's own type does not matter: it has
+ * not run yet.
+ */
+export function canReconstructPrefixBeforeAction(
   actions: readonly Action[],
   actionIndex: number,
 ): boolean {
   if (!Number.isInteger(actionIndex) || actionIndex < 0 || actionIndex >= actions.length) {
     return false;
   }
-  if (actions[actionIndex]?.type !== 'speech') return false;
 
   for (let i = 0; i < actionIndex; i++) {
     if (isUnsafePlaybackNavigationAction(actions[i])) {
@@ -76,12 +80,30 @@ export function canReconstructPrefixForAction(
   return true;
 }
 
+export function canReconstructPrefixForAction(
+  actions: readonly Action[],
+  actionIndex: number,
+): boolean {
+  return (
+    actions[actionIndex]?.type === 'speech' &&
+    canReconstructPrefixBeforeAction(actions, actionIndex)
+  );
+}
+
+/**
+ * Jumps target speech lines. `atBoundary` also accepts any other action that
+ * playback had reached but not started (a raised hand answered just before it).
+ */
 export function canJumpWithinReconstructablePrefix(
   actions: readonly Action[],
   currentActionIndex: number | null | undefined,
   targetActionIndex: number,
+  options: { atBoundary?: boolean } = {},
 ): boolean {
-  if (!canReconstructPrefixForAction(actions, targetActionIndex)) return false;
+  const canReconstructTarget = options.atBoundary
+    ? canReconstructPrefixBeforeAction
+    : canReconstructPrefixForAction;
+  if (!canReconstructTarget(actions, targetActionIndex)) return false;
   const currentLimit = Math.min(actions.length, Math.max(0, currentActionIndex ?? 0));
   for (let i = 0; i < currentLimit; i++) {
     if (isUnsafePlaybackNavigationAction(actions[i])) {

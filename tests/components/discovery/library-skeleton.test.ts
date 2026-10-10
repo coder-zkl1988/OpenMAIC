@@ -35,7 +35,7 @@ describe('LibrarySkeleton', () => {
     ]);
   });
 
-  it('uses the loaded grid and the cards’ 16:9 thumbnail and title row', () => {
+  it('uses the loaded grid and the cards’ 16:9 thumbnail and title / meta row', () => {
     const host = render();
     const grid = host.querySelector('[data-library-skeleton] > div')!;
     // The classes of the loaded course grid in app/page.tsx.
@@ -43,9 +43,22 @@ describe('LibrarySkeleton', () => {
     for (const tile of host.querySelectorAll('[data-skeleton-tile]')) {
       const [thumbnail, row] = [...tile.children];
       expect(thumbnail!.className).toContain('aspect-[16/9] rounded-2xl');
-      expect(row!.className).toBe('mt-2.5 px-1 flex items-center gap-2');
-      expect(row!.querySelector('p')!.className).toContain('font-medium text-[15px]');
+      // The ClassroomCard / FolderCard info row: a one-line title (15px/22px),
+      // the 12px/18px meta line 2px under it, and the 32px ⋯ slot.
+      expect(row!.className).toBe('mt-2.5 pl-1 flex items-start gap-1');
+      const [text, menuSlot] = [...row!.children];
+      const [title, meta] = [...text!.querySelectorAll('p')];
+      expect(title!.className).toContain('text-[15px] leading-[22px] font-medium');
+      expect(meta!.className).toContain('mt-0.5 text-xs leading-[18px]');
+      expect(menuSlot!.className).toBe('size-8 shrink-0');
       expect(tile.querySelector('.animate-pulse')).not.toBeNull();
     }
+  });
+
+  it('draws course tiles on white with the cards’ hairline ring', () => {
+    const host = render();
+    const course = host.querySelector('[data-skeleton-tile="course"]')!;
+    expect(course.firstElementChild!.className).toContain('bg-white ring-1 ring-line');
+    expect(course.querySelector('[data-thumbnail-state="loading"]')).not.toBeNull();
   });
 });

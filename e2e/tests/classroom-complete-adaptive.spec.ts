@@ -97,16 +97,18 @@ test.describe('Classroom complete adaptive layout', () => {
     const classroom = new ClassroomPage(page);
     const classroomId = STAGE_ID;
 
-    // The completed document offers the completion slot (N/N + 1).
+    // The completed document offers the completion slot (N/N + 1). The control
+    // bar's counter is localized ("Page 1 / 4", "第 1 / 4 页"): match the numbers.
     await classroom.goto(classroomId);
     await classroom.waitForLoaded();
-    await expect(page.getByText('1/4', { exact: true })).toBeVisible({ timeout: 10_000 });
+    const pageCounter = classroom.pageCounter;
+    await expect(pageCounter).toHaveText(ClassroomPage.pageCounterText(1, 4), { timeout: 10_000 });
 
     // Advance past the last (3rd) scene into the completion slot.
     const nextScene = page.getByRole('button', { name: 'Next scene' });
-    for (const pageNumber of ['2/4', '3/4', '4/4']) {
+    for (const pageNumber of [2, 3, 4]) {
       await nextScene.click();
-      await expect(page.getByText(pageNumber, { exact: true })).toBeVisible();
+      await expect(pageCounter).toHaveText(ClassroomPage.pageCounterText(pageNumber, 4));
     }
     const complete = page.locator('section[aria-label="Course complete"]');
     await expect(complete).toBeVisible();
@@ -125,7 +127,10 @@ test.describe('Classroom complete adaptive layout', () => {
     });
     expect(trophyTopOk).toBe(true);
 
-    // Tall viewport: the full layout comes back (hysteresis re-expand).
+    // Tall viewport: the full layout comes back (hysteresis re-expand). Slides
+    // contain-fit a width-driven 16:9 box, but the completion page takes the
+    // whole stage slot, so its height follows the viewport even with the scene
+    // sidebar and the interaction panel open (the v6 defaults).
     await page.setViewportSize({ width: 1280, height: 1300 });
     await expect.poll(() => trophyWidth(page)).toBeGreaterThanOrEqual(200);
 

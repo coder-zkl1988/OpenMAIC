@@ -7,7 +7,8 @@
     "errorPrefix": "Ошибка: ",
     "loadingClassroom": "Загрузка класса...",
     "retry": "Повторить",
-    "close": "Закрыть"
+    "close": "Закрыть",
+    "switchLanguage": "Сменить язык"
   },
   "home": {
     "slogan": "Generative Learning in Multi-Agent Interactive Classroom",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "Взаимодействие на уроке",
+    "collapsePanel": "Свернуть панель взаимодействия",
+    "conversationLog": "История разговора",
+    "softCloseCountdown": {
+      "qa": "Вопросы завершатся через {{seconds}} с, затем лекция продолжится",
+      "discussion": "Обсуждение завершится через {{seconds}} с, затем лекция продолжится"
+    },
+    "actionTag": {
+      "group": "Действия на доске",
+      "spotlight": "Подсветка",
+      "laser": "Лазерная указка",
+      "play_video": "Воспроизвести видео",
+      "discussion": "Обсудить",
+      "wb_open": "Доска · Открыть",
+      "wb_close": "Доска · Закрыть",
+      "wb_clear": "Доска · Очистить",
+      "wb_delete": "Доска · Удалить",
+      "wb_draw_text": "Доска · Текст",
+      "wb_draw_shape": "Доска · Фигура",
+      "wb_draw_chart": "Доска · Диаграмма",
+      "wb_draw_latex": "Доска · Формула",
+      "wb_draw_table": "Доска · Таблица",
+      "wb_draw_line": "Доска · Линия",
+      "wb_draw_code": "Доска · Код",
+      "wb_edit_code": "Доска · Изменить код"
+    },
     "lecture": "Лекция",
     "noConversations": "Нет диалогов",
     "startConversation": "Введите сообщение, чтобы начать диалог",
-    "noMessages": "Пока нет сообщений",
-    "ended": "завершено",
     "unknown": "Неизвестно",
-    "stopDiscussion": "Завершить обсуждение",
-    "endQA": "Завершить вопросы и ответы",
     "softClosing": "Продолжить обсуждение",
     "error": {
       "emptyAgentResponses": "Агенты вернули пустые ответы; обсуждение остановлено. Попробуйте ещё раз или проверьте настройки модели.",
-      "streamInterrupted": "Поток данных неожиданно прервался; обсуждение не завершено. Попробуйте ещё раз."
+      "streamInterrupted": "Поток данных неожиданно прервался; обсуждение не завершено. Попробуйте ещё раз.",
+      "modelBusy": "Сервис модели сейчас перегружен. Отправьте сообщение позже или выберите доступную модель в настройках моделей."
     },
     "elementReference": {
       "whiteboardChanged": "Элемент доски изменился или больше недоступен. Выберите его заново или удалите ссылку перед отправкой.",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "Заметки",
-      "chat": "Чат"
+      "chat": "Взаимодействие",
+      "scenes": "Сцены"
     },
     "lectureNotes": {
       "empty": "Заметки появятся здесь после воспроизведения лекции",
@@ -264,7 +289,7 @@
     },
     "badge": {
       "qa": "Вопросы",
-      "discussion": "ДИСКУС",
+      "discussion": "Обсуждение",
       "lecture": "ЛЕКЦ"
     }
   },
@@ -310,8 +335,8 @@
     "discussion": "Обсуждение",
     "join": "Присоединиться",
     "skip": "Пропустить",
-    "pause": "Пауза",
-    "resume": "Продолжить"
+    "offerLabel": "{{name}} предлагает начать обсуждение",
+    "autoSkipHint": "Автоматический пропуск через {{seconds}} с"
   },
   "voice": {
     "startListening": "Голосовой ввод",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "Текущая сцена",
+    "collapseSceneSidebar": "Свернуть список сцен",
+    "expandSceneSidebar": "Развернуть список сцен",
+    "sceneRail": "Сцены",
+    "sceneRailItem": "Страница {{n}}: {{title}}",
+    "headerMenu": "Ещё: язык, тема, настройки, режим Pro, экспорт",
+    "exportMenu": "Экспорт",
+    "expandInteractionPanel": "Развернуть панель взаимодействия",
+    "pageCounter": "Страница {{current}} / {{total}}",
+    "previousScene": "Предыдущая сцена",
+    "nextScene": "Следующая сцена",
+    "play": "Воспроизвести",
+    "pause": "Пауза",
+    "pauseAnswer": "Приостановить ответ",
+    "resumeAnswer": "Продолжить ответ",
+    "playbackSpeed": "Скорость воспроизведения",
+    "playbackMenu": "Ещё: скорость воспроизведения, громкость, автовоспроизведение",
+    "mute": "Выключить звук",
+    "unmute": "Включить звук",
+    "volume": "Громкость",
+    "whiteboardToggle": "Доска",
+    "caption": {
+      "lecturing": "Объясняет",
+      "paused": "Пауза — ваша очередь говорить",
+      "answering": "Отвечает",
+      "discussing": "Обсуждают",
+      "resumeIn": "Урок продолжится через {{seconds}} с",
+      "answeringYou": "Отвечает на ваш вопрос",
+      "drawing": "Пишет на доске"
+    },
+    "pip": {
+      "badge": "Слайды · страница {{n}}",
+      "return": "Вернуться к слайдам",
+      "returnLabel": "Вернуться к слайдам (страница {{n}})"
+    },
+    "composer": {
+      "raiseHand": "Поднять руку",
+      "raiseHandHint": "Поднять руку: преподаватель вызовет вас после этой фразы",
+      "raiseHandInLiveSession": "Во время вопросов можно говорить сразу",
+      "lowerHand": "Опустить",
+      "lowerHandHint": "Опустить руку и отозвать вопрос",
+      "cuePlaceholder": "Скажите или введите вопрос",
+      "cueStatus": "Ваша очередь · урок на паузе",
+      "send": "Отправить",
+      "cancelRecording": "Отменить запись",
+      "handRaised": "Рука поднята · вас вызовут после этой фразы",
+      "handRaisedStep": "Рука поднята · вас вызовут после этого шага",
+      "raisedPlaceholder": "Можно заранее написать вопрос...",
+      "followUpPlaceholder": "Задайте уточняющий вопрос...",
+      "referencePlaceholder": "{{type}}: что вы хотите об этом спросить?",
+      "handLowered": "Рука опущена"
+    },
+    "handRaise": {
+      "raised": "Вы подняли руку",
+      "aheadOfDiscussion": "Вы подняли руку — обсуждение {{name}} будет после вас",
+      "calledBy": "{{name}} просит вас высказаться",
+      "pendingQuestion": "В очереди · ответ после этой фразы",
+      "pendingQuestionStep": "В очереди · ответ после этого шага"
+    },
+    "participants": {
+      "label": "Участники",
+      "online": "В сети: {{count}}",
+      "speaking": "Говорит",
+      "wantsToSpeak": "Хочет высказаться",
+      "handRaised": "Рука поднята",
+      "more": "Ещё участников: {{count}}"
+    },
     "generating": "Генерация...",
     "paused": "Пауза",
     "generationFailed": "Ошибка генерации",
@@ -765,18 +856,26 @@
     "title": "Интерактивная доска",
     "open": "Открыть доску",
     "clear": "Очистить доску",
-    "minimize": "Свернуть доску",
+    "minimize": "Вернуться к слайдам",
     "ready": "Доска готова",
     "readyHint": "Элементы появятся здесь, когда AI их добавит",
     "clearSuccess": "Доска очищена",
     "clearError": "Ошибка очистки доски: ",
-    "resetView": "Сбросить вид",
     "restoreError": "Ошибка восстановления доски: ",
     "history": "История",
     "restore": "Восстановить",
     "noHistory": "Истории пока нет",
     "restored": "Доска восстановлена",
-    "elementCount": "{{count}} элементов"
+    "elementCount": "{{count}} элементов",
+    "drawing": "{{name}} пишет на доске",
+    "drawingAnonymous": "Запись на доске",
+    "zoom": "Масштаб",
+    "zoomIn": "Увеличить",
+    "zoomOut": "Уменьшить",
+    "fit": "По размеру окна",
+    "historyWithCount": "История ({{count}})",
+    "undo": "Отменить",
+    "restoreSnapshot": "Восстановить #{{index}}"
   },
   "quiz": {
     "title": "Тест",
@@ -816,21 +915,22 @@
     "noSpeechDetected": "Речь не обнаружена, попробуйте ещё раз",
     "discussionEnded": "Обсуждение завершено",
     "qaEnded": "Вопросы и ответы завершены",
-    "softClosing": "Продолжить обсуждение",
     "thinking": "Размышляет",
-    "yourTurn": "Ваша очередь",
     "stopDiscussion": "Завершить обсуждение",
+    "stopQA": "Завершить вопросы",
     "autoPlay": "Автовоспр.",
     "autoPlayOff": "Остановить",
     "speed": "Скорость",
-    "previousLine": "Previous line",
-    "nextLine": "Next line",
-    "lineProgress": "Line {{current}} / {{total}}",
     "voiceInput": "Голосовой ввод",
     "voiceInputDisabled": "Голосовой ввод отключён",
     "textInput": "Текстовый ввод",
     "stopRecording": "Остановить запись",
-    "startRecording": "Начать запись"
+    "handRaisedQueued": "Рука поднята — учитель ответит после этой фразы",
+    "handRaisedQueuedStep": "Рука поднята — учитель ответит после этого шага",
+    "handRaisedDelivered": "Ваш вопрос отправлен",
+    "cancelQueuedQuestion": "Отменить",
+    "queuedQuestionNotSent": "Вопрос с поднятой рукой не отправлен",
+    "queuedQuestionRestored": "Неотправленный вопрос восстановлен"
   },
   "pbl": {
     "emptyProject": "PBL-проект ещё не создан. Создайте его через генерацию курса.",
@@ -1066,7 +1166,6 @@
     "yesterday": "Вчера",
     "daysAgo": "дн. назад",
     "slides": "слайдов",
-    "nameCopied": "Название скопировано",
     "deleteConfirmTitle": "Удалить",
     "delete": "Удалить",
     "rename": "Переименовать",
@@ -1091,8 +1190,10 @@
     "deleteFolderTitle": "Удалить папку «{{name}}»",
     "deleteFolderEmptyDesc": "Эта папка пуста. Удаление необратимо.",
     "deleteFolderUngroupDesc": "Курсы остаются в «Мои курсы», просто без папки.",
+    "moreActions": "Ещё действия",
+    "openCourse": "Открыть курс {{name}}",
+    "openFolder": "Открыть папку {{name}}",
     "moveToFolder": "Переместить в папку",
-    "moveToFolderLabel": "Переместить в папку",
     "ungrouped": "Без папки",
     "searchResults": "Результаты поиска",
     "folderCreateFailed": "Не удалось создать папку",
@@ -1122,6 +1223,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Ошибка генерации, попробуйте снова",
     "requirementPlaceholder": "Расскажите, что вы хотите изучить, например:\n\"Научи меня Python с нуля за 30 минут\"\n\"Объясни преобразование Фурье на доске\"\n\"Как играть в настольную игру Авалон\"",
+    "requirementLabel": "Что вы хотите изучить",
     "requirementRequired": "Пожалуйста, укажите требования к курсу",
     "fileTooLarge": "Файл слишком большой. Выберите файл до 50 МБ",
     "courseMaterialCountLimit": "Можно загрузить до 5 файлов материалов курса",
@@ -1256,6 +1358,7 @@
     "language": "Язык",
     "languageDesc": "Выберите язык интерфейса",
     "theme": "Тема",
+    "themeWithCurrent": "Тема: {{theme}}",
     "themeDesc": "Выберите тему оформления (Светлая/Тёмная/Системная)",
     "themeOptions": {
       "light": "Светлая",
@@ -2308,12 +2411,14 @@
     "title": "Профиль",
     "defaultNickname": "Ученик",
     "chooseAvatar": "Выбрать аватар",
+    "avatarOption": "Аватар {{n}}",
     "uploadAvatar": "Загрузить",
     "bioPlaceholder": "Расскажите о себе — AI-учитель адаптирует уроки под ваш уровень...",
     "avatarHint": "Ваш аватар будет отображаться в обсуждениях и чатах",
     "fileTooLarge": "Изображение слишком большое — выберите файл до 5 МБ",
     "invalidFileType": "Пожалуйста, выберите файл изображения",
-    "editTooltip": "Нажмите для редактирования профиля"
+    "editTooltip": "Нажмите для редактирования профиля",
+    "edit": "Редактировать профиль"
   },
   "media": {
     "imageCapability": "Генерация изображений",

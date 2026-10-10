@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from 'zustand/vanilla';
 import type { PPTCodeElement, WbEditCodeAction } from '@openmaic/dsl';
 import { ActionEngine } from '@/lib/action/engine';
@@ -8,7 +8,7 @@ import { useCanvasStore } from '@/lib/store/canvas';
 const initialWhiteboardOpen = useCanvasStore.getState().whiteboardOpen;
 
 afterEach(() => {
-  useCanvasStore.setState({ whiteboardOpen: initialWhiteboardOpen });
+  useCanvasStore.setState({ whiteboardOpen: initialWhiteboardOpen, whiteboardDrawing: null });
 });
 
 async function replaceLines(lineIds: string[] | undefined, content = 'X') {
@@ -112,4 +112,60 @@ describe('ActionEngine wb_edit_code replace_lines', () => {
       expect(edited).toEqual(code);
     },
   );
+});
+
+describe('ActionEngine wb_edit_code drawing marker', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('marks the whiteboard as being drawn on for the edit, then clears it', async () => {
+    vi.useFakeTimers();
+    useCanvasStore.setState({ whiteboardOpen: true, whiteboardDrawing: null });
+    const code: PPTCodeElement = {
+      id: 'code-1',
+      type: 'code',
+      language: 'typescript',
+      lines: [{ id: 'A', content: 'A' }],
+      fileName: 'example.ts',
+      showLineNumbers: true,
+      fontSize: 14,
+      left: 100,
+      top: 120,
+      width: 500,
+      height: 300,
+      rotate: 0,
+    };
+    const store = createStore<ReturnType<StageStore['getState']>>(() => ({
+      stage: {
+        id: 'stage-1',
+        name: 'Code editing',
+        createdAt: 1,
+        updatedAt: 1,
+        whiteboard: [{ id: 'wb-1', viewportSize: 1000, viewportRatio: 9 / 16, elements: [code] }],
+      },
+      scenes: [],
+      currentSceneId: null,
+      mode: 'edit',
+    }));
+
+    const execution = new ActionEngine(store).execute(
+      {
+        id: 'edit-1',
+        type: 'wb_edit_code',
+        elementId: code.id,
+        operation: 'replace_lines',
+        lineIds: ['A'],
+        content: 'B',
+      },
+      { agentId: 'teacher-1' },
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useCanvasStore.getState().whiteboardDrawing).toEqual({ agentId: 'teacher-1' });
+
+    await vi.runAllTimersAsync();
+    await execution;
+    expect(useCanvasStore.getState().whiteboardDrawing).toBeNull();
+  });
 });

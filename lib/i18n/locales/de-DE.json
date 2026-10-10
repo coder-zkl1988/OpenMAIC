@@ -7,7 +7,8 @@
     "errorPrefix": "Fehler: ",
     "loadingClassroom": "Klassenzimmer wird geladen ...",
     "retry": "Erneut versuchen",
-    "close": "Schließen"
+    "close": "Schließen",
+    "switchLanguage": "Sprache wechseln"
   },
   "home": {
     "slogan": "Generatives Lernen im interaktiven Lernraum mit mehreren KI-Agenten",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "Unterrichtsinteraktion",
+    "collapsePanel": "Interaktionsbereich einklappen",
+    "conversationLog": "Gesprächsverlauf",
+    "softCloseCountdown": {
+      "qa": "Die Fragerunde endet in {{seconds}} s, dann geht der Vortrag weiter",
+      "discussion": "Die Diskussion endet in {{seconds}} s, dann geht der Vortrag weiter"
+    },
+    "actionTag": {
+      "group": "Tafelaktionen",
+      "spotlight": "Spotlight",
+      "laser": "Laserpointer",
+      "play_video": "Video abspielen",
+      "discussion": "Diskutieren",
+      "wb_open": "Tafel · Öffnen",
+      "wb_close": "Tafel · Schließen",
+      "wb_clear": "Tafel · Leeren",
+      "wb_delete": "Tafel · Entfernen",
+      "wb_draw_text": "Tafel · Text",
+      "wb_draw_shape": "Tafel · Form",
+      "wb_draw_chart": "Tafel · Diagramm",
+      "wb_draw_latex": "Tafel · Formel",
+      "wb_draw_table": "Tafel · Tabelle",
+      "wb_draw_line": "Tafel · Linie",
+      "wb_draw_code": "Tafel · Code",
+      "wb_edit_code": "Tafel · Code bearbeiten"
+    },
     "lecture": "Vortrag",
     "noConversations": "Keine Chats",
     "startConversation": "Gib unten eine Nachricht ein, um den Chat zu beginnen",
-    "noMessages": "Noch keine Nachrichten",
-    "ended": "beendet",
     "unknown": "Unbekannt",
-    "stopDiscussion": "Diskussion beenden",
-    "endQA": "Fragerunde beenden",
     "softClosing": "Diskussion fortsetzen",
     "error": {
       "emptyAgentResponses": "Die Agenten haben leere Antworten zurückgegeben; die Diskussion wurde beendet. Versuche es erneut oder prüfe deine Modelleinstellungen.",
-      "streamInterrupted": "Der Stream wurde unerwartet beendet; die Diskussion konnte nicht abgeschlossen werden. Versuche es erneut."
+      "streamInterrupted": "Der Stream wurde unerwartet beendet; die Diskussion konnte nicht abgeschlossen werden. Versuche es erneut.",
+      "modelBusy": "Der Modelldienst ist derzeit überlastet. Sende deine Nachricht später erneut oder wähle in den Modelleinstellungen ein verfügbares Modell."
     },
     "elementReference": {
       "whiteboardChanged": "Das referenzierte Whiteboard-Element wurde geändert oder ist nicht mehr verfügbar. Wählen Sie es erneut aus oder entfernen Sie die Referenz vor dem Senden.",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "Notizen",
-      "chat": "Chat"
+      "chat": "Interaktion",
+      "scenes": "Szenen"
     },
     "lectureNotes": {
       "empty": "Nach der Wiedergabe des Vortrags erscheinen hier Notizen",
@@ -264,7 +289,7 @@
     },
     "badge": {
       "qa": "Q&A",
-      "discussion": "Disk.",
+      "discussion": "Diskussion",
       "lecture": "Vortrag"
     }
   },
@@ -310,8 +335,8 @@
     "discussion": "Diskussion",
     "join": "Mitmachen",
     "skip": "Überspringen",
-    "pause": "Pausieren",
-    "resume": "Fortsetzen"
+    "offerLabel": "{{name}} möchte eine Diskussion beginnen",
+    "autoSkipHint": "Wird in {{seconds}} Sekunden automatisch übersprungen"
   },
   "voice": {
     "startListening": "Spracheingabe",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "Aktuelle Szene",
+    "collapseSceneSidebar": "Szenenliste einklappen",
+    "expandSceneSidebar": "Szenenliste ausklappen",
+    "sceneRail": "Szenen",
+    "sceneRailItem": "Seite {{n}}: {{title}}",
+    "headerMenu": "Mehr: Sprache, Design, Einstellungen, Pro-Modus, Export",
+    "exportMenu": "Exportieren",
+    "expandInteractionPanel": "Interaktionsbereich ausklappen",
+    "pageCounter": "Seite {{current}} / {{total}}",
+    "previousScene": "Vorherige Szene",
+    "nextScene": "Nächste Szene",
+    "play": "Abspielen",
+    "pause": "Pausieren",
+    "pauseAnswer": "Antwort pausieren",
+    "resumeAnswer": "Antwort fortsetzen",
+    "playbackSpeed": "Wiedergabegeschwindigkeit",
+    "playbackMenu": "Mehr: Wiedergabegeschwindigkeit, Lautstärke, automatische Wiedergabe",
+    "mute": "Stummschalten",
+    "unmute": "Stummschaltung aufheben",
+    "volume": "Lautstärke",
+    "whiteboardToggle": "Whiteboard",
+    "caption": {
+      "lecturing": "Erklärt",
+      "paused": "Pausiert – du bist dran",
+      "answering": "Antwortet",
+      "discussing": "Diskutiert",
+      "resumeIn": "Unterricht geht in {{seconds}} s weiter",
+      "answeringYou": "Beantwortet deine Frage",
+      "drawing": "Schreibt an die Tafel"
+    },
+    "pip": {
+      "badge": "Folien · Seite {{n}}",
+      "return": "Zurück zu den Folien",
+      "returnLabel": "Zurück zu den Folien (Seite {{n}})"
+    },
+    "composer": {
+      "raiseHand": "Melden",
+      "raiseHandHint": "Melden: Die Lehrkraft ruft dich nach diesem Satz auf",
+      "raiseHandInLiveSession": "Während der Fragerunde kannst du direkt sprechen",
+      "lowerHand": "Senken",
+      "lowerHandHint": "Hand senken und Frage zurückziehen",
+      "cuePlaceholder": "Frage sprechen oder eingeben",
+      "cueStatus": "Du bist dran · Unterricht pausiert",
+      "send": "Senden",
+      "cancelRecording": "Aufnahme abbrechen",
+      "handRaised": "Gemeldet · du bist nach diesem Satz dran",
+      "handRaisedStep": "Gemeldet · du bist nach diesem Schritt dran",
+      "raisedPlaceholder": "Du kannst deine Frage schon aufschreiben...",
+      "followUpPlaceholder": "Nachfrage stellen...",
+      "referencePlaceholder": "{{type}}: Was möchtest du dazu fragen?",
+      "handLowered": "Hand gesenkt"
+    },
+    "handRaise": {
+      "raised": "Du hast dich gemeldet",
+      "aheadOfDiscussion": "Du hast dich gemeldet – die Diskussion von {{name}} kommt nach dir",
+      "calledBy": "{{name}} bittet dich zu sprechen",
+      "pendingQuestion": "In der Warteschlange · Antwort nach diesem Satz",
+      "pendingQuestionStep": "In der Warteschlange · Antwort nach diesem Schritt"
+    },
+    "participants": {
+      "label": "Teilnehmende",
+      "online": "{{count}} online",
+      "speaking": "Spricht",
+      "wantsToSpeak": "Möchte sprechen",
+      "handRaised": "Meldet sich",
+      "more": "{{count}} weitere Teilnehmende"
+    },
     "generating": "Wird generiert...",
     "paused": "Pausiert",
     "generationFailed": "Generierung fehlgeschlagen",
@@ -765,18 +856,26 @@
     "title": "Interaktives Whiteboard",
     "open": "Whiteboard öffnen",
     "clear": "Whiteboard leeren",
-    "minimize": "Whiteboard minimieren",
+    "minimize": "Zurück zu den Folien",
     "ready": "Das Whiteboard ist bereit",
     "readyHint": "Elemente erscheinen hier, wenn die KI sie hinzufügt",
     "clearSuccess": "Whiteboard erfolgreich geleert",
     "clearError": "Whiteboard konnte nicht geleert werden: ",
-    "resetView": "Ansicht zurücksetzen",
     "restoreError": "Whiteboard konnte nicht wiederhergestellt werden: ",
     "history": "Verlauf",
     "restore": "Wiederherstellen",
     "noHistory": "Noch kein Verlauf",
     "restored": "Whiteboard wiederhergestellt",
-    "elementCount": "Elemente: {{count}}"
+    "elementCount": "Elemente: {{count}}",
+    "drawing": "{{name}} schreibt an die Tafel",
+    "drawingAnonymous": "Schreibt an die Tafel",
+    "zoom": "Zoom",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern",
+    "fit": "An Fenster anpassen",
+    "historyWithCount": "Verlauf ({{count}})",
+    "undo": "Rückgängig",
+    "restoreSnapshot": "#{{index}} wiederherstellen"
   },
   "quiz": {
     "title": "Quiz",
@@ -817,20 +916,21 @@
     "discussionEnded": "Diskussion beendet",
     "qaEnded": "Fragerunde beendet",
     "thinking": "Denkt nach",
-    "yourTurn": "Du bist dran",
     "stopDiscussion": "Diskussion beenden",
-    "softClosing": "Diskussion fortsetzen",
+    "stopQA": "Fragerunde beenden",
     "autoPlay": "Automatische Wiedergabe",
     "autoPlayOff": "Automatische Wiedergabe beenden",
     "speed": "Geschwindigkeit",
-    "previousLine": "Vorherige Zeile",
-    "nextLine": "Nächste Zeile",
-    "lineProgress": "Zeile {{current}} / {{total}}",
     "voiceInput": "Spracheingabe",
     "voiceInputDisabled": "Spracheingabe deaktiviert",
     "textInput": "Texteingabe",
     "stopRecording": "Aufnahme beenden",
-    "startRecording": "Aufnahme starten"
+    "handRaisedQueued": "Hand gehoben – die Lehrkraft antwortet nach diesem Satz",
+    "handRaisedQueuedStep": "Hand gehoben – die Lehrkraft antwortet nach diesem Schritt",
+    "handRaisedDelivered": "Deine Frage wurde gesendet",
+    "cancelQueuedQuestion": "Zurückziehen",
+    "queuedQuestionNotSent": "Deine Frage mit gehobener Hand wurde nicht gesendet",
+    "queuedQuestionRestored": "Deine nicht gesendete Frage wurde wiederhergestellt"
   },
   "pbl": {
     "emptyProject": "Das PBL-Projekt wurde noch nicht generiert. Erstelle es über die Kursgenerierung.",
@@ -1066,7 +1166,6 @@
     "yesterday": "Gestern",
     "daysAgo": "Tage her",
     "slides": "Folien",
-    "nameCopied": "Name kopiert",
     "deleteConfirmTitle": "Löschen",
     "delete": "Löschen",
     "rename": "Umbenennen",
@@ -1091,8 +1190,10 @@
     "deleteFolderTitle": "Ordner „{{name}}“ löschen",
     "deleteFolderEmptyDesc": "Dieser Ordner ist leer. Das Löschen kann nicht rückgängig gemacht werden.",
     "deleteFolderUngroupDesc": "Die Kurse bleiben unter „Meine Kurse“, werden aber aus dem Ordner entfernt.",
+    "moreActions": "Weitere Aktionen",
+    "openCourse": "Kurs {{name}} öffnen",
+    "openFolder": "Ordner {{name}} öffnen",
     "moveToFolder": "In Ordner verschieben",
-    "moveToFolderLabel": "Verschieben nach …",
     "ungrouped": "Ohne Ordner",
     "searchResults": "Suchergebnisse",
     "folderCreateFailed": "Ordner konnte nicht erstellt werden",
@@ -1122,6 +1223,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Kurs konnte nicht erstellt werden. Bitte versuche es erneut.",
     "requirementPlaceholder": "Beschreibe, was du lernen möchtest, z. B.\n\"Bring mir Python in 30 Minuten von Grund auf bei\"\n\"Erkläre die Fourier-Transformation am Whiteboard\"\n\"Wie spielt man das Brettspiel Avalon?\"",
+    "requirementLabel": "Lernwunsch",
     "requirementRequired": "Bitte gib die Kursanforderungen ein",
     "fileTooLarge": "Die Datei ist zu groß. Wähle bitte eine Datei unter 50 MB aus.",
     "courseMaterialCountLimit": "Du kannst bis zu 5 Dateien als Kursmaterial hochladen",
@@ -1256,6 +1358,7 @@
     "language": "Sprache",
     "languageDesc": "Sprache der Benutzeroberfläche auswählen",
     "theme": "Design",
+    "themeWithCurrent": "Design: {{theme}}",
     "themeDesc": "Darstellungsmodus auswählen (Hell/Dunkel/System)",
     "themeOptions": {
       "light": "Hell",
@@ -2308,12 +2411,14 @@
     "title": "Profil",
     "defaultNickname": "Lerntalent",
     "chooseAvatar": "Avatar auswählen",
+    "avatarOption": "Avatar {{n}}",
     "uploadAvatar": "Hochladen",
     "bioPlaceholder": "Erzähl etwas über dich – so kann die KI-Lehrkraft den Unterricht auf dich zuschneiden…",
     "avatarHint": "Dein Avatar erscheint in Diskussionsrunden und Chats im Kurs",
     "fileTooLarge": "Das Bild ist zu groß – wähle bitte eines unter 5 MB",
     "invalidFileType": "Bitte wähle eine Bilddatei aus",
-    "editTooltip": "Zum Bearbeiten des Profils klicken"
+    "editTooltip": "Zum Bearbeiten des Profils klicken",
+    "edit": "Profil bearbeiten"
   },
   "media": {
     "imageCapability": "Bildgenerierung",

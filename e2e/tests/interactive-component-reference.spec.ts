@@ -182,7 +182,7 @@ test('the global courseware entry selects one scaled source-authored component a
   // playback document so its text-input shortcut receives the key event.
   await page.getByRole('heading', { name: 'Slider experiment' }).click();
   await page.keyboard.press('T');
-  const input = page.getByPlaceholder('Type your message...', { exact: true });
+  const input = page.getByTestId('classroom-composer').locator('textarea');
   await expect(input).toBeVisible();
   await input.fill('What is the authored value of this component?');
   await input.press('Enter');

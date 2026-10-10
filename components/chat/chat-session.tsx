@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useCallback, memo } from 'react';
+import { memo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { ChatSession, ChatMessageMetadata } from '@/lib/types/chat';
 import type { UIMessage } from 'ai';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { AvatarDisplay } from '@/components/ui/avatar-display';
-import { CircleStop, MessageCircleMore } from 'lucide-react';
-import { InlineActionTag } from './inline-action-tag';
-import { useUserProfileStore } from '@/lib/store/user-profile';
+import { CircleStop } from 'lucide-react';
+import { useAgentRegistry } from '@/lib/orchestration/registry/store';
+import { InlineActionTag, isWhiteboardAction } from './inline-action-tag';
 import { useSoftCloseCountdown } from './use-soft-close-countdown';
 
 /** Extended message part type covering standard + custom action parts */
@@ -30,10 +30,43 @@ interface ChatSessionProps {
   readonly onContinueSession?: (sessionId: string) => void;
 }
 
+type SenderRole = 'teacher' | 'assistant' | 'student';
+
 const AVATARS = {
   teacher: '/avatars/teacher.png',
   user: '/avatars/user.png',
 };
+
+/** Session badge colours (Classroom.dc.html): Q&A on the accent, 讨论 on warning */
+const SESSION_BADGE_STYLES: Record<string, string> = {
+  qa: 'bg-accent-soft text-accent-text',
+  discussion: 'bg-warning-soft text-warning',
+};
+
+/** Role chip colours next to an agent's name */
+const ROLE_CHIP_STYLES: Record<SenderRole, string> = {
+  teacher: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  assistant: 'bg-success-soft text-success',
+  student: 'bg-subtle text-icon',
+};
+
+function actionNameOf(part: MessagePart): string {
+  return part.actionName || part.type.replace('action-', '');
+}
+
+function LoadingDots() {
+  return (
+    <span className="flex h-[22px] items-center gap-1.5" aria-hidden="true">
+      {[0, 200, 400].map((delay) => (
+        <span
+          key={delay}
+          className="size-1.5 rounded-full bg-accent-text/70 animate-pulse"
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </span>
+  );
+}
 
 /**
  * MessageBubble — renders one message as a single chat bubble.
@@ -41,66 +74,46 @@ const AVATARS = {
  * Text is already paced by the StreamBuffer (30ms / 1 char) before it reaches
  * React state. No UI-layer animation is needed — we render parts directly.
  * Action badges only appear once the buffer's tick loop reaches them (after
- * all preceding text is fully revealed).
+ * all preceding text is fully revealed). Whiteboard actions are collected into
+ * a chip row under the bubble; other actions stay inline in the text.
  */
 const MessageBubble = memo(function MessageBubble({
   message,
   isUser,
-  isTeacher,
   isStreaming,
   isLastMessage,
   isActive,
+  isActiveBubble,
 }: {
   message: UIMessage<ChatMessageMetadata>;
   isUser: boolean;
-  isTeacher: boolean;
   isStreaming: boolean;
   isLastMessage: boolean;
   isActive: boolean;
+  isActiveBubble: boolean;
 }) {
+  const { t } = useI18n();
   const parts: MessagePart[] = (message.parts || []) as MessagePart[];
   const isLive = !!(isStreaming && isLastMessage);
 
-  // ── Determine renderable content ──
-  const hasContent = parts.some(
-    (p: MessagePart) => (p.type === 'text' && p.text) || p.type?.startsWith('action-'),
+  const isText = (p: MessagePart) => p.type === 'text' && !!p.text;
+  const isAction = (p: MessagePart) => !!p.type?.startsWith('action-');
+  const hasBubbleContent = parts.some(
+    (p) => isText(p) || (isAction(p) && !isWhiteboardAction(actionNameOf(p))),
   );
+  const boardParts = parts
+    .map((part, index) => ({ part, index }))
+    .filter(({ part }) => isAction(part) && isWhiteboardAction(actionNameOf(part)));
 
   // Loading dots (between agent_start and first text_delta)
-  if (!hasContent && isActive && message.role === 'assistant') {
+  if (!hasBubbleContent && boardParts.length === 0) {
+    if (!isActive || message.role !== 'assistant') return null;
     return (
-      <div className="flex gap-1.5 items-center py-1.5 px-1">
-        <span
-          className={cn(
-            'w-1.5 h-1.5 rounded-full animate-pulse',
-            isTeacher
-              ? 'bg-purple-400/70 dark:bg-purple-500/70'
-              : 'bg-indigo-400/70 dark:bg-indigo-500/70',
-          )}
-        />
-        <span
-          className={cn(
-            'w-1.5 h-1.5 rounded-full animate-pulse',
-            isTeacher
-              ? 'bg-purple-400/70 dark:bg-purple-500/70'
-              : 'bg-indigo-400/70 dark:bg-indigo-500/70',
-          )}
-          style={{ animationDelay: '200ms' }}
-        />
-        <span
-          className={cn(
-            'w-1.5 h-1.5 rounded-full animate-pulse',
-            isTeacher
-              ? 'bg-purple-400/70 dark:bg-purple-500/70'
-              : 'bg-indigo-400/70 dark:bg-indigo-500/70',
-          )}
-          style={{ animationDelay: '400ms' }}
-        />
+      <div className="w-fit rounded-[4px_14px_14px_14px] border border-line bg-background px-3 py-2">
+        <LoadingDots />
       </div>
     );
   }
-
-  if (!hasContent) return null;
 
   const lastTextIdx = parts.reduce(
     (acc: number, p: MessagePart, i: number) => (p.type === 'text' && p.text ? i : acc),
@@ -108,54 +121,76 @@ const MessageBubble = memo(function MessageBubble({
   );
 
   return (
-    <div
-      className={cn(
-        'inline-block px-2.5 py-1.5 rounded-xl text-[12px] leading-relaxed max-w-full text-left transition-shadow duration-300',
-        isUser
-          ? 'bg-gradient-to-br from-purple-600 to-purple-700 dark:from-purple-500 dark:to-purple-600 text-white rounded-tr-sm shadow-sm shadow-purple-300/30 dark:shadow-purple-900/50 ring-1 ring-purple-500/20'
-          : isTeacher
-            ? 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-100 dark:border-gray-700 rounded-tl-sm shadow-sm'
-            : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-900 dark:text-indigo-200 border border-indigo-100/50 dark:border-indigo-800/50 rounded-tl-sm',
+    <>
+      {hasBubbleContent && (
+        <div
+          className={cn(
+            'w-fit max-w-full px-3 py-2 text-left text-[14px] leading-[1.6] transition-[box-shadow,border-color] duration-300',
+            isUser
+              ? 'rounded-[14px_4px_14px_14px] bg-primary text-white'
+              : 'rounded-[4px_14px_14px_14px] border border-line bg-background text-fg',
+            isActiveBubble && !isUser && 'border-accent-line ring-2 ring-accent-soft',
+          )}
+        >
+          <span className="whitespace-pre-wrap break-words">
+            {parts.map((part: MessagePart, i: number) => {
+              if (part.type === 'text' || part.type === 'step-start') {
+                const text = part.type === 'text' ? part.text : '';
+                if (!text) return null;
+
+                const isLast = i === lastTextIdx;
+
+                return (
+                  <span key={`${message.id}-${i}`}>
+                    {text}
+                    {isLive && isLast && (
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current opacity-50 animate-pulse ml-1 align-middle" />
+                    )}
+                    {message.metadata?.interrupted && isLast && !isLive && (
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-danger ml-1 align-middle" />
+                    )}
+                  </span>
+                );
+              }
+
+              if (isAction(part) && !isWhiteboardAction(actionNameOf(part))) {
+                return (
+                  <InlineActionTag
+                    key={`${message.id}-action-${i}`}
+                    actionName={actionNameOf(part)}
+                    state={part.state || 'result'}
+                  />
+                );
+              }
+
+              return null;
+            })}
+          </span>
+        </div>
       )}
-    >
-      <span className="whitespace-pre-wrap break-words">
-        {parts.map((part: MessagePart, i: number) => {
-          if (part.type === 'text' || part.type === 'step-start') {
-            const text = part.type === 'text' ? part.text : '';
-            if (!text) return null;
 
-            const isLast = i === lastTextIdx;
-
-            return (
-              <span key={`${message.id}-${i}`}>
-                {text}
-                {isLive && isLast && (
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-current opacity-50 animate-pulse ml-1 align-middle" />
-                )}
-                {message.metadata?.interrupted && isLast && !isLive && (
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 ml-1 align-middle" />
-                )}
-              </span>
-            );
-          }
-
-          if (part.type?.startsWith('action-')) {
-            return (
-              <InlineActionTag
-                key={`${message.id}-action-${i}`}
-                actionName={part.actionName || part.type.replace('action-', '')}
-                state={part.state || 'result'}
-              />
-            );
-          }
-
-          return null;
-        })}
-      </span>
-    </div>
+      {boardParts.length > 0 && (
+        <div role="group" aria-label={t('chat.actionTag.group')} className="flex flex-wrap gap-1">
+          {boardParts.map(({ part, index }) => (
+            <InlineActionTag
+              key={`${message.id}-action-${index}`}
+              actionName={actionNameOf(part)}
+              state={part.state || 'result'}
+            />
+          ))}
+        </div>
+      )}
+    </>
   );
 });
 
+/**
+ * One Q&A / discussion session inside the flat conversation stream
+ * (Classroom.dc.html): a centred session badge, user bubbles on the right,
+ * agent rows (avatar, name, role chip, bubble) on the left, the persistent
+ * "问答已结束 / 讨论已结束" marker, and the soft-close row during the grace
+ * window. The stream owns scrolling; this component renders no scroll box.
+ */
 export function ChatSessionComponent({
   session,
   isActive,
@@ -165,223 +200,211 @@ export function ChatSessionComponent({
   onContinueSession,
 }: ChatSessionProps) {
   const { t } = useI18n();
-  const userProfileAvatar = useUserProfileStore((s) => s.avatar);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const activeBubbleRef = useRef<HTMLDivElement>(null);
   const isDiscussion = session.type === 'discussion';
   const isQA = session.type === 'qa';
-  const canEnd =
-    (isDiscussion || isQA) && (session.status === 'active' || session.status === 'soft-closing');
   const isEnded = session.status === 'completed' && (isDiscussion || isQA);
   const isSoftClosing = session.status === 'soft-closing' && (isDiscussion || isQA);
   const remainingSoftCloseSeconds = useSoftCloseCountdown(session.softCloseDeadline);
-
-  // Track whether user is at the bottom of the scroll container.
-  // When user scrolls up to read history, auto-scroll is suppressed.
-  const isAtBottomRef = useRef(true);
-  const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  }, []);
-
-  // Auto-scroll: smooth scroll when a NEW message arrives — always (new agent bubble should be visible)
-  const msgCount = session.messages.length;
-  useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      isAtBottomRef.current = true;
-    }
-  }, [msgCount]);
-
-  // Auto-scroll: rAF-throttled instant scroll as text grows — only when user is at bottom
-  const scrollRaf = useRef(0);
-  useEffect(() => {
-    if (!isAtBottomRef.current) return;
-    cancelAnimationFrame(scrollRaf.current);
-    scrollRaf.current = requestAnimationFrame(() => {
-      const el = scrollContainerRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
+  // Announce the grace window once, when it opens: the visible countdown ticks
+  // every second, and a live region around it would re-read the whole row each
+  // time. A new deadline (another soft-close) announces again.
+  const [softCloseAnnouncement, setSoftCloseAnnouncement] = useState<{
+    readonly deadline?: number;
+    readonly seconds: number;
+  } | null>(null);
+  if (
+    isSoftClosing &&
+    remainingSoftCloseSeconds !== undefined &&
+    softCloseAnnouncement?.deadline !== session.softCloseDeadline
+  ) {
+    setSoftCloseAnnouncement({
+      deadline: session.softCloseDeadline,
+      seconds: remainingSoftCloseSeconds,
     });
-  }, [session.messages]);
-
-  // Scroll to active bubble when it changes
-  useEffect(() => {
-    if (activeBubbleId && activeBubbleRef.current) {
-      activeBubbleRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-      });
-      isAtBottomRef.current = true;
-    }
-  }, [activeBubbleId]);
-
-  if (session.messages.length === 0 && !isActive) {
-    return (
-      <div className="h-20 flex items-center justify-center text-center px-2">
-        <p className="text-[10px] text-gray-400 dark:text-gray-500">{t('chat.noMessages')}</p>
-      </div>
-    );
   }
+  const getAgentConfig = (id: string) => useAgentRegistry.getState().getAgent(id);
 
-  // Button text based on session type
-  const endButtonText = isDiscussion ? t('chat.stopDiscussion') : t('chat.endQA');
+  const senderName = (metadata: ChatMessageMetadata | undefined) => {
+    const agentId = metadata?.agentId;
+    if (agentId) {
+      const i18nName = t(`settings.agentNames.${agentId}`);
+      if (i18nName !== `settings.agentNames.${agentId}`) return i18nName;
+    }
+    return metadata?.senderName || t('chat.unknown');
+  };
+
+  const senderRole = (metadata: ChatMessageMetadata | undefined): SenderRole => {
+    if (metadata?.originalRole === 'teacher') return 'teacher';
+    const role = metadata?.agentId ? getAgentConfig(metadata.agentId)?.role : undefined;
+    return role === 'teacher' || role === 'assistant' ? role : 'student';
+  };
+
+  // The same action as the control bar's stop pill, so the same label
+  const endButtonText = isDiscussion ? t('roundtable.stopDiscussion') : t('roundtable.stopQA');
+  const softCloseCountdownKey = isDiscussion
+    ? 'chat.softCloseCountdown.discussion'
+    : 'chat.softCloseCountdown.qa';
+  const endedText = isDiscussion ? t('roundtable.discussionEnded') : t('roundtable.qaEnded');
 
   return (
-    <div className="flex flex-col">
-      {/* Messages */}
-      <div
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="space-y-1 overflow-y-auto scrollbar-hide"
-      >
-        {session.messages.map((message, msgIdx) => {
-          const isUser = message.metadata?.originalRole === 'user';
-          const isTeacher = message.metadata?.originalRole === 'teacher';
-          const avatar = isUser
-            ? userProfileAvatar || AVATARS.user
-            : message.metadata?.senderAvatar || AVATARS.teacher;
-          const isActiveBubble = activeBubbleId === message.id;
-          const isLastMessage = msgIdx === session.messages.length - 1;
+    <section
+      data-testid="chat-session"
+      data-session-type={session.type}
+      data-status={session.status}
+      className="flex flex-col gap-3"
+    >
+      {/* Session badge */}
+      {(isQA || isDiscussion) && (
+        <div className="flex justify-center">
+          <span
+            className={cn(
+              'inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold',
+              SESSION_BADGE_STYLES[session.type],
+            )}
+          >
+            {t(`chat.badge.${session.type}`)}
+          </span>
+        </div>
+      )}
 
+      {/* Messages */}
+      {session.messages.map((message, msgIdx) => {
+        const isUser = message.metadata?.originalRole === 'user';
+        const isActiveBubble = activeBubbleId === message.id;
+        const isLastMessage = msgIdx === session.messages.length - 1;
+        const bubble = (
+          <MessageBubble
+            message={message}
+            isUser={isUser}
+            isStreaming={!!isStreaming}
+            isLastMessage={isLastMessage}
+            isActive={isActive}
+            isActiveBubble={isActiveBubble}
+          />
+        );
+
+        if (isUser) {
           return (
             <motion.div
               key={message.id}
-              ref={isActiveBubble ? activeBubbleRef : undefined}
+              data-message-id={message.id}
               initial={{ opacity: 0, y: 4 }}
-              animate={
-                isActiveBubble
-                  ? {
-                      opacity: 1,
-                      y: 0,
-                      boxShadow: [
-                        '0 0 0 0 rgba(124, 58, 237, 0)',
-                        '0 0 20px 0 rgba(124, 58, 237, 0.15)',
-                        '0 0 8px 0 rgba(124, 58, 237, 0.08)',
-                      ],
-                    }
-                  : {
-                      opacity: 1,
-                      y: 0,
-                      boxShadow: '0 0 0 0 rgba(124, 58, 237, 0)',
-                    }
-              }
-              transition={
-                isActiveBubble
-                  ? {
-                      boxShadow: {
-                        duration: 2.5,
-                        repeat: Infinity,
-                        ease: 'easeInOut',
-                      },
-                      default: { duration: 0.3 },
-                    }
-                  : { duration: 0.3 }
-              }
-              className={cn(
-                'flex gap-2 px-1.5 py-1 rounded-lg border-l-[3px] border-l-transparent transition-[background-color,border-color] duration-300',
-                isUser && 'flex-row-reverse',
-                isActiveBubble &&
-                  'border-l-violet-500 dark:border-l-violet-400 bg-violet-50/50 dark:bg-violet-900/20',
-              )}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex justify-end"
             >
-              {/* Mini Avatar */}
-              <div className="w-5 h-5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0 mt-0.5 ring-1 ring-gray-200/50 dark:ring-gray-700/50">
-                <AvatarDisplay src={avatar} alt="avatar" className="text-xs" />
-              </div>
-
-              {/* Content */}
-              <div className={cn('flex-1 min-w-0', isUser && 'text-right')}>
-                <span
-                  className={cn(
-                    'text-[9px] font-bold uppercase tracking-wider block mb-0.5',
-                    isUser
-                      ? 'text-purple-500 dark:text-purple-400'
-                      : isTeacher
-                        ? 'text-purple-400 dark:text-purple-300'
-                        : 'text-indigo-400 dark:text-indigo-300',
-                  )}
-                >
-                  {(() => {
-                    const agentId = message.metadata?.agentId;
-                    if (agentId) {
-                      const i18nName = t(`settings.agentNames.${agentId}`);
-                      if (i18nName !== `settings.agentNames.${agentId}`) return i18nName;
-                    }
-                    return message.metadata?.senderName || t('chat.unknown');
-                  })()}
-                </span>
-
-                <MessageBubble
-                  message={message}
-                  isUser={isUser}
-                  isTeacher={isTeacher}
-                  isStreaming={!!isStreaming}
-                  isLastMessage={isLastMessage}
-                  isActive={isActive}
-                />
-              </div>
+              <div className="flex max-w-[78%] flex-col items-end">{bubble}</div>
             </motion.div>
           );
-        })}
+        }
 
-        {/* Session ended indicator */}
-        <AnimatePresence>
-          {isEnded && (
-            <motion.div
-              initial={{ opacity: 0, scaleX: 0 }}
-              animate={{ opacity: 1, scaleX: 1 }}
-              exit={{ opacity: 0, scaleX: 0 }}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-              className="mx-3 mt-2 mb-1 flex items-center gap-2"
-            >
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent" />
-              <span className="flex items-center gap-1 text-[9px] text-gray-400 dark:text-gray-500 font-medium">
-                <CircleStop className="w-2.5 h-2.5" />
-                {t('chat.ended')}
-              </span>
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent" />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        const role = senderRole(message.metadata);
+        return (
+          <motion.div
+            key={message.id}
+            data-message-id={message.id}
+            data-active={isActiveBubble || undefined}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-start gap-2"
+          >
+            <span className="size-7 shrink-0 overflow-hidden rounded-full bg-subtle ring-1 ring-line">
+              <AvatarDisplay
+                src={message.metadata?.senderAvatar || AVATARS.teacher}
+                alt=""
+                className="text-xs"
+              />
+            </span>
+            <div className="flex min-w-0 max-w-[85%] flex-col gap-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-xs font-semibold text-fg-secondary">
+                  {senderName(message.metadata)}
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 rounded-full px-1.5 text-[10px] font-semibold leading-4',
+                    ROLE_CHIP_STYLES[role],
+                  )}
+                >
+                  {t(`settings.agentRoles.${role}`)}
+                </span>
+              </div>
+              {bubble}
+            </div>
+          </motion.div>
+        );
+      })}
 
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Session controls for Q&A and Discussion */}
+      {/* Session ended marker — persistent, type-specific */}
       <AnimatePresence>
-        {canEnd && onEndSession && (
+        {isEnded && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-center justify-center gap-1 text-[11px] text-fg-tertiary"
+          >
+            <CircleStop className="size-[11px]" />
+            {endedText}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Always mounted, so the one-time soft-close announcement is read */}
+      {(isQA || isDiscussion) && (
+        <span role="status" className="sr-only">
+          {isSoftClosing && onEndSession && softCloseAnnouncement
+            ? t(softCloseCountdownKey, { seconds: softCloseAnnouncement.seconds })
+            : ''}
+        </span>
+      )}
+
+      {/* Soft-close row: the grace window before the session ends by itself
+        (HandRaiseFlow.dc.html step 4). The ticking copy is hidden from
+        assistive tech; the status above announces it once. */}
+      <AnimatePresence>
+        {isSoftClosing && onEndSession && (
           <motion.div
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 5 }}
-            className="mt-2 mx-2 flex flex-wrap items-center justify-center gap-1.5"
+            className="flex flex-col items-center gap-2 rounded-[14px] border border-line bg-background p-2.5"
           >
-            <button
-              onClick={() => onEndSession(session.id)}
-              className="h-7 bg-red-50/80 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200/60 dark:border-red-800/50 px-2.5 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-colors hover:bg-red-100 dark:hover:bg-red-900/35"
-            >
-              <CircleStop className="size-3" />
-              {endButtonText}
-            </button>
-            {isSoftClosing && onContinueSession && (
+            <span aria-hidden="true" className="text-center text-xs text-fg-secondary">
+              {t(softCloseCountdownKey, { seconds: remainingSoftCloseSeconds ?? 0 })}
+            </span>
+            <div className="flex flex-wrap justify-center gap-1.5">
               <button
-                onClick={() => onContinueSession(session.id)}
-                className="h-7 bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-700 px-2.5 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/25"
+                type="button"
+                onClick={() => onEndSession(session.id)}
+                className="flex h-8 items-center gap-1 rounded-lg border border-danger/30 bg-danger-soft px-2.5 text-xs font-semibold text-danger transition-colors hover:border-danger/50 cursor-pointer"
               >
-                <MessageCircleMore className="size-3" />
-                {t('chat.softClosing')}
-                {remainingSoftCloseSeconds !== undefined && (
-                  <span className="text-[9px] font-medium tabular-nums text-gray-400 dark:text-gray-500">
-                    {remainingSoftCloseSeconds}s
-                  </span>
-                )}
+                <CircleStop className="size-3" />
+                {endButtonText}
               </button>
-            )}
+              {onContinueSession && (
+                <button
+                  type="button"
+                  onClick={() => onContinueSession(session.id)}
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-accent-line bg-background px-2.5 text-xs font-semibold text-accent-text transition-colors hover:bg-accent-soft cursor-pointer"
+                >
+                  {t('chat.softClosing')}
+                  {remainingSoftCloseSeconds !== undefined && (
+                    <span
+                      aria-hidden="true"
+                      className="text-[11px] font-medium tabular-nums text-fg-tertiary"
+                    >
+                      {remainingSoftCloseSeconds}s
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </section>
   );
 }

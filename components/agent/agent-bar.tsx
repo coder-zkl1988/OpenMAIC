@@ -704,7 +704,7 @@ export function AgentBar() {
   const avatarRow = (
     <div className="flex items-center gap-1.5 shrink-0">
       {teacherAgent && (
-        <div className="size-8 rounded-full overflow-hidden ring-2 ring-blue-400/40 dark:ring-blue-500/30 shrink-0">
+        <div className="size-8 rounded-full overflow-hidden border-2 border-white ring-2 ring-blue-500/45 dark:border-background dark:ring-blue-500/40 shrink-0">
           <img
             src={teacherAgent.avatar}
             alt={getAgentName(teacherAgent)}
@@ -717,7 +717,7 @@ export function AgentBar() {
         <>
           <div className="flex -space-x-2">
             {agents.find((a) => a.role === 'assistant') && (
-              <div className="size-6 rounded-full overflow-hidden ring-[1.5px] ring-background">
+              <div className="size-6 rounded-full overflow-hidden border-[1.5px] border-white ring-1 ring-line dark:border-background">
                 <img
                   src={agents.find((a) => a.role === 'assistant')!.avatar}
                   alt=""
@@ -726,7 +726,7 @@ export function AgentBar() {
               </div>
             )}
           </div>
-          <Shuffle className="size-4 text-violet-400 dark:text-violet-500" />
+          <Shuffle aria-hidden="true" className="size-4 text-primary-5" />
         </>
       ) : (
         <>
@@ -735,7 +735,7 @@ export function AgentBar() {
               {nonTeacherSelected.slice(0, 4).map((agent) => (
                 <div
                   key={agent.id}
-                  className="size-6 rounded-full overflow-hidden ring-[1.5px] ring-background"
+                  className="size-6 rounded-full overflow-hidden border-[1.5px] border-white ring-1 ring-line dark:border-background"
                 >
                   <img
                     src={agent.avatar}
@@ -745,8 +745,8 @@ export function AgentBar() {
                 </div>
               ))}
               {nonTeacherSelected.length > 4 && (
-                <div className="size-6 rounded-full bg-muted ring-[1.5px] ring-background flex items-center justify-center">
-                  <span className="text-[9px] font-bold text-muted-foreground">
+                <div className="size-6 rounded-full bg-subtle border-[1.5px] border-white ring-1 ring-line dark:border-background flex items-center justify-center">
+                  <span className="text-[9px] font-bold text-fg-tertiary">
                     +{nonTeacherSelected.length - 4}
                   </span>
                 </div>
@@ -756,9 +756,12 @@ export function AgentBar() {
         </>
       )}
       {ttsEnabled ? (
-        <Volume2 className="size-3.5 text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors" />
+        <Volume2
+          aria-hidden="true"
+          className="size-3.5 text-icon-muted group-hover:text-icon transition-colors"
+        />
       ) : (
-        <VolumeX className="size-3.5 text-muted-foreground/30" />
+        <VolumeX aria-hidden="true" className="size-3.5 text-icon-muted/70" />
       )}
     </div>
   );
@@ -804,24 +807,35 @@ export function AgentBar() {
   };
 
   return (
-    <div ref={containerRef} className="relative w-96">
+    // Fills the width its host gives it (the home composer's header row lets
+    // it shrink from 384px); the popover below keeps its own 384px.
+    <div ref={containerRef} className="relative w-full">
       <Tooltip>
         <TooltipTrigger asChild>
           <button
+            type="button"
+            aria-label={t('agentBar.expandedTitle')}
+            aria-expanded={open}
             className={cn(
-              'group flex items-center gap-2 cursor-pointer rounded-full px-2.5 py-2 transition-all w-full',
-              'border border-border/50 text-muted-foreground/70 hover:text-foreground hover:bg-muted/60',
+              'group flex items-center gap-2 cursor-pointer rounded-full py-[5px] pl-3.5 pr-3 transition-all w-full',
+              'border border-line bg-background hover:bg-subtle',
             )}
             onClick={() => setOpen(!open)}
           >
-            <span className="text-xs text-muted-foreground/60 group-hover:text-muted-foreground transition-colors hidden sm:block font-medium flex-1 text-left truncate">
+            <span className="text-xs text-fg-tertiary group-hover:text-fg-secondary transition-colors hidden sm:block font-medium flex-1 min-w-0 text-left truncate">
               {open ? t('agentBar.expandedTitle') : t('agentBar.readyToLearn')}
             </span>
             {avatarRow}
             {open ? (
-              <ChevronUp className="size-3 text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors" />
+              <ChevronUp
+                aria-hidden="true"
+                className="size-3 shrink-0 text-icon-muted group-hover:text-icon transition-colors"
+              />
             ) : (
-              <ChevronDown className="size-3 text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors" />
+              <ChevronDown
+                aria-hidden="true"
+                className="size-3 shrink-0 text-icon-muted group-hover:text-icon transition-colors"
+              />
             )}
           </button>
         </TooltipTrigger>
@@ -839,7 +853,7 @@ export function AgentBar() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.97 }}
             transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-            className="absolute right-0 top-full mt-1 z-50 w-96"
+            className="absolute right-0 top-full mt-1 z-50 w-96 max-w-[calc(100vw-2rem)]"
           >
             <div className="rounded-2xl bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] shadow-[0_1px_8px_-2px_rgba(0,0,0,0.06)] dark:shadow-[0_1px_8px_-2px_rgba(0,0,0,0.3)] px-2 py-1.5">
               {/* Teacher — always visible */}

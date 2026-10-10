@@ -21,6 +21,15 @@
  *                                 ▲                    │
  *                                 │ resume / user msg  │
  *                                 └────────────────────┘
+ *
+ * A question sent while playing can wait for the current action to finish
+ * (queueUserInterrupt — a "raised hand"); processNext then delivers it at the
+ * next action boundary, entering live mode just like handleUserInterrupt.
+ *
+ * A hand can also go up without a question (raiseHand). At the boundary the
+ * engine pauses and calls the learner (onHandCalled) instead of entering live
+ * mode; the learner then speaks (handleUserInterrupt, resuming at the next
+ * action afterwards) or lowers the hand (lowerHand, which resumes at once).
  */
 
 import type { Scene } from '@/lib/types/stage';
@@ -32,6 +41,7 @@ import type {
   PlaybackSnapshot,
   TriggerEvent,
   Effect,
+  HandState,
 } from './types';
 import type { AudioPlayer } from '@/lib/utils/audio-player';
 import type { LegacySpeechAction } from '@/lib/types/action';
@@ -54,6 +64,16 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger('PlaybackEngine');
 
+/** What waits for the next action boundary: a question, or a bare hand */
+type QueuedInterrupt = { kind: 'question'; text: string } | { kind: 'hand' };
+
+/**
+ * Where a called hand stopped the lecture: 'boundary' after an action
+ * finished (nothing to replay), 'paused' with a line possibly cut off (it
+ * replays, as for any interrupt from pause), 'idle' with no lecture running.
+ */
+type HandCallPosition = 'boundary' | 'paused' | 'idle';
+
 export class PlaybackEngine {
   private scenes: Scene[] = [];
   private sceneIndex: number = 0;
@@ -64,6 +84,10 @@ export class PlaybackEngine {
   // Discussion state save
   private savedSceneIndex: number | null = null;
   private savedActionIndex: number | null = null;
+  // The lecture played its last action but a raised hand answered at the final
+  // boundary preempted its completion (onComplete), which continuePlayback
+  // runs. Outlives the Q&A's restore; cleared once it runs or the cursor moves.
+  private lectureCompletionPending: boolean = false;
 
   // Discussion topic state
   private currentTopicState: TopicState | null = null;
@@ -88,9 +112,22 @@ export class PlaybackEngine {
   private browserTTSChunkIndex: number = 0; // current chunk being spoken
   private browserTTSPausedChunks: string[] = []; // remaining chunks saved on pause (for cancel+re-speak)
   private speechTimerRemaining: number = 0; // remaining ms (set on pause)
+  private speechTimerTotal: number = 0; // full reading time of the line (for progress)
+  private browserTTSTotalChunks: number = 0; // chunk count of the whole line (for progress)
+  // What voices the line in flight once its play() settles: pre-generated
+  // audio, browser TTS or the reading timer. The audio element outlives a
+  // finished line, so hasActiveAudio() alone can't tell whose it is.
+  private speechSource: 'audio' | 'tts' | 'timer' | null = null;
   private playbackGeneration: number = 0;
   // Keep the cursor on speech for progress/persistence; defer its cues until playback starts.
   private pendingNavigationSpeechIndex: number | null = null;
+  // Question or bare hand raised mid-line; delivered at the next action boundary
+  private queued: QueuedInterrupt | null = null;
+  // A raised hand that has been called: the learner holds the floor
+  private handCall: HandCallPosition | null = null;
+  // The discussion a raised hand jumped ahead of. Kept so the card offered
+  // again is the same trigger (and agent) onHandCalled announced.
+  private deferredTrigger: TriggerEvent | null = null;
 
   constructor(
     scenes: Scene[],
@@ -121,6 +158,190 @@ export class PlaybackEngine {
     return this.savedSceneIndex !== null;
   }
 
+  /**
+   * Whether the lecture already played its last action — a raised hand
+   * answered at the final boundary — so resuming it only runs the completion
+   * branch. Unlike hasLectureInterruption it still holds after the Q&A ends
+   * (an exhausted cursor then means "Play completes", not "Play restarts").
+   */
+  hasPendingLectureCompletion(): boolean {
+    return this.lectureCompletionPending;
+  }
+
+  /**
+   * Raise a hand while the lecture plays: hold the question until the current
+   * action finishes, then deliver it through onUserInterrupt and resume at the
+   * next action afterwards. Returns false when the question should be sent
+   * right away instead (handleUserInterrupt): not playing, or waiting on a
+   * discussion trigger rather than in a line. One question waits at a time; a
+   * second one is refused (check hasQueuedInterrupt first; a bare hand takes
+   * its question through attachQuestion).
+   */
+  queueUserInterrupt(text: string): boolean {
+    if (this.mode !== 'playing') return false;
+    if (this.isDiscussionTriggerPending()) return false;
+    if (this.queued !== null) {
+      log.warn('queueUserInterrupt called while a question is already queued');
+      return false;
+    }
+    this.queued = { kind: 'question', text };
+    return true;
+  }
+
+  /**
+   * Raise a hand without a question. While the lecture plays the hand waits
+   * for the current action to finish; the engine then pauses and calls the
+   * learner (onHandCalled). Paused or idle, the learner is called at once. A
+   * hand outranks a discussion about to be offered: its card is withdrawn
+   * unconsumed and offered again after the learner is done. Returns false
+   * when no hand can go up: in a live Q&A (the learner talks directly), while
+   * something already waits, or once the learner holds the floor.
+   */
+  raiseHand(): boolean {
+    if (this.handCall !== null) return false;
+    if (this.mode === 'live') return false;
+    if (this.mode === 'paused' && this.currentTopicState === 'pending') return false;
+
+    if (this.isDiscussionTriggerPending()) {
+      this.callHandBeforeDiscussion();
+      return true;
+    }
+    if (this.mode === 'playing') {
+      if (this.queued !== null) return false;
+      this.queued = { kind: 'hand' };
+      return true;
+    }
+    // Paused or idle: nothing to wait for. A question already waiting through
+    // a pause keeps its turn (it is delivered on resume or flush).
+    if (this.queued?.kind === 'question') return false;
+    this.queued = null;
+    this.callHand(this.mode === 'paused' ? 'paused' : 'idle');
+    return true;
+  }
+
+  /**
+   * The learner typed while the hand waits: the hand becomes a queued
+   * question, delivered at the same boundary. False when no bare hand waits.
+   */
+  attachQuestion(text: string): boolean {
+    if (this.queued?.kind !== 'hand') return false;
+    this.queued = { kind: 'question', text };
+    return true;
+  }
+
+  /**
+   * Lower a bare hand. A waiting hand is withdrawn and the lecture plays on;
+   * a called hand gives the floor back and the paused lecture resumes at
+   * once. False when no hand was up.
+   */
+  lowerHand(): boolean {
+    if (this.queued?.kind === 'hand') {
+      this.queued = null;
+      return true;
+    }
+    if (this.handCall === null) return false;
+    const position = this.handCall;
+    this.handCall = null;
+    if (position !== 'idle' && this.mode === 'paused') this.resume();
+    return true;
+  }
+
+  /** Where the bare hand stands: waiting, called, or null (no hand up) */
+  getHandState(): HandState | null {
+    if (this.handCall !== null) return 'called';
+    if (this.queued?.kind === 'hand') return 'raised';
+    return null;
+  }
+
+  /**
+   * How far the line in flight has been spoken, 0..1 (audio position, reading
+   * timer, or browser-TTS chunk). Null when no spoken line is in flight.
+   */
+  getSpeechProgress(): number | null {
+    if (this.mode !== 'playing' && this.mode !== 'paused') return null;
+    if (this.mode === 'paused' && (this.currentTopicState === 'pending' || this.handCall)) {
+      return null;
+    }
+    const action = this.scenes[this.sceneIndex]?.actions?.[this.actionIndex - 1];
+    if (action?.type !== 'speech' || !action.text.trim()) return null;
+
+    const clamp = (value: number) => Math.min(1, Math.max(0, value));
+    switch (this.speechSource) {
+      case 'tts': {
+        if (!this.browserTTSActive || this.browserTTSTotalChunks === 0) return 0;
+        // A resumed line re-speaks only the remaining chunks, so count from the end
+        const remaining = this.browserTTSChunks.length - this.browserTTSChunkIndex;
+        return clamp(1 - remaining / this.browserTTSTotalChunks);
+      }
+      case 'audio': {
+        if (!this.audioPlayer.hasActiveAudio()) return 0;
+        const duration = this.audioPlayer.getDuration();
+        return duration > 0 ? clamp(this.audioPlayer.getCurrentTime() / duration) : 0;
+      }
+      case 'timer': {
+        if (this.speechTimerTotal <= 0) return 0;
+        const remaining =
+          this.speechTimer !== null
+            ? this.speechTimerRemaining - (Date.now() - this.speechTimerStart)
+            : this.speechTimerRemaining;
+        return clamp(1 - remaining / this.speechTimerTotal);
+      }
+      default:
+        // The line started but its audio, voice or timer is not running yet
+        return 0;
+    }
+  }
+
+  /** Whether a raised-hand question or bare hand is waiting for the next action boundary */
+  hasQueuedInterrupt(): boolean {
+    return this.queued !== null;
+  }
+
+  /**
+   * Whether the action now playing is a spoken line: a raised hand then waits
+   * for "this sentence" rather than another step (a video, a drawing, a widget,
+   * a blank slide's dwell). processNext advances the cursor as an action
+   * starts, so the one in flight sits just before it.
+   */
+  isSpeechInFlight(): boolean {
+    if (this.mode !== 'playing') return false;
+    const action = this.scenes[this.sceneIndex]?.actions?.[this.actionIndex - 1];
+    return action?.type === 'speech' && !!action.text.trim();
+  }
+
+  /**
+   * Drop the waiting question (or bare hand); returns the question's text
+   * (null when none was queued, or only a hand was up)
+   */
+  cancelQueuedInterrupt(): string | null {
+    const queued = this.queued;
+    this.queued = null;
+    return queued?.kind === 'question' ? queued.text : null;
+  }
+
+  /**
+   * Deliver the waiting question now (e.g. the user pressed pause). The line is
+   * cut off, so handleUserInterrupt replays it on resume. A bare hand is called
+   * instead: the lecture pauses mid-line and the learner gets the floor.
+   * Returns false when nothing was queued.
+   */
+  flushQueuedInterrupt(): boolean {
+    const queued = this.queued;
+    if (queued === null) return false;
+    if (queued.kind === 'question') {
+      this.handleUserInterrupt(queued.text);
+      return true;
+    }
+    this.queued = null;
+    if (this.mode === 'playing') {
+      // Mark the call first: pause() announces the mode change
+      this.handCall = 'paused';
+      this.pause();
+    }
+    this.callHand(this.mode === 'paused' ? 'paused' : 'idle');
+    return true;
+  }
+
   /** Scene id at the current playback position (post-restore engine state) */
   getCurrentSceneId(): string | null {
     return this.scenes[this.sceneIndex]?.id ?? null;
@@ -139,6 +360,11 @@ export class PlaybackEngine {
   /** Restore playback position from a snapshot */
   restoreFromSnapshot(snapshot: PlaybackSnapshot): void {
     this.pendingNavigationSpeechIndex = null;
+    this.lectureCompletionPending = false;
+    // A hand raised at the old position would be answered at the wrong one
+    this.queued = null;
+    this.handCall = null;
+    this.deferredTrigger = null;
     this.sceneIndex = snapshot.sceneIndex;
     this.actionIndex = snapshot.actionIndex;
     this.consumedDiscussions = new Set(snapshot.consumedDiscussions);
@@ -154,6 +380,7 @@ export class PlaybackEngine {
     this.sceneIndex = 0;
     this.actionIndex = 0;
     this.pendingNavigationSpeechIndex = null;
+    this.lectureCompletionPending = false;
     this.invalidatePlaybackGeneration();
     this.setMode('playing');
     this.processNext();
@@ -170,17 +397,24 @@ export class PlaybackEngine {
     this.processNext();
   }
 
-  canJumpToAction(actionIndex: number): boolean {
+  /**
+   * Jumps target speech lines; `atBoundary` also accepts an action a raised
+   * hand was answered just before (restoring that resume position).
+   */
+  canJumpToAction(actionIndex: number, options: { atBoundary?: boolean } = {}): boolean {
     const actions = this.scenes[0]?.actions ?? [];
     return (
       this.mode !== 'live' &&
-      canJumpWithinReconstructablePrefix(actions, this.actionIndex, actionIndex)
+      canJumpWithinReconstructablePrefix(actions, this.actionIndex, actionIndex, options)
     );
   }
 
-  async jumpToAction(actionIndex: number, options: { autoplay?: boolean } = {}): Promise<boolean> {
+  async jumpToAction(
+    actionIndex: number,
+    options: { autoplay?: boolean; atBoundary?: boolean } = {},
+  ): Promise<boolean> {
     const actions = this.scenes[0]?.actions ?? [];
-    if (!this.canJumpToAction(actionIndex)) return false;
+    if (!this.canJumpToAction(actionIndex, { atBoundary: options.atBoundary })) return false;
 
     const autoplay = options.autoplay ?? this.mode === 'playing';
     const generation = this.invalidatePlaybackGeneration();
@@ -190,8 +424,12 @@ export class PlaybackEngine {
     this.actionIndex = 0;
     this.savedSceneIndex = null;
     this.savedActionIndex = null;
+    this.lectureCompletionPending = false;
     this.currentTopicState = null;
     this.currentTrigger = null;
+    this.deferredTrigger = null;
+    this.queued = null;
+    this.handCall = null;
     this.actionEngine.resetPlaybackVisualState();
 
     for (let i = 0; i < actionIndex; i++) {
@@ -285,8 +523,9 @@ export class PlaybackEngine {
         this.browserTTSChunkIndex = 0;
         this.browserTTSPausedChunks = [];
         this.playBrowserTTSChunk(this.playbackGeneration);
-      } else if (this.audioPlayer.hasActiveAudio()) {
-        // Audio is paused — resume it; TTS onend will call processNext
+      } else if (this.speechSource !== 'timer' && this.audioPlayer.hasActiveAudio()) {
+        // Audio is paused — resume it; TTS onend will call processNext.
+        // (A reading-timer line keeps the previous line's ended element.)
         const generation = this.playbackGeneration;
         this.audioPlayer.onEnded(() => {
           if (!this.isCurrentGeneration(generation)) return;
@@ -333,12 +572,17 @@ export class PlaybackEngine {
       this.speechTimer = null;
     }
     this.speechTimerRemaining = 0;
+    this.speechSource = null;
     this.sceneIndex = 0;
     this.actionIndex = 0;
     this.savedSceneIndex = null;
     this.savedActionIndex = null;
+    this.lectureCompletionPending = false;
     this.currentTopicState = null;
     this.currentTrigger = null;
+    this.deferredTrigger = null;
+    this.queued = null;
+    this.handCall = null;
   }
 
   /**
@@ -441,6 +685,11 @@ export class PlaybackEngine {
   /** User sends a message during playback → interrupt → live mode */
   handleUserInterrupt(text: string): void {
     this.invalidatePlaybackGeneration();
+    // A direct message supersedes a raised hand still waiting for its boundary
+    this.queued = null;
+    // A hand called at a boundary paused AFTER its action finished
+    const calledAtBoundary = this.handCall === 'boundary';
+    this.handCall = null;
     if (this.mode === 'playing' || this.mode === 'paused') {
       // Save lecture state BEFORE stopping audio — actionIndex was already
       // incremented by processNext, so subtract 1 to replay the interrupted
@@ -448,13 +697,28 @@ export class PlaybackEngine {
       // position (e.g. live → paused → new message).
       if (this.savedSceneIndex === null) {
         this.savedSceneIndex = this.sceneIndex;
-        this.savedActionIndex = Math.max(0, this.actionIndex - 1);
+        if (calledAtBoundary) {
+          // Nothing was cut off: resume at the next action, like a queued
+          // question delivered at the same boundary
+          this.savedActionIndex = this.actionIndex;
+          this.lectureCompletionPending = this.isExhausted();
+        } else {
+          this.savedActionIndex = Math.max(0, this.actionIndex - 1);
+          this.lectureCompletionPending = false;
+        }
       }
 
       // Cancel pending trigger delay
       if (this.triggerDelayTimer) {
         clearTimeout(this.triggerDelayTimer);
         this.triggerDelayTimer = null;
+      }
+      // Hide a shown ProactiveCard WITHOUT consuming its discussion: the saved
+      // cursor is the discussion itself, so it is offered again on resume (and
+      // the card can't auto-skip or "Join" over the saved cursor mid-Q&A).
+      if (this.currentTrigger) {
+        this.currentTrigger = null;
+        this.callbacks.onProactiveHide?.();
       }
     }
 
@@ -516,10 +780,13 @@ export class PlaybackEngine {
       this.speechTimer = null;
     }
     this.speechTimerRemaining = 0;
+    this.speechSource = null;
     this.callbacks.onProactiveHide?.();
   }
 
   private setMode(mode: EngineMode): void {
+    // Playing on or entering a Q&A ends a called hand's turn, however it ends
+    if (mode === 'playing' || mode === 'live') this.handCall = null;
     if (this.mode === mode) return;
     this.mode = mode;
     this.callbacks.onModeChange?.(mode);
@@ -532,6 +799,125 @@ export class PlaybackEngine {
     }
     this.savedSceneIndex = null;
     this.savedActionIndex = null;
+  }
+
+  /**
+   * Deliver a raised-hand question at an action boundary. The previous action
+   * finished naturally, so the lecture resumes at the NEXT action (unlike
+   * handleUserInterrupt, which replays the line it cut off).
+   */
+  private deliverQueuedInterrupt(): void {
+    const queued = this.queued;
+    if (queued?.kind !== 'question') return;
+    const text = queued.text;
+    this.queued = null;
+    this.invalidatePlaybackGeneration();
+
+    if (this.savedSceneIndex === null) {
+      this.savedSceneIndex = this.sceneIndex;
+      this.savedActionIndex = this.actionIndex;
+      this.lectureCompletionPending = this.isExhausted();
+    }
+    // Publish the boundary so the UI cursor and persisted progress already
+    // point past the finished action while the question is answered. Flagged
+    // so that a reload resumes at the next action whatever its type, rather
+    // than replaying the last speech line (handleUserInterrupt publishes
+    // nothing: the line it cuts off must replay).
+    this.callbacks.onProgress?.(this.getSnapshot(), { atBoundary: true });
+
+    // Mode BEFORE stopping audio, mirroring handleUserInterrupt (both are
+    // no-ops at a boundary, but must never re-enter processNext).
+    this.currentTopicState = 'active';
+    this.setMode('live');
+    this.audioPlayer.stop();
+    this.cancelBrowserTTS();
+    this.callbacks.onUserInterrupt?.(text);
+  }
+
+  /**
+   * Call a bare raised hand at an action boundary. Same bookkeeping as
+   * deliverQueuedInterrupt, but the engine pauses for the learner instead of
+   * entering live mode: lowerHand resumes at the next action, a question sent
+   * now (handleUserInterrupt) saves that next action as the resume point.
+   */
+  private deliverRaisedHand(): void {
+    this.queued = null;
+    this.invalidatePlaybackGeneration();
+    this.callHandAtBoundary();
+  }
+
+  /**
+   * A hand outranks the discussion about to be offered: withdraw its card (or
+   * the delay before it) WITHOUT consuming it, step the cursor back onto the
+   * discussion action and call the learner, so the discussion is offered again
+   * when the lecture resumes — after a Q&A (the saved cursor) or a lowered hand.
+   */
+  private callHandBeforeDiscussion(): void {
+    this.queued = null;
+    this.invalidatePlaybackGeneration();
+    if (this.triggerDelayTimer) {
+      clearTimeout(this.triggerDelayTimer);
+      this.triggerDelayTimer = null;
+    }
+    // processNext stepped past the discussion before scheduling its card
+    this.actionIndex = Math.max(0, this.actionIndex - 1);
+    const action = this.scenes[this.sceneIndex]?.actions?.[this.actionIndex];
+    const deferred =
+      this.currentTrigger ??
+      (action?.type === 'discussion' ? this.toTrigger(action as DiscussionAction) : undefined);
+    if (this.currentTrigger) {
+      this.currentTrigger = null;
+      this.callbacks.onProactiveHide?.();
+    }
+    // processNext re-offers this very object, so an agent picked for the
+    // shown card (or written onto it by the onHandCalled handler) carries over
+    this.deferredTrigger = deferred ?? null;
+    this.callHandAtBoundary(deferred);
+  }
+
+  /**
+   * The boundary bookkeeping of deliverQueuedInterrupt (completion owed,
+   * flagged progress so a reload resumes at the next action), then the call.
+   */
+  private callHandAtBoundary(deferredDiscussion?: TriggerEvent): void {
+    if (this.savedSceneIndex === null) {
+      this.lectureCompletionPending = this.isExhausted();
+    }
+    this.callbacks.onProgress?.(this.getSnapshot(), { atBoundary: true });
+    this.callHand('boundary', deferredDiscussion);
+  }
+
+  /**
+   * Give a raised hand the floor. Set the mode BEFORE stopping audio (see
+   * handleUserInterrupt): a synchronous onend must not re-enter processNext.
+   * Stopping also drops a finished line's audio element, so a later resume()
+   * moves on to the next action instead of restarting that line.
+   */
+  private callHand(position: HandCallPosition, deferredDiscussion?: TriggerEvent): void {
+    this.handCall = position;
+    if (position === 'boundary') {
+      this.setMode('paused');
+      this.audioPlayer.stop();
+      this.cancelBrowserTTS();
+    }
+    this.callbacks.onHandCalled?.({
+      atBoundary: position === 'boundary',
+      ...(deferredDiscussion ? { deferredDiscussion } : {}),
+    });
+  }
+
+  /** Waiting on a discussion: its card's delay is running, or the card shows */
+  private isDiscussionTriggerPending(): boolean {
+    return this.triggerDelayTimer !== null || this.currentTrigger !== null;
+  }
+
+  private toTrigger(action: DiscussionAction): TriggerEvent {
+    return {
+      id: action.id,
+      question: action.topic,
+      prompt: action.prompt,
+      agentId: action.agentId,
+    };
   }
 
   /**
@@ -565,6 +951,14 @@ export class PlaybackEngine {
   private async processNext(generation: number = this.playbackGeneration): Promise<void> {
     if (this.mode !== 'playing' || !this.isCurrentGeneration(generation)) return;
 
+    // Every action boundary passes through here: answer a raised hand before
+    // the next action (or the completion branch) starts.
+    if (this.queued !== null) {
+      if (this.queued.kind === 'hand') this.deliverRaisedHand();
+      else this.deliverQueuedInterrupt();
+      return;
+    }
+
     // Check for scene boundary (fire scene change callback at start of each new scene)
     if (this.actionIndex === 0 && this.sceneIndex < this.scenes.length) {
       const scene = this.scenes[this.sceneIndex];
@@ -578,6 +972,7 @@ export class PlaybackEngine {
       if (!this.isCurrentGeneration(generation)) return;
       // All scenes complete
       this.invalidatePlaybackGeneration();
+      this.lectureCompletionPending = false;
       this.actionEngine.clearEffects();
       this.setMode('idle');
       this.callbacks.onComplete?.();
@@ -610,6 +1005,7 @@ export class PlaybackEngine {
     switch (action.type) {
       case 'speech': {
         const speechAction = action as SpeechAction;
+        this.speechSource = null;
         this.callbacks.onSpeechStart?.(speechAction.text);
 
         // onEnded → processNext; if paused, resume() will call processNext
@@ -629,8 +1025,10 @@ export class PlaybackEngine {
           if (!this.isCurrentGeneration(generation)) return;
           const speed = this.callbacks.getPlaybackSpeed?.() ?? 1;
           const readingMs = estimateSpeechDurationMs(speechAction.text, { speed });
+          this.speechSource = 'timer';
           this.speechTimerStart = Date.now();
           this.speechTimerRemaining = readingMs;
+          this.speechTimerTotal = readingMs;
           this.speechTimer = setTimeout(() => {
             if (!this.isCurrentGeneration(generation)) return;
             this.speechTimer = null;
@@ -653,7 +1051,9 @@ export class PlaybackEngine {
           .play(speechAction.audioId || '', (speechAction as LegacySpeechAction).audioUrl)
           .then((audioStarted) => {
             if (!this.isCurrentGeneration(generation)) return;
-            if (!audioStarted) {
+            if (audioStarted) {
+              this.speechSource = 'audio';
+            } else {
               // No pre-generated audio — try browser-native TTS only when it is
               // the selected provider AND actually enabled (opt-in, #665).
               if (
@@ -709,13 +1109,12 @@ export class PlaybackEngine {
           return;
         }
 
-        // 3s delay before showing ProactiveCard (allows previous speech to finish naturally)
-        const trigger: TriggerEvent = {
-          id: discussionAction.id,
-          question: discussionAction.topic,
-          prompt: discussionAction.prompt,
-          agentId: discussionAction.agentId,
-        };
+        // 3s delay before showing ProactiveCard (allows previous speech to finish naturally).
+        // A discussion a raised hand deferred comes back as the same trigger.
+        const deferred = this.deferredTrigger;
+        this.deferredTrigger = null;
+        const trigger =
+          deferred?.id === discussionAction.id ? deferred : this.toTrigger(discussionAction);
 
         this.triggerDelayTimer = setTimeout(() => {
           if (!this.isCurrentGeneration(generation)) return;
@@ -745,8 +1144,11 @@ export class PlaybackEngine {
       case 'widget_setState':
       case 'widget_annotation':
       case 'widget_reveal': {
-        // Synchronous actions — await completion, then continue
-        await this.actionEngine.execute(action);
+        // Synchronous actions — await completion, then continue. The lecture's
+        // narrator performs them (named by the whiteboard's drawing chip).
+        await this.actionEngine.execute(action, {
+          agentId: this.callbacks.getLectureAgentId?.() ?? null,
+        });
         if (!this.isCurrentGeneration(generation)) return;
         if (this.mode === 'playing') {
           this.processNext(generation);
@@ -789,9 +1191,11 @@ export class PlaybackEngine {
   private playBrowserTTS(speechAction: SpeechAction, generation: number): void {
     if (!this.isCurrentGeneration(generation)) return;
     this.browserTTSChunks = this.splitIntoChunks(speechAction.text);
+    this.browserTTSTotalChunks = this.browserTTSChunks.length;
     this.browserTTSChunkIndex = 0;
     this.browserTTSPausedChunks = [];
     this.browserTTSActive = true;
+    this.speechSource = 'tts';
     this.playBrowserTTSChunk(generation);
   }
 
@@ -915,6 +1319,7 @@ export class PlaybackEngine {
     if (this.browserTTSActive) {
       this.browserTTSActive = false;
       this.browserTTSChunks = [];
+      this.browserTTSTotalChunks = 0;
       this.browserTTSChunkIndex = 0;
       this.browserTTSPausedChunks = [];
       window.speechSynthesis?.cancel();

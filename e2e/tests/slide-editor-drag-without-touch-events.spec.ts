@@ -98,15 +98,22 @@ test.describe('Slide editor without the TouchEvent global (desktop Safari)', () 
     const start = await shape.boundingBox();
     if (!start) throw new Error('Shape has no bounding box');
 
-    // Select, then drag the selected element.
+    // Select, then drag the selected element. The distance is set in slide
+    // units (the shape is 200 wide) so the drop lands well clear of every
+    // alignment line (slide edges and centre lines snap within 5 units),
+    // whatever the editor canvas scale is at this viewport.
+    const scale = start.width / 200;
+    const dx = Math.round(60 * scale);
+    const dy = Math.round(40 * scale);
     await page.mouse.click(start.x + start.width / 2, start.y + start.height / 2);
-    await dragBy(page, start.x + start.width / 2, start.y + start.height / 2, 120, 60);
+    await dragBy(page, start.x + start.width / 2, start.y + start.height / 2, dx, dy);
     await expect
       .poll(async () => {
         const box = await shape.boundingBox();
-        return box && { dx: Math.round(box.x - start.x), dy: Math.round(box.y - start.y) };
+        if (!box) return false;
+        return Math.abs(box.x - start.x - dx) <= 1 && Math.abs(box.y - start.y - dy) <= 1;
       })
-      .toEqual({ dx: 120, dy: 60 });
+      .toBe(true);
 
     // Resize from the bottom-right handle of the selection.
     const moved = await shape.boundingBox();

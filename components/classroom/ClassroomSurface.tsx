@@ -37,6 +37,7 @@ import { createLogger } from '@/lib/logger';
 import { MediaStageProvider } from '@/lib/contexts/media-stage-context';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { FileQuestion, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
 import { defaultClassroomLoadDeps, runClassroomLoad } from '@/lib/classroom/load-classroom';
@@ -47,6 +48,10 @@ import {
 import { useClassroomSession } from '@/lib/classroom/use-classroom-session';
 import { applySceneDeepLink } from '@/lib/classroom/scene-deep-link';
 import { useRunCourse } from '@/lib/generation-run-client/use-run-course';
+import {
+  ClassroomLayoutContext,
+  useClassroomLayoutObserver,
+} from '@/lib/hooks/use-classroom-layout';
 import { CourseGeneratingPlaceholder } from './CourseGeneratingPlaceholder';
 
 const log = createLogger('Classroom');
@@ -84,6 +89,11 @@ export function ClassroomSurface({
   const loadEpochRef = useRef(0);
 
   const { mayGenerate, refreshOwnership } = useClassroomSession({ classroomId, variant });
+
+  // The responsive layout follows this root's width, not the viewport's: the
+  // workbench pane is narrower than the window it sits in
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const layout = useClassroomLayoutObserver(surfaceRef);
 
   const loadClassroom = useCallback(
     async (isEffectCurrent: () => boolean): Promise<ClassroomLoadOutcome> => {
@@ -291,19 +301,29 @@ export function ClassroomSurface({
   return (
     <ThemeProvider>
       <MediaStageProvider value={classroomId}>
+        {/* data-ui="v2" scopes the redesigned classroom: later subtree token
+            overrides (e.g. a [data-ui=v2] --muted-foreground retune) hang off
+            this attribute instead of changing the global tokens.
+            @container/classroom makes it the query container for the
+            responsive sizes (--container-tablet / --container-desktop), and
+            data-layout mirrors the JS side (useClassroomLayout). */}
         <div
-          className={
+          ref={surfaceRef}
+          data-ui="v2"
+          data-layout={layout}
+          className={cn(
+            '@container/classroom',
             variant === 'pane'
               ? // A flex CHILD of the pane's row box, so it has to claim both
                 // axes explicitly: `h-full` alone leaves the width to shrink
                 // to content, and the classroom chrome (which layers with
                 // `absolute inset-0`) then has nothing to fill.
                 'flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
-              : 'h-app flex flex-col overflow-hidden'
-          }
+              : 'h-app flex flex-col overflow-hidden',
+          )}
         >
           {view === 'loading' ? (
-            <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+            <div className="flex-1 flex items-center justify-center bg-page">
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin" />
                 <p>{t('common.loadingClassroom')}</p>
@@ -315,7 +335,7 @@ export function ClassroomSurface({
             // the answer. One message for "deleted" and for "never existed" —
             // see the state's declaration.
             <div
-              className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900"
+              className="flex-1 flex items-center justify-center bg-page"
               data-testid="classroom-not-found"
             >
               <div className="flex flex-col items-center gap-3 text-center max-w-md px-6">
@@ -332,7 +352,7 @@ export function ClassroomSurface({
             </div>
           ) : view === 'error' ? (
             <div
-              className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900"
+              className="flex-1 flex items-center justify-center bg-page"
               data-testid="classroom-load-error"
             >
               <div className="text-center">
@@ -369,10 +389,12 @@ export function ClassroomSurface({
               href={runCourse.generation.href}
             />
           ) : (
-            <Stage
-              classroomId={classroomId}
-              onRetryOutline={mayGenerate && runCourse.runId ? runCourse.retryOutline : undefined}
-            />
+            <ClassroomLayoutContext.Provider value={layout}>
+              <Stage
+                classroomId={classroomId}
+                onRetryOutline={mayGenerate && runCourse.runId ? runCourse.retryOutline : undefined}
+              />
+            </ClassroomLayoutContext.Provider>
           )}
         </div>
       </MediaStageProvider>

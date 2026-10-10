@@ -29,7 +29,12 @@ import {
 import { keepUnimported } from '@/lib/legacy-browser-import/model-settings-unimported';
 
 /** Persisted-blob version for zustand's `persist` `migrate` ladder. */
-const SETTINGS_PERSIST_VERSION = 5;
+const SETTINGS_PERSIST_VERSION = 6;
+
+/** The interaction panel's default width, and its floor after the v6 migration */
+export const DEFAULT_CHAT_AREA_WIDTH = 360;
+/** The interaction panel's drag-resize ceiling (chat-area.tsx MAX_WIDTH) */
+const MAX_CHAT_AREA_WIDTH = 560;
 
 /**
  * Bound after the store exists; see `onWriteRefused` for why it is not inlined.
@@ -219,6 +224,27 @@ export function migrateSettingsToV5(
   return next;
 }
 
+/**
+ * The version 6 migration (the classroom redesign): both side panels open
+ * once, because the conversation (and soon the composer) lives in the
+ * interaction panel, and that panel is at least its new 360px default wide.
+ * Collapsing afterwards persists as before.
+ */
+export function migrateSettingsToV6(
+  persisted: Partial<PersistedSettings>,
+): Partial<PersistedSettings> {
+  const width =
+    typeof persisted.chatAreaWidth === 'number' && Number.isFinite(persisted.chatAreaWidth)
+      ? persisted.chatAreaWidth
+      : DEFAULT_CHAT_AREA_WIDTH;
+  return {
+    ...persisted,
+    sidebarCollapsed: false,
+    chatAreaCollapsed: false,
+    chatAreaWidth: Math.min(MAX_CHAT_AREA_WIDTH, Math.max(DEFAULT_CHAT_AREA_WIDTH, width)),
+  };
+}
+
 /** Set when a load staged kept model settings: the store writes itself back without them. */
 let stagedOnLoad = false;
 
@@ -247,10 +273,10 @@ export const useSettingsStore = create<SettingsState>()(
       agentVoiceOverrides: {},
       agentSelectionIsUserSet: false,
 
-      // Layout preferences
-      sidebarCollapsed: true,
-      chatAreaCollapsed: true,
-      chatAreaWidth: 320,
+      // Layout preferences (both panels open, as the classroom design shows)
+      sidebarCollapsed: false,
+      chatAreaCollapsed: false,
+      chatAreaWidth: DEFAULT_CHAT_AREA_WIDTH,
       editRailCollapsed: false,
       editRailWidth: 220,
 
@@ -301,7 +327,9 @@ export const useSettingsStore = create<SettingsState>()(
       migrate: (persistedState: unknown, version: number) => {
         const state = { ...((persistedState as Record<string, unknown> | null) ?? {}) };
         // v4 → v5: model settings move to the server (RFC #1701).
-        return version < 5 ? migrateSettingsToV5(state, version) : pickPersisted(state);
+        const v5 = version < 5 ? migrateSettingsToV5(state, version) : pickPersisted(state);
+        // v5 → v6: the classroom redesign opens both side panels once.
+        return version < 6 ? migrateSettingsToV6(v5) : v5;
       },
       // Only known preference fields reach the state; anything else a blob
       // carries (fields of earlier builds) is ignored. Model settings kept

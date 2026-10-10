@@ -6,16 +6,23 @@ import { Play, Pause, Repeat, Loader2, Volume2, ChevronDown, ChevronUp } from 'l
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { AvatarDisplay } from '@/components/ui/avatar-display';
 import type { AudioIndicatorState } from '@/components/roundtable/audio-indicator';
-import type { PlaybackView } from '@/lib/playback';
+import type { PlaybackPhase, PlaybackView } from '@/lib/playback';
+import { describeCaptionSpeaker } from '@/lib/playback/caption-model';
 import type { Participant } from '@/lib/types/roundtable';
 import { cn } from '@/lib/utils';
-import { DEFAULT_TEACHER_AVATAR, DEFAULT_STUDENT_AVATAR } from '@/components/roundtable/constants';
+
+export {
+  buildCaptionModel,
+  type CaptionModel,
+  type CaptionModelInput,
+  type CaptionStatus,
+} from '@/lib/playback/caption-model';
 
 const PRESENTATION_BUBBLE_WIDTH = 'w-[min(420px,calc(100vw-3rem))]';
 
 interface PresentationSpeechOverlayProps {
   readonly playbackView: PlaybackView;
-  readonly participants: Participant[];
+  readonly participants: readonly Participant[];
   readonly speakingAgentId: string | null;
   readonly isTopicPending: boolean;
   readonly userAvatar?: string;
@@ -38,6 +45,19 @@ export interface PresentationBubbleModel {
   isTopicPending: boolean;
 }
 
+/** Phases in which the presentation overlay shows the current line */
+const PRESENTATION_PHASES: readonly PlaybackPhase[] = [
+  'lecturePlaying',
+  'lecturePaused',
+  'discussionActive',
+  'discussionPaused',
+];
+
+/**
+ * The presentation bubble for a view the roundtable already resolved through
+ * buildCaptionModel (its `view`): the same speaker, name and avatar, shown only
+ * while a line plays or waits.
+ */
 export function buildPresentationBubbleModel({
   playbackView,
   participants,
@@ -49,7 +69,7 @@ export function buildPresentationBubbleModel({
   userAvatar,
 }: {
   playbackView: PlaybackView;
-  participants: Participant[];
+  participants: readonly Participant[];
   speakingAgentId: string | null;
   isTopicPending: boolean;
   fallbackTeacherName: string;
@@ -58,60 +78,28 @@ export function buildPresentationBubbleModel({
   userAvatar?: string;
 }): PresentationBubbleModel | null {
   const { phase, bubbleRole, sourceText } = playbackView;
-  const showDuringPhase =
-    phase === 'lecturePlaying' ||
-    phase === 'lecturePaused' ||
-    phase === 'discussionActive' ||
-    phase === 'discussionPaused';
   const isLoading = phase === 'discussionActive' && bubbleRole !== null && sourceText === '';
 
-  if (!showDuringPhase) return null;
-  if (bubbleRole !== 'teacher' && bubbleRole !== 'agent' && bubbleRole !== 'user') return null;
+  if (!PRESENTATION_PHASES.includes(phase)) return null;
+  if (bubbleRole === null) return null;
   if (!sourceText && !isLoading) return null;
 
-  const teacherParticipant = participants.find((participant) => participant.role === 'teacher');
-  const speakingStudent = speakingAgentId
-    ? participants.find(
-        (participant) =>
-          participant.id === speakingAgentId &&
-          participant.role !== 'teacher' &&
-          participant.role !== 'user',
-      )
-    : null;
-
-  if (bubbleRole === 'teacher') {
-    return {
-      key: 'teacher',
-      role: 'teacher',
-      side: 'left',
-      name: teacherParticipant?.name || fallbackTeacherName,
-      avatar: teacherParticipant?.avatar || DEFAULT_TEACHER_AVATAR,
-      text: sourceText,
-      isLoading,
-      isTopicPending,
-    };
-  }
-
-  if (bubbleRole === 'user') {
-    const userParticipant = participants.find((p) => p.role === 'user');
-    return {
-      key: 'user',
-      role: 'user',
-      side: 'right',
-      name: userParticipant?.name || fallbackUserName,
-      avatar: userAvatar || userParticipant?.avatar || DEFAULT_STUDENT_AVATAR,
-      text: sourceText,
-      isLoading,
-      isTopicPending,
-    };
-  }
-
+  const { key, name, avatar } = describeCaptionSpeaker(bubbleRole, {
+    participants,
+    speakingAgentId,
+    names: {
+      teacher: fallbackTeacherName,
+      student: fallbackStudentName,
+      user: fallbackUserName,
+    },
+    avatars: { user: userAvatar },
+  });
   return {
-    key: `agent-${speakingAgentId || 'unknown'}`,
-    role: 'agent',
-    side: 'right',
-    name: speakingStudent?.name || fallbackStudentName,
-    avatar: speakingStudent?.avatar || DEFAULT_STUDENT_AVATAR,
+    key,
+    role: bubbleRole,
+    side: bubbleRole === 'teacher' ? 'left' : 'right',
+    name,
+    avatar,
     text: sourceText,
     isLoading,
     isTopicPending,

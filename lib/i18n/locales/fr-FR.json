@@ -7,7 +7,8 @@
     "errorPrefix": "Erreur : ",
     "loadingClassroom": "Chargement de la classe…",
     "retry": "Réessayer",
-    "close": "Fermer"
+    "close": "Fermer",
+    "switchLanguage": "Changer de langue"
   },
   "home": {
     "slogan": "L’apprentissage génératif en classe interactive multi-agents",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "Interaction en classe",
+    "collapsePanel": "Replier le panneau d'interaction",
+    "conversationLog": "Historique de la conversation",
+    "softCloseCountdown": {
+      "qa": "Les questions se terminent dans {{seconds}} s, puis le cours reprend",
+      "discussion": "La discussion se termine dans {{seconds}} s, puis le cours reprend"
+    },
+    "actionTag": {
+      "group": "Actions du tableau blanc",
+      "spotlight": "Projecteur",
+      "laser": "Pointeur laser",
+      "play_video": "Lire la vidéo",
+      "discussion": "Discuter",
+      "wb_open": "Tableau blanc · Ouvrir",
+      "wb_close": "Tableau blanc · Fermer",
+      "wb_clear": "Tableau blanc · Effacer",
+      "wb_delete": "Tableau blanc · Supprimer",
+      "wb_draw_text": "Tableau blanc · Texte",
+      "wb_draw_shape": "Tableau blanc · Forme",
+      "wb_draw_chart": "Tableau blanc · Graphique",
+      "wb_draw_latex": "Tableau blanc · Formule",
+      "wb_draw_table": "Tableau blanc · Tableau",
+      "wb_draw_line": "Tableau blanc · Ligne",
+      "wb_draw_code": "Tableau blanc · Code",
+      "wb_edit_code": "Tableau blanc · Modifier le code"
+    },
     "lecture": "Cours",
     "noConversations": "Aucune conversation",
     "startConversation": "Écrivez un message ci-dessous pour commencer à discuter",
-    "noMessages": "Aucun message pour l’instant",
-    "ended": "terminé",
     "unknown": "Inconnu",
-    "stopDiscussion": "Arrêter la discussion",
-    "endQA": "Terminer les questions",
     "softClosing": "Poursuivre la discussion",
     "error": {
       "emptyAgentResponses": "Les agents n’ont renvoyé aucune réponse ; la discussion s’est arrêtée. Réessayez ou vérifiez les paramètres de votre modèle.",
-      "streamInterrupted": "Le flux s’est interrompu de façon inattendue ; la discussion n’a pas abouti. Veuillez réessayer."
+      "streamInterrupted": "Le flux s’est interrompu de façon inattendue ; la discussion n’a pas abouti. Veuillez réessayer.",
+      "modelBusy": "Le service du modèle est actuellement surchargé. Renvoie ton message plus tard ou choisis un modèle disponible dans les paramètres des modèles."
     },
     "elementReference": {
       "whiteboardChanged": "L’élément du tableau blanc a changé ou n’est plus disponible. Sélectionnez-le à nouveau ou retirez la référence avant d’envoyer.",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "Notes",
-      "chat": "Discussion"
+      "chat": "Interaction",
+      "scenes": "Scènes"
     },
     "lectureNotes": {
       "empty": "Les notes apparaîtront ici après la lecture du cours",
@@ -264,7 +289,7 @@
     },
     "badge": {
       "qa": "Q/R",
-      "discussion": "DISC",
+      "discussion": "Discussion",
       "lecture": "COURS"
     }
   },
@@ -310,8 +335,8 @@
     "discussion": "Discussion",
     "join": "Participer",
     "skip": "Passer",
-    "pause": "Pause",
-    "resume": "Reprendre"
+    "offerLabel": "{{name}} propose une discussion",
+    "autoSkipHint": "Passage automatique dans {{seconds}} secondes"
   },
   "voice": {
     "startListening": "Saisie vocale",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "Scène actuelle",
+    "collapseSceneSidebar": "Réduire la liste des scènes",
+    "expandSceneSidebar": "Déplier la liste des scènes",
+    "sceneRail": "Scènes",
+    "sceneRailItem": "Page {{n}} : {{title}}",
+    "headerMenu": "Plus : langue, thème, paramètres, mode Pro, exporter",
+    "exportMenu": "Exporter",
+    "expandInteractionPanel": "Déplier le panneau d’interaction",
+    "pageCounter": "Page {{current}} / {{total}}",
+    "previousScene": "Scène précédente",
+    "nextScene": "Scène suivante",
+    "play": "Lire",
+    "pause": "Pause",
+    "pauseAnswer": "Mettre la réponse en pause",
+    "resumeAnswer": "Reprendre la réponse",
+    "playbackSpeed": "Vitesse de lecture",
+    "playbackMenu": "Plus : vitesse de lecture, volume, lecture auto",
+    "mute": "Couper le son",
+    "unmute": "Réactiver le son",
+    "volume": "Volume",
+    "whiteboardToggle": "Tableau blanc",
+    "caption": {
+      "lecturing": "Explique",
+      "paused": "En pause, à vous de parler",
+      "answering": "Répond",
+      "discussing": "En discussion",
+      "resumeIn": "Le cours reprend dans {{seconds}} s",
+      "answeringYou": "Réponse à votre question",
+      "drawing": "Écrit au tableau"
+    },
+    "pip": {
+      "badge": "Diapositives · page {{n}}",
+      "return": "Retour aux diapositives",
+      "returnLabel": "Retour aux diapositives (page {{n}})"
+    },
+    "composer": {
+      "raiseHand": "Lever la main",
+      "raiseHandHint": "Levez la main : l’enseignant vous donne la parole après cette phrase",
+      "raiseHandInLiveSession": "Pendant les questions, vous pouvez parler directement",
+      "lowerHand": "Baisser",
+      "lowerHandHint": "Baisser la main et retirer la question",
+      "cuePlaceholder": "Dites ou tapez votre question",
+      "cueStatus": "À vous de parler · cours en pause",
+      "send": "Envoyer",
+      "cancelRecording": "Annuler l’enregistrement",
+      "handRaised": "Main levée · à vous après cette phrase",
+      "handRaisedStep": "Main levée · à vous après cette étape",
+      "raisedPlaceholder": "Vous pouvez déjà écrire votre question...",
+      "followUpPlaceholder": "Poser une question de suivi...",
+      "referencePlaceholder": "{{type}} : que voulez-vous demander à ce sujet ?",
+      "handLowered": "Main baissée"
+    },
+    "handRaise": {
+      "raised": "Vous avez levé la main",
+      "aheadOfDiscussion": "Vous avez levé la main ; la discussion de {{name}} passe après vous",
+      "calledBy": "{{name}} vous donne la parole",
+      "pendingQuestion": "En attente · réponse après cette phrase",
+      "pendingQuestionStep": "En attente · réponse après cette étape"
+    },
+    "participants": {
+      "label": "Participants",
+      "online": "{{count}} en ligne",
+      "speaking": "Parle",
+      "wantsToSpeak": "Veut parler",
+      "handRaised": "Main levée",
+      "more": "{{count}} autres participants"
+    },
     "generating": "Génération…",
     "paused": "En pause",
     "generationFailed": "Échec de la génération",
@@ -765,18 +856,26 @@
     "title": "Tableau blanc interactif",
     "open": "Ouvrir le tableau blanc",
     "clear": "Effacer le tableau blanc",
-    "minimize": "Réduire le tableau blanc",
+    "minimize": "Retour aux diapositives",
     "ready": "Le tableau blanc est prêt",
     "readyHint": "Les éléments ajoutés par l’IA apparaîtront ici",
     "clearSuccess": "Tableau blanc effacé",
     "clearError": "Échec de l’effacement du tableau blanc : ",
-    "resetView": "Réinitialiser la vue",
     "restoreError": "Échec de la restauration du tableau blanc : ",
     "history": "Historique",
     "restore": "Restaurer",
     "noHistory": "Aucun historique pour l’instant",
     "restored": "Tableau blanc restauré",
-    "elementCount": "{{count}} éléments"
+    "elementCount": "{{count}} éléments",
+    "drawing": "{{name}} écrit au tableau",
+    "drawingAnonymous": "Écriture au tableau",
+    "zoom": "Zoom",
+    "zoomIn": "Zoom avant",
+    "zoomOut": "Zoom arrière",
+    "fit": "Ajuster à la fenêtre",
+    "historyWithCount": "Historique ({{count}})",
+    "undo": "Annuler",
+    "restoreSnapshot": "Restaurer #{{index}}"
   },
   "quiz": {
     "title": "Quiz",
@@ -817,20 +916,21 @@
     "discussionEnded": "Discussion terminée",
     "qaEnded": "Questions terminées",
     "thinking": "Réflexion",
-    "yourTurn": "À vous",
     "stopDiscussion": "Arrêter la discussion",
-    "softClosing": "Poursuivre la discussion",
+    "stopQA": "Terminer les questions",
     "autoPlay": "Lecture auto",
     "autoPlayOff": "Arrêter la lecture auto",
     "speed": "Vitesse",
-    "previousLine": "Réplique précédente",
-    "nextLine": "Réplique suivante",
-    "lineProgress": "Réplique {{current}} / {{total}}",
     "voiceInput": "Saisie vocale",
     "voiceInputDisabled": "Saisie vocale désactivée",
     "textInput": "Saisie au clavier",
     "stopRecording": "Arrêter l’enregistrement",
-    "startRecording": "Démarrer l’enregistrement"
+    "handRaisedQueued": "Main levée — le professeur vous répondra après cette phrase",
+    "handRaisedQueuedStep": "Main levée — le professeur vous répondra après cette étape",
+    "handRaisedDelivered": "Votre question a été envoyée",
+    "cancelQueuedQuestion": "Annuler",
+    "queuedQuestionNotSent": "Votre question à main levée n’a pas été envoyée",
+    "queuedQuestionRestored": "Votre question non envoyée a été restaurée"
   },
   "pbl": {
     "emptyProject": "Le projet n’a pas encore été généré. Veuillez le créer via la génération de cours.",
@@ -1066,7 +1166,6 @@
     "yesterday": "Hier",
     "daysAgo": "jours",
     "slides": "diapositives",
-    "nameCopied": "Nom copié",
     "deleteConfirmTitle": "Supprimer",
     "delete": "Supprimer",
     "rename": "Renommer",
@@ -1099,8 +1198,10 @@
     "folderRenameFailed": "Échec du renommage du dossier",
     "folderWidth": "Largeur {{width}}/{{max}}",
     "moveFailed": "Échec du déplacement du cours",
+    "moreActions": "Autres actions",
+    "openCourse": "Ouvrir le cours {{name}}",
+    "openFolder": "Ouvrir le dossier {{name}}",
     "moveToFolder": "Déplacer vers un dossier",
-    "moveToFolderLabel": "Déplacer vers un dossier",
     "newFolderDesc": "Organisez les cours par sujet pour un accès plus facile.",
     "newFolderInline": "Nouveau dossier",
     "newFolderTitle": "Nouveau dossier",
@@ -1122,6 +1223,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Échec de la génération de la classe, veuillez réessayer",
     "requirementPlaceholder": "Dites-moi ce que vous voulez apprendre, par exemple :\n« Apprends-moi Python en partant de zéro en 30 minutes »\n« Explique la transformation de Fourier au tableau »\n« Comment jouer au jeu de société Avalon »",
+    "requirementLabel": "Ce que vous voulez apprendre",
     "requirementRequired": "Veuillez saisir vos attentes pour le cours",
     "fileTooLarge": "Fichier trop volumineux. Veuillez choisir un fichier de moins de 50 Mo",
     "courseMaterialCountLimit": "Vous pouvez envoyer jusqu’à 5 supports de cours",
@@ -1256,6 +1358,7 @@
     "language": "Langue",
     "languageDesc": "Choisir la langue de l’interface",
     "theme": "Thème",
+    "themeWithCurrent": "Thème : {{theme}}",
     "themeDesc": "Choisir le thème (clair, sombre ou système)",
     "themeOptions": {
       "light": "Clair",
@@ -2308,12 +2411,14 @@
     "title": "Profil",
     "defaultNickname": "Apprenant",
     "chooseAvatar": "Choisir un avatar",
+    "avatarOption": "Avatar {{n}}",
     "uploadAvatar": "Envoyer",
     "bioPlaceholder": "Parlez-nous de vous : le professeur IA personnalisera les cours en conséquence…",
     "avatarHint": "Votre avatar apparaîtra dans les discussions et les échanges de la classe",
     "fileTooLarge": "Image trop volumineuse, veuillez en choisir une de moins de 5 Mo",
     "invalidFileType": "Veuillez sélectionner un fichier image",
-    "editTooltip": "Cliquez pour modifier votre profil"
+    "editTooltip": "Cliquez pour modifier votre profil",
+    "edit": "Modifier le profil"
   },
   "media": {
     "imageCapability": "Génération d’images",

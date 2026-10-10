@@ -7,7 +7,8 @@
     "errorPrefix": "错误：",
     "loadingClassroom": "正在加载课堂...",
     "retry": "重试",
-    "close": "關閉"
+    "close": "關閉",
+    "switchLanguage": "切換語言"
   },
   "home": {
     "slogan": "多智能體互動課室中的生成式學習",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "課堂互動",
+    "collapsePanel": "收起互動欄",
+    "conversationLog": "對話紀錄",
+    "softCloseCountdown": {
+      "qa": "{{seconds}} 秒後結束問答，回到講課",
+      "discussion": "{{seconds}} 秒後結束討論，回到講課"
+    },
+    "actionTag": {
+      "group": "白板操作",
+      "spotlight": "聚焦",
+      "laser": "雷射筆",
+      "play_video": "播放影片",
+      "discussion": "討論",
+      "wb_open": "板書 · 開啟",
+      "wb_close": "板書 · 關閉",
+      "wb_clear": "板書 · 清空",
+      "wb_delete": "板書 · 刪除",
+      "wb_draw_text": "板書 · 文字",
+      "wb_draw_shape": "板書 · 圖形",
+      "wb_draw_chart": "板書 · 圖表",
+      "wb_draw_latex": "板書 · 公式",
+      "wb_draw_table": "板書 · 表格",
+      "wb_draw_line": "板書 · 線條",
+      "wb_draw_code": "板書 · 程式碼",
+      "wb_edit_code": "板書 · 改程式碼"
+    },
     "lecture": "授課",
     "noConversations": "暫無對話",
     "startConversation": "輸入訊息開始對話",
-    "noMessages": "暫無訊息",
-    "ended": "已結束",
     "unknown": "未知",
-    "stopDiscussion": "結束討論",
-    "endQA": "結束問答",
     "softClosing": "繼續討論",
     "error": {
       "emptyAgentResponses": "智能體連續無回應,討論已停止。請重新嘗試或檢查模型設定。",
-      "streamInterrupted": "資料串流意外中斷,討論未能完成。請重新嘗試。"
+      "streamInterrupted": "資料串流意外中斷,討論未能完成。請重新嘗試。",
+      "modelBusy": "模型服務目前繁忙。請稍後再次傳送訊息，或在模型設定中切換可用模型。"
     },
     "elementReference": {
       "whiteboardChanged": "引用的白板元素已變更或無法使用，請重新選擇或移除引用後再傳送。",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "筆記",
-      "chat": "對話"
+      "chat": "互動",
+      "scenes": "場景"
     },
     "lectureNotes": {
       "empty": "播放課程後，筆記將在此顯示",
@@ -310,8 +335,8 @@
     "discussion": "討論",
     "join": "加入討論",
     "skip": "略過",
-    "pause": "暫停",
-    "resume": "繼續"
+    "offerLabel": "{{name}} 發起討論",
+    "autoSkipHint": "{{seconds}} 秒後自動略過"
   },
   "voice": {
     "startListening": "語音輸入",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "目前場景",
+    "collapseSceneSidebar": "收起場景欄",
+    "expandSceneSidebar": "展開場景欄",
+    "sceneRail": "場景",
+    "sceneRailItem": "第 {{n}} 頁：{{title}}",
+    "headerMenu": "更多：語言、主題、設定、專業模式、匯出",
+    "exportMenu": "匯出",
+    "expandInteractionPanel": "展開互動欄",
+    "pageCounter": "第 {{current}} / {{total}} 頁",
+    "previousScene": "上一頁",
+    "nextScene": "下一頁",
+    "play": "播放",
+    "pause": "暫停",
+    "pauseAnswer": "暫停回答",
+    "resumeAnswer": "繼續回答",
+    "playbackSpeed": "播放速度",
+    "playbackMenu": "更多：播放速度、音量、自動播放",
+    "mute": "靜音",
+    "unmute": "取消靜音",
+    "volume": "音量",
+    "whiteboardToggle": "白板",
+    "caption": {
+      "lecturing": "講解中",
+      "paused": "已暫停，等你發言",
+      "answering": "回答中",
+      "discussing": "討論中",
+      "resumeIn": "{{seconds}} 秒後繼續講課",
+      "answeringYou": "正在回答你的問題",
+      "drawing": "邊講邊寫"
+    },
+    "pip": {
+      "badge": "課件 · 第 {{n}} 頁",
+      "return": "返回課件",
+      "returnLabel": "返回課件（第 {{n}} 頁）"
+    },
+    "composer": {
+      "raiseHand": "舉手",
+      "raiseHandHint": "舉手提問：老師講完目前這句後請你發言",
+      "raiseHandInLiveSession": "問答中可直接發言",
+      "lowerHand": "放下",
+      "lowerHandHint": "放下手，撤回提問",
+      "cuePlaceholder": "說出或輸入你的問題",
+      "cueStatus": "輪到你發言了 · 課堂已暫停",
+      "send": "傳送",
+      "cancelRecording": "取消錄音",
+      "handRaised": "已舉手 · 講完這句就請你發言",
+      "handRaisedStep": "已舉手 · 這一步結束就請你發言",
+      "raisedPlaceholder": "可以先寫下問題...",
+      "followUpPlaceholder": "繼續追問...",
+      "referencePlaceholder": "關於這個{{type}}，你想問什麼？",
+      "handLowered": "已放下手"
+    },
+    "handRaise": {
+      "raised": "你舉手了",
+      "aheadOfDiscussion": "你舉手了，{{name}} 的討論排在你之後",
+      "calledBy": "{{name}} 請你發言",
+      "pendingQuestion": "排隊中 · 老師講完這句就回答",
+      "pendingQuestionStep": "排隊中 · 老師完成目前步驟就回答"
+    },
+    "participants": {
+      "label": "課堂成員",
+      "online": "{{count}} 人在線",
+      "speaking": "講解中",
+      "wantsToSpeak": "想發言",
+      "handRaised": "舉手中",
+      "more": "另外 {{count}} 位成員"
+    },
     "generating": "生成中...",
     "paused": "已暫停",
     "generationFailed": "生成失敗",
@@ -750,18 +841,26 @@
     "title": "互動白板",
     "open": "開啟白板",
     "clear": "清空白板",
-    "minimize": "最小化白板",
+    "minimize": "返回課件",
     "ready": "白板已就緒",
     "readyHint": "AI 新增元素後將在此顯示",
     "clearSuccess": "白板已清空",
     "clearError": "清空白板失敗：",
-    "resetView": "重設檢視",
     "restoreError": "恢復白板失敗：",
     "history": "歷史紀錄",
     "restore": "恢復",
     "noHistory": "暫無歷史紀錄",
     "restored": "已恢復白板內容",
-    "elementCount": "{{count}} 個元素"
+    "elementCount": "{{count}} 個元素",
+    "drawing": "{{name}} 正在板書",
+    "drawingAnonymous": "正在板書",
+    "zoom": "縮放",
+    "zoomIn": "放大",
+    "zoomOut": "縮小",
+    "fit": "適應視窗",
+    "historyWithCount": "歷史記錄（{{count}} 筆）",
+    "undo": "復原",
+    "restoreSnapshot": "還原 #{{index}}"
   },
   "quiz": {
     "title": "課堂小測",
@@ -802,20 +901,21 @@
     "discussionEnded": "討論已結束",
     "qaEnded": "問答已結束",
     "thinking": "思考中",
-    "yourTurn": "輪到你發言了",
     "stopDiscussion": "結束討論",
-    "softClosing": "繼續討論",
+    "stopQA": "結束問答",
     "autoPlay": "自動播放",
     "autoPlayOff": "關閉自動播放",
     "speed": "倍速",
-    "previousLine": "Previous line",
-    "nextLine": "Next line",
-    "lineProgress": "Line {{current}} / {{total}}",
     "voiceInput": "語音輸入",
     "voiceInputDisabled": "語音輸入已停用",
     "textInput": "文字輸入",
     "stopRecording": "停止錄音",
-    "startRecording": "開始錄音"
+    "handRaisedQueued": "已舉手 · 老師講完這句就回答你",
+    "handRaisedQueuedStep": "已舉手 · 老師完成目前步驟就回答你",
+    "handRaisedDelivered": "你的問題已送出",
+    "cancelQueuedQuestion": "撤回",
+    "queuedQuestionNotSent": "舉手提問未送出",
+    "queuedQuestionRestored": "已恢復你未送出的提問"
   },
   "pbl": {
     "emptyProject": "PBL專案尚未生成，請透過課程生成建立",
@@ -1051,7 +1151,6 @@
     "yesterday": "昨天",
     "daysAgo": "天前",
     "slides": "投影片",
-    "nameCopied": "名稱已複製",
     "deleteConfirmTitle": "確認刪除",
     "delete": "刪除",
     "rename": "重新命名",
@@ -1076,8 +1175,10 @@
     "deleteFolderTitle": "刪除資料夾「{{name}}」",
     "deleteFolderEmptyDesc": "這個資料夾是空的。刪除後無法復原。",
     "deleteFolderUngroupDesc": "課程保留在「我的課程」，只是不再歸類。",
+    "moreActions": "更多操作",
+    "openCourse": "開啟課程 {{name}}",
+    "openFolder": "開啟資料夾 {{name}}",
     "moveToFolder": "移動到資料夾",
-    "moveToFolderLabel": "移動到資料夾",
     "ungrouped": "未分類",
     "searchResults": "搜尋結果",
     "folderCreateFailed": "建立資料夾失敗",
@@ -1107,6 +1208,7 @@
     "formatListSeparator": "、",
     "generateFailed": "生成課堂失敗，請重試",
     "requirementPlaceholder": "輸入你想學的任何內容，例如：\n「從零學 Python，30 分鐘寫出第一個程式」\n「用白板為我講解傅立葉轉換」\n「阿瓦隆桌遊怎麼玩」",
+    "requirementLabel": "學習需求",
     "requirementRequired": "請輸入課程需求",
     "fileTooLarge": "檔案過大，請選擇小於 50MB 的檔案",
     "courseMaterialCountLimit": "最多可上傳 5 個課程材料檔案",
@@ -1241,6 +1343,7 @@
     "language": "語言",
     "languageDesc": "選擇介面語言",
     "theme": "主題",
+    "themeWithCurrent": "主題：{{theme}}",
     "themeDesc": "選擇主題模式（淺色/深色/跟隨系統）",
     "themeOptions": {
       "light": "淺色",
@@ -2293,12 +2396,14 @@
     "title": "個人資料",
     "defaultNickname": "同學",
     "chooseAvatar": "選擇頭像",
+    "avatarOption": "頭像 {{n}}",
     "uploadAvatar": "上傳",
     "bioPlaceholder": "介紹一下自己，AI老師會根據你的背景提供個人化教學...",
     "avatarHint": "你的頭像將顯示在課堂討論和對話中",
     "fileTooLarge": "圖片過大，請選擇小於 5MB 的圖片",
     "invalidFileType": "請選擇圖片檔案",
-    "editTooltip": "點擊編輯個人資料"
+    "editTooltip": "點擊編輯個人資料",
+    "edit": "編輯個人資料"
   },
   "media": {
     "imageCapability": "圖像生成",

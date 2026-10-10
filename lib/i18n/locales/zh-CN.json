@@ -7,7 +7,8 @@
     "errorPrefix": "错误：",
     "loadingClassroom": "正在加载课堂...",
     "retry": "重试",
-    "close": "关闭"
+    "close": "关闭",
+    "switchLanguage": "切换语言"
   },
   "home": {
     "slogan": "Generative Learning in Multi-Agent Interactive Classroom",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "课堂互动",
+    "collapsePanel": "收起互动栏",
+    "conversationLog": "对话记录",
+    "softCloseCountdown": {
+      "qa": "{{seconds}} 秒后结束问答，回到讲课",
+      "discussion": "{{seconds}} 秒后结束讨论，回到讲课"
+    },
+    "actionTag": {
+      "group": "白板操作",
+      "spotlight": "聚焦",
+      "laser": "激光笔",
+      "play_video": "播放视频",
+      "discussion": "讨论",
+      "wb_open": "板书 · 打开",
+      "wb_close": "板书 · 关闭",
+      "wb_clear": "板书 · 清空",
+      "wb_delete": "板书 · 删除",
+      "wb_draw_text": "板书 · 文字",
+      "wb_draw_shape": "板书 · 图形",
+      "wb_draw_chart": "板书 · 图表",
+      "wb_draw_latex": "板书 · 公式",
+      "wb_draw_table": "板书 · 表格",
+      "wb_draw_line": "板书 · 线条",
+      "wb_draw_code": "板书 · 代码",
+      "wb_edit_code": "板书 · 改代码"
+    },
     "lecture": "授课",
     "noConversations": "暂无对话",
     "startConversation": "输入消息开始对话",
-    "noMessages": "暂无消息",
-    "ended": "已结束",
     "unknown": "未知",
-    "stopDiscussion": "结束讨论",
-    "endQA": "结束问答",
     "softClosing": "继续讨论",
     "error": {
       "emptyAgentResponses": "智能体连续无响应,讨论已停止。请重新尝试或检查模型配置。",
-      "streamInterrupted": "数据流意外中断,讨论未能完成。请重新尝试。"
+      "streamInterrupted": "数据流意外中断,讨论未能完成。请重新尝试。",
+      "modelBusy": "模型服务当前繁忙。请稍后再次发送消息，或在模型设置中切换可用模型。"
     },
     "elementReference": {
       "whiteboardChanged": "引用的白板元素已变化或不可用，请重新选择或移除引用后再发送。",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "笔记",
-      "chat": "对话"
+      "chat": "互动",
+      "scenes": "场景"
     },
     "lectureNotes": {
       "empty": "播放课程后，笔记将在此显示",
@@ -310,8 +335,8 @@
     "discussion": "讨论",
     "join": "加入讨论",
     "skip": "跳过",
-    "pause": "暂停",
-    "resume": "继续"
+    "offerLabel": "{{name}} 发起讨论",
+    "autoSkipHint": "{{seconds}} 秒后自动跳过"
   },
   "voice": {
     "startListening": "语音输入",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "当前场景",
+    "collapseSceneSidebar": "收起场景栏",
+    "expandSceneSidebar": "展开场景栏",
+    "sceneRail": "场景",
+    "sceneRailItem": "第 {{n}} 页：{{title}}",
+    "headerMenu": "更多：语言、主题、设置、专业模式、导出",
+    "exportMenu": "导出",
+    "expandInteractionPanel": "展开互动栏",
+    "pageCounter": "第 {{current}} / {{total}} 页",
+    "previousScene": "上一页",
+    "nextScene": "下一页",
+    "play": "播放",
+    "pause": "暂停",
+    "pauseAnswer": "暂停回答",
+    "resumeAnswer": "继续回答",
+    "playbackSpeed": "播放速度",
+    "playbackMenu": "更多：播放速度、音量、自动播放",
+    "mute": "静音",
+    "unmute": "取消静音",
+    "volume": "音量",
+    "whiteboardToggle": "白板",
+    "caption": {
+      "lecturing": "讲解中",
+      "paused": "已暂停，等你发言",
+      "answering": "回答中",
+      "discussing": "讨论中",
+      "resumeIn": "{{seconds}} 秒后继续讲课",
+      "answeringYou": "正在回答你的问题",
+      "drawing": "边讲边写"
+    },
+    "pip": {
+      "badge": "课件 · 第 {{n}} 页",
+      "return": "返回课件",
+      "returnLabel": "返回课件（第 {{n}} 页）"
+    },
+    "composer": {
+      "raiseHand": "举手",
+      "raiseHandHint": "举手提问：老师讲完当前这句后请你发言",
+      "raiseHandInLiveSession": "问答中可直接发言",
+      "lowerHand": "放下",
+      "lowerHandHint": "放下手，撤回提问",
+      "cuePlaceholder": "说出或输入你的问题",
+      "cueStatus": "轮到你发言了 · 课堂已暂停",
+      "send": "发送",
+      "cancelRecording": "取消录音",
+      "handRaised": "已举手 · 讲完这句就请你发言",
+      "handRaisedStep": "已举手 · 这一步结束就请你发言",
+      "raisedPlaceholder": "可以先写下问题...",
+      "followUpPlaceholder": "继续追问...",
+      "referencePlaceholder": "关于这个{{type}}，你想问什么？",
+      "handLowered": "已放下手"
+    },
+    "handRaise": {
+      "raised": "你举手了",
+      "aheadOfDiscussion": "你举手了，{{name}} 的讨论排在你之后",
+      "calledBy": "{{name}} 请你发言",
+      "pendingQuestion": "排队中 · 老师讲完这句就回答",
+      "pendingQuestionStep": "排队中 · 老师完成当前步骤就回答"
+    },
+    "participants": {
+      "label": "课堂成员",
+      "online": "{{count}} 人在线",
+      "speaking": "讲解中",
+      "wantsToSpeak": "想发言",
+      "handRaised": "举手中",
+      "more": "另外 {{count}} 位成员"
+    },
     "generating": "生成中...",
     "paused": "已暂停",
     "generationFailed": "生成失败",
@@ -765,18 +856,26 @@
     "title": "互动白板",
     "open": "打开白板",
     "clear": "清空白板",
-    "minimize": "最小化白板",
+    "minimize": "返回课件",
     "ready": "白板已就绪",
     "readyHint": "AI 添加元素后将在此显示",
     "clearSuccess": "白板已清空",
     "clearError": "清空白板失败：",
-    "resetView": "重置视图",
     "restoreError": "恢复白板失败：",
     "history": "历史记录",
     "restore": "恢复",
     "noHistory": "暂无历史记录",
     "restored": "已恢复白板内容",
-    "elementCount": "{{count}} 个元素"
+    "elementCount": "{{count}} 个元素",
+    "drawing": "{{name}} 正在板书",
+    "drawingAnonymous": "正在板书",
+    "zoom": "缩放",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fit": "适应窗口",
+    "historyWithCount": "历史记录（{{count}} 条）",
+    "undo": "撤销",
+    "restoreSnapshot": "恢复 #{{index}}"
   },
   "quiz": {
     "title": "随堂测验",
@@ -817,20 +916,21 @@
     "discussionEnded": "讨论已结束",
     "qaEnded": "问答已结束",
     "thinking": "思考中",
-    "yourTurn": "轮到你发言了",
     "stopDiscussion": "结束讨论",
-    "softClosing": "继续讨论",
+    "stopQA": "结束问答",
     "autoPlay": "自动播放",
     "autoPlayOff": "关闭自动播放",
     "speed": "倍速",
-    "previousLine": "Previous line",
-    "nextLine": "Next line",
-    "lineProgress": "Line {{current}} / {{total}}",
     "voiceInput": "语音输入",
     "voiceInputDisabled": "语音输入已禁用",
     "textInput": "文字输入",
     "stopRecording": "停止录音",
-    "startRecording": "开始录音"
+    "handRaisedQueued": "已举手 · 老师讲完这句就回答你",
+    "handRaisedQueuedStep": "已举手 · 老师完成当前步骤就回答你",
+    "handRaisedDelivered": "你的问题已发送",
+    "cancelQueuedQuestion": "撤回",
+    "queuedQuestionNotSent": "举手提问未发送",
+    "queuedQuestionRestored": "已恢复你未发送的提问"
   },
   "pbl": {
     "emptyProject": "PBL项目尚未生成，请通过课程生成创建",
@@ -1066,7 +1166,6 @@
     "yesterday": "昨天",
     "daysAgo": "天前",
     "slides": "页",
-    "nameCopied": "课堂名称已复制",
     "deleteConfirmTitle": "删除课堂",
     "delete": "删除",
     "rename": "重命名",
@@ -1091,8 +1190,10 @@
     "deleteFolderTitle": "删除文件夹「{{name}}」",
     "deleteFolderEmptyDesc": "这是一个空文件夹，删除后不可恢复。",
     "deleteFolderUngroupDesc": "课程保留在「我的课程」，只是不再归类。",
+    "moreActions": "更多操作",
+    "openCourse": "打开课程 {{name}}",
+    "openFolder": "打开文件夹 {{name}}",
     "moveToFolder": "移动到文件夹",
-    "moveToFolderLabel": "移动到…",
     "ungrouped": "未分组",
     "searchResults": "搜索结果",
     "folderCreateFailed": "创建文件夹失败",
@@ -1122,6 +1223,7 @@
     "formatListSeparator": "、",
     "generateFailed": "生成课堂失败，请重试",
     "requirementPlaceholder": "输入你想学的任何内容，例如：\n「从零学 Python，30 分钟写出第一个程序」\n「用白板给我讲解傅里叶变换」\n「阿瓦隆桌游怎么玩」",
+    "requirementLabel": "学习需求",
     "requirementRequired": "请输入课程需求",
     "fileTooLarge": "文件过大，请选择小于 50MB 的文件",
     "courseMaterialCountLimit": "最多可上传 5 个课程材料文件",
@@ -1256,6 +1358,7 @@
     "language": "语言",
     "languageDesc": "选择界面语言",
     "theme": "主题",
+    "themeWithCurrent": "主题：{{theme}}",
     "themeDesc": "选择主题模式（浅色/深色/跟随系统）",
     "themeOptions": {
       "light": "浅色",
@@ -2308,12 +2411,14 @@
     "title": "个人资料",
     "defaultNickname": "同学",
     "chooseAvatar": "选择头像",
+    "avatarOption": "头像 {{n}}",
     "uploadAvatar": "上传",
     "bioPlaceholder": "介绍一下自己，AI老师会根据你的背景个性化教学...",
     "avatarHint": "你的头像将显示在课堂讨论和对话中",
     "fileTooLarge": "图片过大，请选择小于 5MB 的图片",
     "invalidFileType": "请选择图片文件",
-    "editTooltip": "点击编辑个人资料"
+    "editTooltip": "点击编辑个人资料",
+    "edit": "编辑个人资料"
   },
   "media": {
     "imageCapability": "图像生成",

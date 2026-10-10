@@ -5,6 +5,11 @@ export interface StoredActionResumePosition {
   actionIndex: number;
   actionId: string;
   actionType: Action['type'];
+  /**
+   * A raised hand was answered just before this action, which had not started:
+   * resume exactly there, whatever its type (other positions are speech lines).
+   */
+  atBoundary?: true;
 }
 
 export interface ActionResumeRestoreCursor {
@@ -33,7 +38,9 @@ function isStoredActionResumeState(value: unknown): value is StoredActionResumeS
       typeof entry === 'object' &&
       Number.isInteger((entry as StoredActionResumePosition).actionIndex) &&
       typeof (entry as StoredActionResumePosition).actionId === 'string' &&
-      typeof (entry as StoredActionResumePosition).actionType === 'string',
+      typeof (entry as StoredActionResumePosition).actionType === 'string' &&
+      ((entry as StoredActionResumePosition).atBoundary === undefined ||
+        (entry as StoredActionResumePosition).atBoundary === true),
   );
 }
 
@@ -105,21 +112,45 @@ export function getActionResumeRestoreCursor(
 ): ActionResumeRestoreCursor {
   const position = getValidActionResumePosition(state, sceneId, actions);
   if (!position) return { actionIndex: 0, position: null };
-  if (!canJumpWithinReconstructablePrefix(actions, 0, position.actionIndex)) {
+  if (
+    !canJumpWithinReconstructablePrefix(actions, 0, position.actionIndex, {
+      atBoundary: position.atBoundary === true,
+    })
+  ) {
     return { actionIndex: 0, position: null };
   }
   return { actionIndex: position.actionIndex, position };
 }
 
+/** Whether the stored position of a scene is a raised-hand boundary at exactly `actionIndex`. */
+export function isActionBoundaryResumePositionAt(
+  storage: Pick<Storage, 'getItem'>,
+  storageKey: string,
+  sceneId: string,
+  actionIndex: number,
+): boolean {
+  const position = readActionResumeState(storage, storageKey).scenes[sceneId];
+  return position?.atBoundary === true && position.actionIndex === actionIndex;
+}
+
+/**
+ * Speech lines are resume positions; with `atBoundary` (a raised hand answered
+ * before the action started) any action is.
+ */
 export function createActionResumePosition(
   actions: readonly Action[],
   actionIndex: number | null | undefined,
+  options: { atBoundary?: boolean } = {},
 ): StoredActionResumePosition | null {
   if (!Number.isInteger(actionIndex) || actionIndex === null || actionIndex === undefined) {
     return null;
   }
   const action = actions[actionIndex];
-  if (!action || action.type !== 'speech') return null;
+  if (!action) return null;
+  if (action.type !== 'speech') {
+    if (!options.atBoundary) return null;
+    return { actionIndex, actionId: action.id, actionType: action.type, atBoundary: true };
+  }
   return {
     actionIndex,
     actionId: action.id,

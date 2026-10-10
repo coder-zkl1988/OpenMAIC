@@ -366,6 +366,129 @@ describe('lectureActionPersistParams', () => {
 
 describe('runPiSingleRequest', () => {
   it.each([
+    [
+      'Failed after 3 attempts. Last error: Our servers are currently overloaded. Please try again later.',
+      'chat.error.modelBusy',
+    ],
+    ['Invalid API key', 'Invalid API key'],
+  ])('handles a reported service failure without throwing: %s', async (message, expected) => {
+    const encoder = new TextEncoder();
+    const cancel = vi.fn();
+    const startEvent = {
+      type: 'agent_start',
+      data: { messageId: 'message-1', agentId: 'teacher-1', agentName: 'Teacher' },
+    };
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            [
+              startEvent,
+              { type: 'error', data: { message } },
+              { type: 'done', data: { totalActions: 0, totalAgents: 1 } },
+            ]
+              .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+              .join(''),
+          ),
+        );
+      },
+      cancel,
+    });
+    const onEvent = vi.fn();
+    const onIterationEnd = vi.fn();
+    const clearAfterError = vi.fn();
+    const markCompleted = vi.fn();
+    const enterSoftClosing = vi.fn();
+    const onStop = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async () => new Response(body, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(
+        runPiSingleRequest(
+          'session-1',
+          {
+            messages: [],
+            storeState: {},
+            config: { agentIds: ['teacher-1'] },
+          } as unknown as Parameters<typeof runPiSingleRequest>[1],
+          new AbortController(),
+          'qa',
+          () => ({ onEvent, onIterationEnd }),
+          clearAfterError,
+          enterSoftClosing,
+          markCompleted,
+          vi.fn(),
+          { current: onStop },
+          (key) => key,
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(clearAfterError).toHaveBeenCalledExactlyOnceWith('session-1', expected);
+      expect(onStop).toHaveBeenCalledExactlyOnceWith({ sessionId: 'session-1', source: 'error' });
+      expect(onEvent).toHaveBeenCalledExactlyOnceWith(startEvent);
+      expect(onIterationEnd).not.toHaveBeenCalled();
+      expect(markCompleted).not.toHaveBeenCalled();
+      expect(enterSoftClosing).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(body.locked).toBe(false);
+      expect(consoleWarn).toHaveBeenCalledOnce();
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      consoleError.mockRestore();
+      consoleWarn.mockRestore();
+    }
+  });
+
+  it('still rejects unexpected stream consumer errors and releases the reader', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"type":"thinking","data":{}}\n\n'));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(body, { status: 200 })),
+    );
+    const clearAfterError = vi.fn();
+    try {
+      await expect(
+        runPiSingleRequest(
+          'session-1',
+          {
+            messages: [],
+            storeState: {},
+            config: { agentIds: ['teacher-1'] },
+          } as unknown as Parameters<typeof runPiSingleRequest>[1],
+          new AbortController(),
+          'qa',
+          () => ({
+            onEvent: () => {
+              throw new Error('unexpected consumer failure');
+            },
+            onIterationEnd: vi.fn(),
+          }),
+          clearAfterError,
+          vi.fn(),
+          vi.fn(),
+          vi.fn(),
+          { current: vi.fn() },
+          (key) => key,
+        ),
+      ).rejects.toThrow('unexpected consumer failure');
+      expect(clearAfterError).not.toHaveBeenCalled();
+      expect(body.locked).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
     'removed-before-post',
     'runtime-authoritative',
     'server-rejected',

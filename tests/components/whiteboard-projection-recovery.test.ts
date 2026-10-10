@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { act, createElement, forwardRef, Fragment, type ReactNode } from 'react';
+import {
+  act,
+  createElement,
+  forwardRef,
+  Fragment,
+  useImperativeHandle,
+  type ReactNode,
+} from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -13,17 +20,29 @@ const mocks = vi.hoisted(() => ({
 vi.mock('motion/react', () => ({
   AnimatePresence: ({ children }: { children: ReactNode }) =>
     createElement(Fragment, null, children),
-  motion: { div: 'div', button: 'button' },
+  motion: { div: 'div', button: 'button', section: 'section', span: 'span' },
+  useReducedMotion: () => false,
 }));
 vi.mock('lucide-react', () => ({
+  CircleCheck: () => null,
   Eraser: () => null,
   History: () => null,
+  Maximize: () => null,
   Minimize2: () => null,
+  Minus: () => null,
   PencilLine: () => null,
+  Plus: () => null,
   RotateCcw: () => null,
+  Scan: () => null,
+  Undo2: () => null,
+  ZoomIn: () => null,
+  ZoomOut: () => null,
 }));
 vi.mock('@/components/whiteboard/whiteboard-canvas', () => ({
-  WhiteboardCanvas: forwardRef(function WhiteboardCanvas() {
+  WHITEBOARD_MIN_ZOOM: 0.2,
+  WHITEBOARD_MAX_ZOOM: 5,
+  WhiteboardCanvas: forwardRef(function WhiteboardCanvas(_props, ref) {
+    useImperativeHandle(ref, () => ({ resetView: vi.fn(), zoomBy: vi.fn(), fit: vi.fn() }));
     return null;
   }),
 }));
@@ -51,7 +70,7 @@ import { Whiteboard } from '@/components/whiteboard';
 
 function WhiteboardHarness() {
   const isOpen = useCanvasStore((state) => state.whiteboardOpen);
-  return createElement(Whiteboard, { isOpen, onClose: vi.fn() });
+  return createElement(Whiteboard, { isOpen });
 }
 
 afterEach(() => {

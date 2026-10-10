@@ -7,7 +7,8 @@
     "errorPrefix": "오류: ",
     "loadingClassroom": "강의실 불러오는 중...",
     "retry": "다시 시도",
-    "close": "닫기"
+    "close": "닫기",
+    "switchLanguage": "언어 전환"
   },
   "home": {
     "slogan": "멀티 에이전트 인터랙티브 교실에서 펼치는 생성형 학습",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "수업 상호작용",
+    "collapsePanel": "상호작용 패널 접기",
+    "conversationLog": "대화 기록",
+    "softCloseCountdown": {
+      "qa": "{{seconds}}초 후 Q&A를 마치고 강의로 돌아갑니다",
+      "discussion": "{{seconds}}초 후 토론을 마치고 강의로 돌아갑니다"
+    },
+    "actionTag": {
+      "group": "판서 작업",
+      "spotlight": "스포트라이트",
+      "laser": "레이저",
+      "play_video": "동영상 재생",
+      "discussion": "토론",
+      "wb_open": "판서 · 열기",
+      "wb_close": "판서 · 닫기",
+      "wb_clear": "판서 · 지우기",
+      "wb_delete": "판서 · 삭제",
+      "wb_draw_text": "판서 · 텍스트",
+      "wb_draw_shape": "판서 · 도형",
+      "wb_draw_chart": "판서 · 차트",
+      "wb_draw_latex": "판서 · 수식",
+      "wb_draw_table": "판서 · 표",
+      "wb_draw_line": "판서 · 선",
+      "wb_draw_code": "판서 · 코드",
+      "wb_edit_code": "판서 · 코드 편집"
+    },
     "lecture": "강의",
     "noConversations": "대화 없음",
     "startConversation": "아래에 메시지를 입력하여 채팅을 시작하세요",
-    "noMessages": "아직 메시지가 없습니다",
-    "ended": "종료됨",
     "unknown": "알 수 없음",
-    "stopDiscussion": "토론 중단",
-    "endQA": "Q&A 종료",
     "softClosing": "토론 계속하기",
     "error": {
       "emptyAgentResponses": "에이전트가 빈 응답을 반환하여 토론이 중단되었습니다. 다시 시도하거나 모델 설정을 확인하세요.",
-      "streamInterrupted": "스트림이 예기치 않게 종료되어 토론이 완료되지 않았습니다. 다시 시도해 주세요."
+      "streamInterrupted": "스트림이 예기치 않게 종료되어 토론이 완료되지 않았습니다. 다시 시도해 주세요.",
+      "modelBusy": "현재 모델 서비스가 혼잡합니다. 잠시 후 메시지를 다시 보내거나 모델 설정에서 사용 가능한 모델을 선택하세요."
     },
     "elementReference": {
       "whiteboardChanged": "참조한 화이트보드 요소가 변경되었거나 사용할 수 없습니다. 다시 선택하거나 참조를 제거한 후 보내세요.",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "노트",
-      "chat": "채팅"
+      "chat": "상호작용",
+      "scenes": "장면"
     },
     "lectureNotes": {
       "empty": "강의 재생 후 여기에 노트가 표시됩니다",
@@ -310,8 +335,8 @@
     "discussion": "토론",
     "join": "참여",
     "skip": "건너뛰기",
-    "pause": "일시정지",
-    "resume": "재개"
+    "offerLabel": "{{name}} 님이 토론을 제안했습니다",
+    "autoSkipHint": "{{seconds}}초 후 자동으로 건너뜁니다"
   },
   "voice": {
     "startListening": "음성 입력",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "현재 장면",
+    "collapseSceneSidebar": "장면 목록 접기",
+    "expandSceneSidebar": "장면 목록 펼치기",
+    "sceneRail": "장면",
+    "sceneRailItem": "{{n}}페이지: {{title}}",
+    "headerMenu": "더보기: 언어, 테마, 설정, 프로 모드, 내보내기",
+    "exportMenu": "내보내기",
+    "expandInteractionPanel": "상호작용 패널 펼치기",
+    "pageCounter": "{{current}} / {{total}} 페이지",
+    "previousScene": "이전 장면",
+    "nextScene": "다음 장면",
+    "play": "재생",
+    "pause": "일시정지",
+    "pauseAnswer": "답변 일시정지",
+    "resumeAnswer": "답변 재개",
+    "playbackSpeed": "재생 속도",
+    "playbackMenu": "더보기: 재생 속도, 볼륨, 자동 재생",
+    "mute": "음소거",
+    "unmute": "음소거 해제",
+    "volume": "볼륨",
+    "whiteboardToggle": "화이트보드",
+    "caption": {
+      "lecturing": "설명 중",
+      "paused": "일시정지됨 · 발언할 차례입니다",
+      "answering": "답변 중",
+      "discussing": "토론 중",
+      "resumeIn": "{{seconds}}초 후 수업 재개",
+      "answeringYou": "질문에 답하는 중",
+      "drawing": "판서하며 설명 중"
+    },
+    "pip": {
+      "badge": "슬라이드 · {{n}}페이지",
+      "return": "슬라이드로 돌아가기",
+      "returnLabel": "슬라이드로 돌아가기 ({{n}}페이지)"
+    },
+    "composer": {
+      "raiseHand": "손들기",
+      "raiseHandHint": "손들기: 선생님이 이 문장을 마친 뒤 발언을 요청합니다",
+      "raiseHandInLiveSession": "Q&A 중에는 바로 말할 수 있어요",
+      "lowerHand": "내리기",
+      "lowerHandHint": "손을 내리고 질문 취소",
+      "cuePlaceholder": "질문을 말하거나 입력하세요",
+      "cueStatus": "발언할 차례입니다 · 수업 일시정지됨",
+      "send": "보내기",
+      "cancelRecording": "녹음 취소",
+      "handRaised": "손을 들었어요 · 이 문장이 끝나면 발언할 차례예요",
+      "handRaisedStep": "손을 들었어요 · 이 단계가 끝나면 발언할 차례예요",
+      "raisedPlaceholder": "질문을 먼저 적어 두세요...",
+      "followUpPlaceholder": "이어서 질문하기...",
+      "referencePlaceholder": "이 {{type}}에 대해 무엇을 묻고 싶나요?",
+      "handLowered": "손을 내렸어요"
+    },
+    "handRaise": {
+      "raised": "손을 들었어요",
+      "aheadOfDiscussion": "손을 들었어요. {{name}} 님의 토론은 내 다음 순서예요",
+      "calledBy": "{{name}} 님이 발언을 요청했어요",
+      "pendingQuestion": "대기 중 · 이 문장이 끝나면 답변해요",
+      "pendingQuestionStep": "대기 중 · 이 단계가 끝나면 답변해요"
+    },
+    "participants": {
+      "label": "참여자",
+      "online": "{{count}}명 접속 중",
+      "speaking": "설명 중",
+      "wantsToSpeak": "발언 희망",
+      "handRaised": "손 든 상태",
+      "more": "참여자 {{count}}명 더 보기"
+    },
     "generating": "생성 중...",
     "paused": "일시정지됨",
     "generationFailed": "생성 실패",
@@ -765,18 +856,26 @@
     "title": "인터랙티브 화이트보드",
     "open": "화이트보드 열기",
     "clear": "화이트보드 지우기",
-    "minimize": "화이트보드 최소화",
+    "minimize": "슬라이드로 돌아가기",
     "ready": "화이트보드가 준비되었습니다",
     "readyHint": "AI가 요소를 추가하면 여기에 표시됩니다",
     "clearSuccess": "화이트보드를 성공적으로 지웠습니다",
     "clearError": "화이트보드 지우기 실패: ",
-    "resetView": "보기 초기화",
     "restoreError": "화이트보드 복원 실패: ",
     "history": "기록",
     "restore": "복원",
     "noHistory": "아직 기록이 없습니다",
     "restored": "화이트보드가 복원되었습니다",
-    "elementCount": "요소 {{count}}개"
+    "elementCount": "요소 {{count}}개",
+    "drawing": "{{name}} 판서 중",
+    "drawingAnonymous": "판서 중",
+    "zoom": "확대/축소",
+    "zoomIn": "확대",
+    "zoomOut": "축소",
+    "fit": "창에 맞추기",
+    "historyWithCount": "기록 ({{count}}개)",
+    "undo": "실행 취소",
+    "restoreSnapshot": "#{{index}} 복원"
   },
   "quiz": {
     "title": "퀴즈",
@@ -816,21 +915,22 @@
     "noSpeechDetected": "음성이 감지되지 않았습니다. 다시 시도해주세요",
     "discussionEnded": "토론이 종료되었습니다",
     "qaEnded": "Q&A가 종료되었습니다",
-    "softClosing": "토론 계속하기",
     "thinking": "생각 중",
-    "yourTurn": "내 차례",
     "stopDiscussion": "토론 중단",
+    "stopQA": "질의응답 종료",
     "autoPlay": "자동 재생",
     "autoPlayOff": "자동 재생 끄기",
     "speed": "속도",
-    "previousLine": "Previous line",
-    "nextLine": "Next line",
-    "lineProgress": "Line {{current}} / {{total}}",
     "voiceInput": "음성 입력",
     "voiceInputDisabled": "음성 입력 비활성화됨",
     "textInput": "텍스트 입력",
     "stopRecording": "녹음 중지",
-    "startRecording": "녹음 시작"
+    "handRaisedQueued": "손을 들었습니다 · 이 문장이 끝나면 선생님이 답변해 드립니다",
+    "handRaisedQueuedStep": "손을 들었습니다 · 이 단계가 끝나면 선생님이 답변해 드립니다",
+    "handRaisedDelivered": "질문을 보냈습니다",
+    "cancelQueuedQuestion": "취소",
+    "queuedQuestionNotSent": "손을 들고 남긴 질문이 전송되지 않았습니다",
+    "queuedQuestionRestored": "보내지 않은 질문을 복원했습니다"
   },
   "pbl": {
     "emptyProject": "PBL 프로젝트가 아직 생성되지 않았습니다. 강좌 생성을 통해 만들어주세요.",
@@ -1066,7 +1166,6 @@
     "yesterday": "어제",
     "daysAgo": "일 전",
     "slides": "슬라이드",
-    "nameCopied": "이름이 복사되었습니다",
     "deleteConfirmTitle": "삭제 확인",
     "delete": "삭제",
     "rename": "이름 변경",
@@ -1091,8 +1190,10 @@
     "deleteFolderTitle": "폴더 \"{{name}}\" 삭제",
     "deleteFolderEmptyDesc": "이 폴더는 비어 있습니다. 삭제 후 복구할 수 없습니다.",
     "deleteFolderUngroupDesc": "강의는 «내 강의»에 유지되며, 미분류로 변경됩니다.",
+    "moreActions": "더 보기",
+    "openCourse": "{{name}} 코스 열기",
+    "openFolder": "{{name}} 폴더 열기",
     "moveToFolder": "폴더로 이동",
-    "moveToFolderLabel": "폴더로 이동",
     "ungrouped": "미분류",
     "searchResults": "검색 결과",
     "folderCreateFailed": "폴더 만들기에 실패했습니다",
@@ -1122,6 +1223,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "교실 생성에 실패했습니다. 다시 시도해주세요",
     "requirementPlaceholder": "학습하고 싶은 내용을 자유롭게 입력하세요, 예:\n\"파이썬을 30분 만에 처음부터 가르쳐주세요\"\n\"칠판에 푸리에 변환을 설명해주세요\"\n\"보드게임 Avalon 하는 방법\"",
+    "requirementLabel": "학습 요청",
     "requirementRequired": "강좌 요구사항을 입력해주세요",
     "fileTooLarge": "파일이 너무 큽니다. 50MB 미만의 파일을 선택해주세요",
     "courseMaterialCountLimit": "강의 자료 파일은 최대 5개까지 업로드할 수 있습니다",
@@ -1256,6 +1358,7 @@
     "language": "언어",
     "languageDesc": "인터페이스 언어 선택",
     "theme": "테마",
+    "themeWithCurrent": "테마: {{theme}}",
     "themeDesc": "테마 모드 선택 (라이트/다크/시스템)",
     "themeOptions": {
       "light": "라이트",
@@ -2308,12 +2411,14 @@
     "title": "프로필",
     "defaultNickname": "학습자",
     "chooseAvatar": "아바타 선택",
+    "avatarOption": "아바타 {{n}}",
     "uploadAvatar": "업로드",
     "bioPlaceholder": "자신에 대해 알려주세요 — AI 선생님이 맞춤 수업을 준비해 드립니다...",
     "avatarHint": "아바타는 교실 토론 및 채팅에 표시됩니다",
     "fileTooLarge": "이미지가 너무 큽니다 — 5MB 미만의 파일을 선택해 주세요",
     "invalidFileType": "이미지 파일을 선택해 주세요",
-    "editTooltip": "클릭하여 프로필 수정"
+    "editTooltip": "클릭하여 프로필 수정",
+    "edit": "프로필 편집"
   },
   "media": {
     "imageCapability": "이미지 생성",

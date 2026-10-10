@@ -41,16 +41,37 @@ export function CourseRunStatusIcon({
   return <Loader2 className={cn('animate-spin', className)} aria-hidden="true" />;
 }
 
-/** The pill a course card shows while its run is not over. */
-export function CourseRunStatusLabel({ status }: { readonly status: CourseRunStatus }) {
+/**
+ * The pill a course card shows while its run is not over. `size="md"` is the
+ * home library card's 12px pill on the primary scale; the default is the
+ * compact 11px pill the Pro workspace rail keeps.
+ */
+export function CourseRunStatusLabel({
+  status,
+  size = 'sm',
+}: {
+  readonly status: CourseRunStatus;
+  readonly size?: 'sm' | 'md';
+}) {
   const { t } = useI18n();
+  const paused = status.kind === 'paused';
   return (
     <span
       className={cn(
-        'shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
-        status.kind === 'paused'
-          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-          : 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400',
+        'shrink-0 inline-flex items-center gap-1 rounded-full font-medium',
+        size === 'md'
+          ? cn(
+              'px-2 py-px text-xs leading-[18px]',
+              paused
+                ? 'bg-warning-soft text-warning'
+                : 'bg-primary-1 text-primary-6 dark:bg-accent-soft dark:text-accent-text',
+            )
+          : cn(
+              'px-2 py-0.5 text-[11px]',
+              paused
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                : 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400',
+            ),
       )}
       data-testid="course-run-status"
     >

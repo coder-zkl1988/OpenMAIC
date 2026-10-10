@@ -7,7 +7,8 @@
     "errorPrefix": "エラー：",
     "loadingClassroom": "教室を読み込み中...",
     "retry": "再試行",
-    "close": "閉じる"
+    "close": "閉じる",
+    "switchLanguage": "言語を切り替え"
   },
   "home": {
     "slogan": "マルチエージェント対話型教室で生成的に学ぶ",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "授業の交流",
+    "collapsePanel": "交流パネルを閉じる",
+    "conversationLog": "会話の記録",
+    "softCloseCountdown": {
+      "qa": "{{seconds}} 秒後にQ&Aを終了し、講義に戻ります",
+      "discussion": "{{seconds}} 秒後にディスカッションを終了し、講義に戻ります"
+    },
+    "actionTag": {
+      "group": "板書の操作",
+      "spotlight": "スポットライト",
+      "laser": "レーザー",
+      "play_video": "動画を再生",
+      "discussion": "ディスカッション",
+      "wb_open": "板書 · 開く",
+      "wb_close": "板書 · 閉じる",
+      "wb_clear": "板書 · クリア",
+      "wb_delete": "板書 · 削除",
+      "wb_draw_text": "板書 · テキスト",
+      "wb_draw_shape": "板書 · 図形",
+      "wb_draw_chart": "板書 · グラフ",
+      "wb_draw_latex": "板書 · 数式",
+      "wb_draw_table": "板書 · 表",
+      "wb_draw_line": "板書 · 線",
+      "wb_draw_code": "板書 · コード",
+      "wb_edit_code": "板書 · コード編集"
+    },
     "lecture": "講義",
     "noConversations": "会話はありません",
     "startConversation": "下にメッセージを入力して会話を始めましょう",
-    "noMessages": "メッセージはまだありません",
-    "ended": "終了",
     "unknown": "不明",
-    "stopDiscussion": "ディスカッションを終了",
-    "endQA": "Q&Aを終了",
     "softClosing": "話し合いを続ける",
     "error": {
       "emptyAgentResponses": "エージェントが空の応答を返したため、ディスカッションを停止しました。再試行するかモデル設定をご確認ください。",
-      "streamInterrupted": "ストリームが予期せず終了し、ディスカッションが完了しませんでした。再度お試しください。"
+      "streamInterrupted": "ストリームが予期せず終了し、ディスカッションが完了しませんでした。再度お試しください。",
+      "modelBusy": "モデルサービスが現在混雑しています。時間を置いてメッセージを再送信するか、モデル設定で利用可能なモデルを選択してください。"
     },
     "elementReference": {
       "whiteboardChanged": "参照したホワイトボードの要素が変更されたか、利用できません。再選択するか、参照を削除してから送信してください。",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "ノート",
-      "chat": "チャット"
+      "chat": "交流",
+      "scenes": "シーン"
     },
     "lectureNotes": {
       "empty": "講義の再生後にノートがここに表示されます",
@@ -310,8 +335,8 @@
     "discussion": "ディスカッション",
     "join": "参加する",
     "skip": "スキップ",
-    "pause": "一時停止",
-    "resume": "再開"
+    "offerLabel": "{{name}} がディスカッションを始めようとしています",
+    "autoSkipHint": "{{seconds}} 秒後に自動的にスキップします"
   },
   "voice": {
     "startListening": "音声入力",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "現在のシーン",
+    "collapseSceneSidebar": "シーン一覧を折りたたむ",
+    "expandSceneSidebar": "シーン一覧を展開",
+    "sceneRail": "シーン",
+    "sceneRailItem": "{{n}} ページ：{{title}}",
+    "headerMenu": "その他：言語、テーマ、設定、プロモード、エクスポート",
+    "exportMenu": "エクスポート",
+    "expandInteractionPanel": "インタラクションパネルを展開",
+    "pageCounter": "{{current}} / {{total}} ページ",
+    "previousScene": "前のシーン",
+    "nextScene": "次のシーン",
+    "play": "再生",
+    "pause": "一時停止",
+    "pauseAnswer": "回答を一時停止",
+    "resumeAnswer": "回答を再開",
+    "playbackSpeed": "再生速度",
+    "playbackMenu": "その他：再生速度、音量、自動再生",
+    "mute": "ミュート",
+    "unmute": "ミュート解除",
+    "volume": "音量",
+    "whiteboardToggle": "ホワイトボード",
+    "caption": {
+      "lecturing": "説明中",
+      "paused": "一時停止中・あなたの番です",
+      "answering": "回答中",
+      "discussing": "ディスカッション中",
+      "resumeIn": "{{seconds}} 秒後に授業を再開",
+      "answeringYou": "あなたの質問に回答しています",
+      "drawing": "板書しながら説明中"
+    },
+    "pip": {
+      "badge": "スライド · {{n}} ページ",
+      "return": "スライドに戻る",
+      "returnLabel": "スライドに戻る（{{n}} ページ）"
+    },
+    "composer": {
+      "raiseHand": "挙手",
+      "raiseHandHint": "挙手：先生がこの文を話し終えたらあなたを指名します",
+      "raiseHandInLiveSession": "Q&A 中はそのまま発言できます",
+      "lowerHand": "手を下ろす",
+      "lowerHandHint": "手を下ろして質問を取り消す",
+      "cuePlaceholder": "質問を話すか入力してください",
+      "cueStatus": "あなたの番です · 授業は一時停止中",
+      "send": "送信",
+      "cancelRecording": "録音をキャンセル",
+      "handRaised": "挙手中 · この文が終わったら指名されます",
+      "handRaisedStep": "挙手中 · このステップが終わったら指名されます",
+      "raisedPlaceholder": "先に質問を書いておけます...",
+      "followUpPlaceholder": "続けて質問する...",
+      "referencePlaceholder": "この{{type}}について、何を聞きたいですか？",
+      "handLowered": "手を下ろしました"
+    },
+    "handRaise": {
+      "raised": "手を挙げました",
+      "aheadOfDiscussion": "手を挙げました。{{name}} のディスカッションはあなたの後です",
+      "calledBy": "{{name}} があなたを指名しました",
+      "pendingQuestion": "待機中 · この文が終わったら回答します",
+      "pendingQuestionStep": "待機中 · このステップが終わったら回答します"
+    },
+    "participants": {
+      "label": "参加者",
+      "online": "{{count}} 人がオンライン",
+      "speaking": "説明中",
+      "wantsToSpeak": "発言したい",
+      "handRaised": "挙手中",
+      "more": "ほか {{count}} 人の参加者"
+    },
     "generating": "生成中...",
     "paused": "一時停止中",
     "generationFailed": "生成に失敗しました",
@@ -765,18 +856,26 @@
     "title": "インタラクティブホワイトボード",
     "open": "ホワイトボードを開く",
     "clear": "ホワイトボードをクリア",
-    "minimize": "ホワイトボードを最小化",
+    "minimize": "スライドに戻る",
     "ready": "ホワイトボードの準備ができました",
     "readyHint": "AIが追加すると要素がここに表示されます",
     "clearSuccess": "ホワイトボードをクリアしました",
     "clearError": "ホワイトボードのクリアに失敗しました：",
-    "resetView": "表示をリセット",
     "restoreError": "ホワイトボードの復元に失敗しました：",
     "history": "履歴",
     "restore": "復元",
     "noHistory": "履歴はまだありません",
     "restored": "ホワイトボードを復元しました",
-    "elementCount": "{{count}} 個の要素"
+    "elementCount": "{{count}} 個の要素",
+    "drawing": "{{name}} が板書中",
+    "drawingAnonymous": "板書中",
+    "zoom": "ズーム",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "fit": "ウィンドウに合わせる",
+    "historyWithCount": "履歴（{{count}} 件）",
+    "undo": "元に戻す",
+    "restoreSnapshot": "#{{index}} を復元"
   },
   "quiz": {
     "title": "クイズ",
@@ -816,21 +915,22 @@
     "noSpeechDetected": "音声が検出されませんでした。もう一度お試しください",
     "discussionEnded": "ディスカッションが終了しました",
     "qaEnded": "Q&Aが終了しました",
-    "softClosing": "話し合いを続ける",
     "thinking": "思考中",
-    "yourTurn": "あなたの番です",
     "stopDiscussion": "ディスカッションを終了",
+    "stopQA": "質疑応答を終了",
     "autoPlay": "自動再生",
     "autoPlayOff": "自動再生を停止",
     "speed": "速度",
-    "previousLine": "Previous line",
-    "nextLine": "Next line",
-    "lineProgress": "Line {{current}} / {{total}}",
     "voiceInput": "音声入力",
     "voiceInputDisabled": "音声入力無効",
     "textInput": "テキスト入力",
     "stopRecording": "録音を停止",
-    "startRecording": "録音を開始"
+    "handRaisedQueued": "挙手しました · この一文が終わったら先生が答えます",
+    "handRaisedQueuedStep": "挙手しました · この手順が終わったら先生が答えます",
+    "handRaisedDelivered": "質問を送信しました",
+    "cancelQueuedQuestion": "取り消す",
+    "queuedQuestionNotSent": "挙手した質問は送信されませんでした",
+    "queuedQuestionRestored": "未送信の質問を復元しました"
   },
   "pbl": {
     "emptyProject": "PBLプロジェクトがまだ生成されていません。コース生成から作成してください。",
@@ -1066,7 +1166,6 @@
     "yesterday": "昨日",
     "daysAgo": "日前",
     "slides": "スライド",
-    "nameCopied": "名前をコピーしました",
     "deleteConfirmTitle": "削除の確認",
     "delete": "削除",
     "rename": "名前を変更",
@@ -1091,8 +1190,10 @@
     "deleteFolderTitle": "フォルダ「{{name}}」を削除",
     "deleteFolderEmptyDesc": "このフォルダは空です。削除後は復元できません。",
     "deleteFolderUngroupDesc": "コースは「マイコース」に残り、未分類になります。",
+    "moreActions": "その他の操作",
+    "openCourse": "コース「{{name}}」を開く",
+    "openFolder": "フォルダ「{{name}}」を開く",
     "moveToFolder": "フォルダに移動",
-    "moveToFolderLabel": "フォルダに移動",
     "ungrouped": "未分類",
     "searchResults": "検索結果",
     "folderCreateFailed": "フォルダの作成に失敗しました",
@@ -1122,6 +1223,7 @@
     "formatListSeparator": "、",
     "generateFailed": "教室の生成に失敗しました。もう一度お試しください",
     "requirementPlaceholder": "学びたいことを自由に入力してください。例えば：\n「Pythonをゼロから30分で教えて」\n「フーリエ変換をホワイトボードで解説して」\n「ボードゲーム『アバロン』の遊び方」",
+    "requirementLabel": "学びたい内容",
     "requirementRequired": "コースの要件を入力してください",
     "fileTooLarge": "ファイルが大きすぎます。50MB以下のファイルを選択してください",
     "courseMaterialCountLimit": "教材ファイルは最大5件までアップロードできます",
@@ -1256,6 +1358,7 @@
     "language": "言語",
     "languageDesc": "インターフェースの言語を選択",
     "theme": "テーマ",
+    "themeWithCurrent": "テーマ：{{theme}}",
     "themeDesc": "テーマモードを選択（ライト／ダーク／システム）",
     "themeOptions": {
       "light": "ライト",
@@ -2308,12 +2411,14 @@
     "title": "プロフィール",
     "defaultNickname": "学習者",
     "chooseAvatar": "アバターを選択",
+    "avatarOption": "アバター {{n}}",
     "uploadAvatar": "アップロード",
     "bioPlaceholder": "自己紹介を入力してください。AI教師があなたに合わせた授業を行います...",
     "avatarHint": "アバターは教室のディスカッションやチャットに表示されます",
     "fileTooLarge": "画像が大きすぎます。5MB以下のファイルを選択してください",
     "invalidFileType": "画像ファイルを選択してください",
-    "editTooltip": "クリックしてプロフィールを編集"
+    "editTooltip": "クリックしてプロフィールを編集",
+    "edit": "プロフィールを編集"
   },
   "media": {
     "imageCapability": "画像生成",

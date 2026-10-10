@@ -174,6 +174,13 @@ export type WidgetMessageCallback = (type: string, payload: Record<string, unkno
 export interface ActionExecutionOptions {
   silent?: boolean;
   signal?: AbortSignal;
+  /** Agent performing the action; names who is drawing in the whiteboard header. */
+  agentId?: string | null;
+}
+
+/** Actions that put new content on the whiteboard (drives the "is drawing" chip). */
+function isWhiteboardDrawingAction(type: Action['type']): boolean {
+  return type.startsWith('wb_draw_') || type === 'wb_edit_code';
 }
 
 export class ActionEngine {
@@ -230,6 +237,25 @@ export class ActionEngine {
       await this.ensureWhiteboardOpen(options);
     }
 
+    if (options.silent || !isWhiteboardDrawingAction(action.type)) {
+      return this.dispatch(action, options);
+    }
+
+    // Mark the board as being drawn on for the duration of the action. Clear it
+    // in finally so a throwing action cannot leave the chip stuck, and only if
+    // no later action has replaced the marker in the meantime.
+    const drawing = { agentId: options.agentId ?? null };
+    useCanvasStore.getState().setWhiteboardDrawing(drawing);
+    try {
+      await this.dispatch(action, options);
+    } finally {
+      if (useCanvasStore.getState().whiteboardDrawing === drawing) {
+        useCanvasStore.getState().setWhiteboardDrawing(null);
+      }
+    }
+  }
+
+  private async dispatch(action: Action, options: ActionExecutionOptions): Promise<void> {
     switch (action.type) {
       // Fire-and-forget
       case 'spotlight':
@@ -299,6 +325,7 @@ export class ActionEngine {
     useCanvasStore.getState().pauseVideo();
     useCanvasStore.getState().setWhiteboardOpen(false);
     useCanvasStore.getState().setWhiteboardClearing(false);
+    useCanvasStore.getState().setWhiteboardDrawing(null);
     const wb = this.stageAPI.whiteboard.get();
     if (wb.success && wb.data) {
       this.stageAPI.whiteboard.update({ elements: [] }, wb.data.id);
@@ -840,7 +867,10 @@ export class ActionEngine {
     }
 
     // Save snapshot before AI clear (mirrors UI handleClear in index.tsx)
-    useWhiteboardHistoryStore.getState().pushSnapshot(wb.data.elements!);
+    useWhiteboardHistoryStore.getState().pushSnapshot(wb.data.elements!, {
+      viewportSize: wb.data.viewportSize,
+      viewportRatio: wb.data.viewportRatio,
+    });
 
     // Trigger cascade exit animation
     useCanvasStore.getState().setWhiteboardClearing(true);

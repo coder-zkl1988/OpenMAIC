@@ -26,3 +26,10 @@ export interface Message {
   timestamp: number;
   actions?: MessageAction[];
 }
+
+/** A discussion the shell asks the chat layer to start */
+export interface DiscussionRequest {
+  topic: string;
+  prompt?: string;
+  agentId?: string; // Agent ID to initiate discussion (default: 'default-1')
+}

@@ -13,17 +13,49 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useStageStore } from '@/lib/store';
 import { PENDING_SCENE_ID } from '@/lib/store/stage';
 import { useCanvasStore } from '@/lib/store/canvas';
 import { useSettingsStore } from '@/lib/store/settings';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import {
+  isStackedClassroomLayout,
+  isTouchClassroomLayout,
+  useClassroomLayout,
+} from '@/lib/hooks/use-classroom-layout';
+import { useVisualViewportInset } from '@/lib/hooks/use-visual-viewport-inset';
 import { SceneSidebar } from '@/components/stage/scene-sidebar';
 import { Header } from '@/components/header';
 import { CanvasArea } from '@/components/canvas/canvas-area';
-import { Roundtable } from '@/components/roundtable';
-import { PlaybackEngine, computePlaybackView, shouldAutoResumeLecture } from '@/lib/playback';
-import type { EngineMode, TriggerEvent, Effect } from '@/lib/playback';
+import { ControlBar } from '@/components/classroom/control-bar';
+import { CaptionStrip } from '@/components/classroom/caption-strip';
+import {
+  PresentationDock,
+  type PresentationDockHandle,
+} from '@/components/classroom/presentation-dock';
+import { Composer, type ComposerHandle } from '@/components/classroom/interaction/composer';
+import { ComposerSlot, useComposerHost } from '@/components/classroom/interaction/composer-slot';
+import { Participants } from '@/components/classroom/interaction/participants';
+import { describeElementReferenceChip } from '@/components/classroom/interaction/element-reference-chip';
+import {
+  isSpaceActivatedTarget,
+  useClassroomShortcuts,
+} from '@/components/classroom/interaction/use-classroom-shortcuts';
+import type { MessageSendResult } from '@/components/classroom/interaction/use-composer-controller';
+import type { QueuedQuestionState } from '@/components/classroom/interaction/use-queued-question-effects';
+import { ProactiveCard } from '@/components/chat/proactive-card';
+import { HandRaiseStreamStatus } from '@/components/chat/conversation-stream';
+import { DEFAULT_TEACHER_AVATAR } from '@/lib/constants/avatar-fallbacks';
+import { useASRAvailable } from '@/lib/hooks/use-asr-available';
+import { usePlaybackControls } from '@/components/canvas/use-playback-controls';
+import {
+  PlaybackEngine,
+  computePlaybackView,
+  shouldAutoResumeLecture,
+  willResumeAfterSoftClose,
+} from '@/lib/playback';
+import type { EngineMode, TriggerEvent, Effect, HandCall, HandState } from '@/lib/playback';
 import {
   canJumpWithinReconstructablePrefix,
   isUnsafePlaybackNavigationAction,
@@ -33,9 +65,16 @@ import {
   clearActionResumePosition,
   createActionResumePosition,
   getActionResumeStorageKey,
+  isActionBoundaryResumePositionAt,
   readActionResumeState,
   saveActionResumePosition,
 } from '@/lib/playback/action-resume';
+import {
+  clearRaisedHandDraft,
+  getSessionStorage,
+  saveRaisedHandDraft,
+  takeRaisedHandDraft,
+} from '@/lib/playback/raised-hand-draft';
 import { loadCursor, saveCursor, type PlaybackCursor } from '@/lib/playback/cursor';
 import { ActionEngine } from '@/lib/action/engine';
 import { createAudioPlayer } from '@/lib/utils/audio-player';
@@ -56,7 +95,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { VisuallyHidden } from 'radix-ui';
 import type { PPTElement } from '@openmaic/dsl';
 import {
@@ -69,10 +108,7 @@ import type {
   PlaybackInteractivePickerState,
 } from '@/components/scene-renderers/InteractiveIframeHost';
 import { isCoursewareReferenceEnabled, isPiChatEnabled } from '@/lib/config/feature-flags';
-import {
-  getSlideElementPresentation,
-  getSlideElementTypeLabel,
-} from '@/components/canvas/slide-element-pick-overlay';
+import { getSlideElementPresentation } from '@/components/canvas/slide-element-pick-overlay';
 import { shouldClearDraftElementReference } from '@/components/chat/element-reference-receipt';
 
 type DraftElementReference = {
@@ -84,6 +120,24 @@ type DraftElementReference = {
 };
 
 type ElementReferenceSendSnapshot = Pick<DraftElementReference, 'reference' | 'selectionVersion'>;
+
+/**
+ * The line on screen when playback rests at an action: the speech there, or
+ * the last one before it (a raised hand answered before a non-speech action).
+ */
+function getSpeechTextAtOrBefore(
+  actions: readonly Action[] = [],
+  actionIndex: number,
+): string | null {
+  for (let i = Math.min(actionIndex, actions.length - 1); i >= 0; i--) {
+    const action = actions[i];
+    if (action.type === 'speech') return action.text;
+  }
+  return null;
+}
+
+/** The interaction panel's fixed width below desktop (TabletLandscape.dc.html) */
+const TOUCH_PANEL_WIDTH = 320;
 
 /**
  * Imperative handle exposed via `ref` so the parent (`Stage`) can tear
@@ -155,6 +209,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const generationInterrupted = useStageStore.use.generationInterrupted();
 
     const currentScene = getCurrentScene();
+    // The classroom a raised hand's unsent draft is kept under
+    const draftStageId = stage?.id ?? currentScene?.stageId;
     const piChatEnabled = isPiChatEnabled();
     const coursewareReferenceEnabled = isCoursewareReferenceEnabled();
     const [elementPickActive, setElementPickActiveState] = useState(false);
@@ -172,6 +228,31 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const pendingInterruptElementReferenceRef = useRef<ElementReferenceSendSnapshot | undefined>(
       undefined,
     );
+    // Raised hand: a question sent mid-line waits in the engine until the
+    // current action finishes; the owner keeps what is sent with it.
+    const queuedQuestionRef = useRef<{
+      id: number;
+      text: string;
+      elementReference?: ElementReferenceSendSnapshot;
+    } | null>(null);
+    const queuedQuestionIdRef = useRef(0);
+    const [queuedQuestion, setQueuedQuestion] = useState<QueuedQuestionState | null>(null);
+    // A bare raised hand (no question): mirrors engine getHandState, and what
+    // it waits for, worded once when it went up
+    const [handState, setHandState] = useState<HandState | null>(null);
+    const [handWaitsFor, setHandWaitsFor] = useState<'sentence' | 'step'>('sentence');
+    // The discussion a called hand jumped ahead of (offered again afterwards)
+    const [deferredDiscussion, setDeferredDiscussion] = useState<TriggerEvent | null>(null);
+    // Shows the learner where to speak once a hand is called (set each render)
+    const handCalledUiRef = useRef<() => void>(() => {});
+    // Set while voice calls a raised hand: the recording owns focus
+    const suppressHandCallFocusRef = useRef(false);
+    // The interaction panel, where focus may move to the composer on a call
+    const panelRef = useRef<HTMLDivElement>(null);
+    // The raised hand's text until the server accepts it or it is given back:
+    // leaving the page meanwhile (reload, tab close, route change, Pro mode)
+    // keeps it as a per-classroom draft that the next visit puts back.
+    const unsentQuestionRef = useRef<{ stageId: string; text: string } | null>(null);
     const interactivePickHandlerRef = useRef<(pick: PlaybackInteractiveComponentPick) => boolean>(
       () => false,
     );
@@ -188,6 +269,18 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const setChatAreaWidth = useSettingsStore((s) => s.setChatAreaWidth);
     const chatAreaCollapsed = useSettingsStore((s) => s.chatAreaCollapsed);
     const setChatAreaCollapsed = useSettingsStore((s) => s.setChatAreaCollapsed);
+    // Below the classroom's desktop width: the compact header with the ⋯ menu
+    // and 44px touch targets. Tablet landscape keeps the numbered scene rail
+    // and a fixed 320px panel; the rail ignores the persisted desktop
+    // `sidebarCollapsed`, and its 展开场景栏 swaps in the full sidebar for this
+    // session only. The stacked layouts (tablet portrait, phone) put the
+    // interaction section under the stage, with the scenes in its 场景 tab;
+    // they ignore the persisted panel collapse too.
+    const classroomLayout = useClassroomLayout();
+    const touchLayout = isTouchClassroomLayout(classroomLayout);
+    const stackedLayout = isStackedClassroomLayout(classroomLayout);
+    const phoneLayout = classroomLayout === 'phone';
+    const [railSidebarOpen, setRailSidebarOpen] = useState(false);
     const setTTSMuted = useSettingsStore((s) => s.setTTSMuted);
     const setTTSVolume = useSettingsStore((s) => s.setTTSVolume);
 
@@ -197,7 +290,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const [lectureSpeech, setLectureSpeech] = useState<string | null>(null); // From PlaybackEngine (lecture)
     const [currentPlaybackActionIndex, setCurrentPlaybackActionIndex] = useState<number | null>(0);
     const [liveSpeech, setLiveSpeech] = useState<string | null>(null); // From buffer (discussion/QA)
-    const [speechProgress, setSpeechProgress] = useState<number | null>(null); // StreamBuffer reveal progress (0–1)
     const [discussionTrigger, setDiscussionTrigger] = useState<TriggerEvent | null>(null);
 
     // Speaking agent tracking (Issue 2)
@@ -209,19 +301,15 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       agentId?: string;
     } | null>(null);
 
-    // Cue user state (Issue 7)
+    // Cue user state (Issue 7): the director handed the floor to the learner
     const [isCueUser, setIsCueUser] = useState(false);
-
-    // End flash state (Issue 3)
-    const [showEndFlash, setShowEndFlash] = useState(false);
-    const [endFlashSessionType, setEndFlashSessionType] = useState<'qa' | 'discussion'>(
-      'discussion',
-    );
+    const [cueAgentId, setCueAgentId] = useState<string | null>(null);
 
     // Streaming state for stop button (Issue 1)
     const [chatIsStreaming, setChatIsStreaming] = useState(false);
     const [chatIsSoftClosing, setChatIsSoftClosing] = useState(false);
-    const [softCloseDeadline, setSoftCloseDeadline] = useState<number | undefined>();
+    // The soft close of a Q&A that interrupted the lecture: when it resumes
+    const [lectureResumeDeadline, setLectureResumeDeadline] = useState<number | undefined>();
     const [chatSessionType, setChatSessionType] = useState<string | null>(null);
 
     // Topic pending state: session is soft-paused, bubble stays visible, waiting for user input
@@ -236,10 +324,22 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const sceneSwitchConfirmingRef = useRef(false);
     const [isPresenting, setIsPresenting] = useState(false);
     const [controlsVisible, setControlsVisible] = useState(true);
-    const [isPresentationInteractionActive, setIsPresentationInteractionActive] = useState(false);
+    // The learner is composing: the composer records or holds a draft in a
+    // focused box. While presenting, the dock reports instead (its open card
+    // counts too).
+    const [isComposerComposing, setIsComposerComposing] = useState(false);
+    const [isDockInteractionActive, setIsDockInteractionActive] = useState(false);
+    const isPresentationInteractionActive = isPresenting
+      ? isDockInteractionActive
+      : isComposerComposing;
+    const studentComposingRef = useRef(false);
+    useEffect(() => {
+      studentComposingRef.current = isPresentationInteractionActive;
+    }, [isPresentationInteractionActive]);
 
     // Whiteboard state (from canvas store so AI tools can open it)
     const whiteboardOpen = useCanvasStore.use.whiteboardOpen();
+    const whiteboardDrawing = useCanvasStore.use.whiteboardDrawing();
     const runtimeProjection = useCanvasStore.use.runtimeWhiteboardProjection();
     const whiteboardClearing = useCanvasStore.use.whiteboardClearing();
     const { whiteboard: displayedWhiteboard, source: displayedWhiteboardSource } =
@@ -300,6 +400,14 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const engineRef = useRef<PlaybackEngine | null>(null);
     const audioPlayerRef = useRef(createAudioPlayer());
     const chatAreaRef = useRef<ChatAreaRef>(null);
+    // The one composer (in the panel, or in the fullscreen dock's card) and
+    // the dock: T / V / Escape and the stream's soft-close "continue" reach
+    // them through these
+    const composerRef = useRef<ComposerHandle>(null);
+    const presentationDockRef = useRef<PresentationDockHandle>(null);
+    const composerHost = useComposerHost();
+    // The side panels as they were before fullscreen collapsed them
+    const panelsBeforePresentationRef = useRef<{ sidebar: boolean; chat: boolean } | null>(null);
     const lectureSessionIdRef = useRef<string | null>(null);
     const lectureActionCounterRef = useRef(0);
     const currentPlaybackActionIndexRef = useRef<number | null>(currentPlaybackActionIndex);
@@ -309,17 +417,32 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const cursorSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingCursorRef = useRef<{ stageId: string; cursor: PlaybackCursor } | null>(null);
     const stageRef = useRef<HTMLDivElement>(null);
-    // Guard to prevent double flash when manual stop triggers onDiscussionEnd
-    const manualStopRef = useRef(false);
+    // Auto-play's scene advance, held while the student composes (typing no
+    // longer pauses the lecture, so it can complete under an open input)
+    const heldAutoAdvanceRef = useRef<{ engine: PlaybackEngine; advance: () => void } | null>(null);
+    // Run a held advance once the input closes — unless the student asked a
+    // question instead (that Q&A now owns the slide) or playback moved on.
+    useEffect(() => {
+      if (isPresentationInteractionActive) return;
+      const held = heldAutoAdvanceRef.current;
+      heldAutoAdvanceRef.current = null;
+      if (!held || chatSessionType) return;
+      const { engine, advance } = held;
+      if (engineRef.current !== engine || engine.getMode() !== 'idle' || !engine.isExhausted()) {
+        return;
+      }
+      advance();
+    }, [chatSessionType, isPresentationInteractionActive]);
 
     const sendMessageWithElementReference = useCallback(
-      (text: string, snapshot?: ElementReferenceSendSnapshot) => {
+      (text: string, snapshot?: ElementReferenceSendSnapshot, onAccepted?: () => void) => {
         return chatAreaRef.current?.sendMessage(
           text,
           snapshot
             ? {
                 elementReference: snapshot.reference,
                 onResponseAccepted: (response) => {
+                  onAccepted?.();
                   const current = draftElementReferenceRef.current;
                   if (
                     !shouldClearDraftElementReference(
@@ -333,11 +456,138 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   setDraftElementReference(null);
                 },
               }
-            : undefined,
+            : onAccepted
+              ? { onResponseAccepted: onAccepted }
+              : undefined,
         );
       },
       [setDraftElementReference],
     );
+
+    /** UI side effects of a question going out, immediately or from a raised hand. */
+    const markQuestionSent = useCallback(() => {
+      // Auto-switch to the 互动 tab when the user sends a message
+      chatAreaRef.current?.switchToTab('interaction');
+      setIsCueUser(false);
+      // Immediately mark streaming for synchronized stop button
+      setChatIsStreaming(true);
+      setChatSessionType((prev) => prev || 'qa');
+      // Optimistic thinking: show thinking dots immediately so there's
+      // no blank gap between userMessage expiry and the SSE thinking event.
+      // The real SSE event will overwrite this with the same or updated value.
+      setThinkingState({ stage: 'director' });
+    }, []);
+
+    /** The page is going away: keep an unsent raised hand as a draft for the next visit. */
+    const persistUnsentQuestion = useCallback(() => {
+      const unsent = unsentQuestionRef.current;
+      if (unsent) saveRaisedHandDraft(getSessionStorage(), unsent.stageId, unsent.text);
+    }, []);
+
+    /** The raised hand was answered or given back: no draft is left behind. */
+    const forgetUnsentQuestion = useCallback(() => {
+      const unsent = unsentQuestionRef.current;
+      unsentQuestionRef.current = null;
+      if (unsent) clearRaisedHandDraft(getSessionStorage(), unsent.stageId);
+    }, []);
+
+    /**
+     * Leaving playback aborts a delivered raised hand's request on purpose,
+     * and that send settling would forget it. Take the question back from the
+     * send (it only forgets the record it was given) so it stays unsent.
+     */
+    const detachUnsentQuestionFromSend = useCallback(() => {
+      const unsent = unsentQuestionRef.current;
+      if (unsent) unsentQuestionRef.current = { ...unsent };
+    }, []);
+
+    /** Drop a raised hand from the engine; the composer puts its text back into the input. */
+    const dropQueuedQuestion = useCallback((): string | null => {
+      const queued = queuedQuestionRef.current;
+      if (!queued) return null;
+      queuedQuestionRef.current = null;
+      engineRef.current?.cancelQueuedInterrupt();
+      setQueuedQuestion({ id: queued.id, text: queued.text, status: 'cancelled' });
+      return queued.text;
+    }, []);
+
+    /**
+     * Drop a raised hand (user cancel, navigation). Its text goes back into the
+     * input, so it is no longer an unsent draft; returns the dropped text.
+     */
+    const cancelQueuedQuestion = useCallback((): string | null => {
+      const text = dropQueuedQuestion();
+      if (text !== null) forgetUnsentQuestion();
+      return text;
+    }, [dropQueuedQuestion, forgetUnsentQuestion]);
+
+    /**
+     * While the lecture plays, a question raises a hand: the engine holds it
+     * until the current action finishes, and the element reference frozen now
+     * travels with it. Returns undefined when it must be sent right away.
+     */
+    const raiseHand = useCallback(
+      (text: string, elementReference?: ElementReferenceSendSnapshot): MessageSendResult => {
+        const engine = engineRef.current;
+        if (queuedQuestionRef.current) {
+          // One raised hand at a time (the composer's send cooldown normally
+          // keeps a second send from getting here)
+          if (engine?.hasQueuedInterrupt()) return 'blocked';
+          // Stale: the engine already dropped it (unreachable while every
+          // engine-side drop goes through an owner cancel) — release it so it
+          // can't block every later send
+          cancelQueuedQuestion();
+        }
+        if (!engine) return undefined;
+        // A bare hand already waits for this line: the question rides on it
+        // (answered at the same boundary instead of calling the learner)
+        const attached = engine.getHandState() === 'raised' && engine.attachQuestion(text);
+        if (!attached && !engine.queueUserInterrupt(text)) return undefined;
+        if (attached) setHandState(engine.getHandState());
+        const id = ++queuedQuestionIdRef.current;
+        queuedQuestionRef.current = { id, text, elementReference };
+        unsentQuestionRef.current = draftStageId ? { stageId: draftStageId, text } : null;
+        // Worded once, by what is in flight: a spoken line or another step
+        const waitsFor = engine.isSpeechInFlight() ? 'sentence' : 'step';
+        setQueuedQuestion({ id, text, status: 'queued', waitsFor });
+        return 'queued';
+      },
+      [cancelQueuedQuestion, draftStageId],
+    );
+
+    /**
+     * 举手 without a question: the engine calls the learner when the current
+     * action ends (at once while paused or idle). Never kept as a draft —
+     * there is no text to give back.
+     */
+    const raiseHandOnly = useCallback((): boolean => {
+      const engine = engineRef.current;
+      if (!engine) return false;
+      // Worded before raising: a hand called at once leaves nothing in flight
+      const waitsFor = engine.isSpeechInFlight() ? 'sentence' : 'step';
+      if (!engine.raiseHand()) return false;
+      setHandWaitsFor(waitsFor);
+      setHandState(engine.getHandState());
+      return true;
+    }, []);
+
+    /** 放下: a waiting hand is withdrawn; a called one gives the floor back and the lecture resumes. */
+    const lowerHand = useCallback((): boolean => {
+      const engine = engineRef.current;
+      if (!engine?.lowerHand()) return false;
+      setHandState(engine.getHandState());
+      setDeferredDiscussion(null);
+      // A hand called by pause froze the lecture's text reveal with the line
+      if (engine.getMode() === 'playing' && lectureSessionIdRef.current) {
+        chatAreaRef.current?.resumeBuffer(lectureSessionIdRef.current);
+      }
+      return true;
+    }, []);
+
+    /** The engine moves the hand on its own (the boundary, play, a jump, a Q&A): mirror it. */
+    const refreshHandState = useCallback(() => {
+      setHandState(engineRef.current?.getHandState() ?? null);
+    }, []);
 
     const updateCurrentPlaybackActionIndex = useCallback((actionIndex: number | null) => {
       currentPlaybackActionIndexRef.current = actionIndex;
@@ -373,31 +623,54 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     );
 
     const saveSceneResumePosition = useCallback(
-      (sceneId: string | null | undefined, actionIndex: number | null | undefined) => {
+      (
+        sceneId: string | null | undefined,
+        actionIndex: number | null | undefined,
+        progress?: { atBoundary?: boolean },
+      ) => {
         if (!sceneId || typeof window === 'undefined') return;
         const scene = scenes.find((s) => s.id === sceneId);
         const actions = scene?.actions ?? [];
         if (!scene || actions.length === 0) return;
+        // A raised hand answered between actions: the next one had not started
+        const atBoundary = progress?.atBoundary === true;
 
         if (Number.isInteger(actionIndex) && actionIndex! >= actions.length) {
+          // ...after the last one: keep the last line's position until Play
+          // runs the completion the raised hand preempted
+          if (atBoundary || engineRef.current?.hasPendingLectureCompletion()) return;
           clearActionResumePosition(window.sessionStorage, actionResumeStorageKey, sceneId);
           return;
         }
 
         const action = Number.isInteger(actionIndex) ? actions[actionIndex!] : null;
-        if (action && action.type !== 'speech') {
+        if (action && action.type !== 'speech' && !atBoundary) {
           const crossedUnsafe = actions
             .slice(0, actionIndex! + 1)
             .some(isUnsafePlaybackNavigationAction);
-          if (crossedUnsafe) {
+          // A raised hand answered just before this action keeps its boundary
+          // position (Q&A pause, unmount, the restore jump, the resume itself)
+          if (
+            crossedUnsafe &&
+            !isActionBoundaryResumePositionAt(
+              window.sessionStorage,
+              actionResumeStorageKey,
+              sceneId,
+              actionIndex!,
+            )
+          ) {
             clearActionResumePosition(window.sessionStorage, actionResumeStorageKey, sceneId);
           }
           return;
         }
 
-        const position = createActionResumePosition(actions, actionIndex);
+        const position = createActionResumePosition(actions, actionIndex, { atBoundary });
         if (!position) return;
-        if (!canJumpWithinReconstructablePrefix(actions, 0, position.actionIndex)) {
+        if (
+          !canJumpWithinReconstructablePrefix(actions, 0, position.actionIndex, {
+            atBoundary: position.atBoundary === true,
+          })
+        ) {
           clearActionResumePosition(window.sessionStorage, actionResumeStorageKey, sceneId);
           return;
         }
@@ -419,6 +692,21 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const autoStartRef = useRef(false);
     // Discussion buffer-level pause state (distinct from soft-pause which aborts SSE)
     const [isDiscussionPaused, setIsDiscussionPaused] = useState(false);
+
+    /** Level-1 pause of the live answer: the text reveal and TTS freeze, SSE keeps buffering */
+    const pauseLiveAnswer = useCallback(() => {
+      const paused = chatAreaRef.current?.pauseActiveLiveBuffer();
+      if (paused) {
+        discussionTTS.pause();
+        setIsDiscussionPaused(true);
+      }
+    }, [discussionTTS]);
+
+    const resumeLiveAnswer = useCallback(() => {
+      chatAreaRef.current?.resumeActiveLiveBuffer();
+      discussionTTS.resume();
+      setIsDiscussionPaused(false);
+    }, [discussionTTS]);
 
     /**
      * Resume a soft-paused topic: re-call /chat with existing session messages.
@@ -442,9 +730,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const resetLiveState = useCallback(() => {
       setLiveSpeech(null);
       setSpeakingAgentId(null);
-      setSpeechProgress(null);
       setThinkingState(null);
       setIsCueUser(false);
+      setCueAgentId(null);
+      setLectureResumeDeadline(undefined);
       setIsTopicPending(false);
       setChatIsStreaming(false);
       setChatIsSoftClosing(false);
@@ -459,10 +748,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         setPlaybackCompleted(false);
         setLectureSpeech(initial?.lectureSpeech ?? null);
         updateCurrentPlaybackActionIndex(initial?.actionIndex ?? 0);
-        setSpeechProgress(null);
-        setShowEndFlash(false);
         setActiveBubbleId(null);
         setDiscussionTrigger(null);
+        setHandState(null);
+        setDeferredDiscussion(null);
       },
       [resetLiveState, updateCurrentPlaybackActionIndex],
     );
@@ -475,31 +764,20 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     }, [resetLiveState]);
 
     /**
-     * Unified session cleanup — called by both roundtable stop button and chat area end button.
-     * Handles: engine transition, flash, roundtable state clearing.
+     * Unified session cleanup — called by both the control bar's stop and the
+     * stream's end button. Handles the engine transition and clears the live
+     * state; the stream keeps a persistent "ended" marker for the session.
      */
     const doSessionCleanup = useCallback(() => {
-      const activeType = chatSessionType;
-
-      // Engine cleanup — guard to avoid double flash from onDiscussionEnd
-      manualStopRef.current = true;
       engineRef.current?.handleEndDiscussion();
-      manualStopRef.current = false;
-
-      // Show end flash with correct session type
-      if (activeType === 'qa' || activeType === 'discussion') {
-        setEndFlashSessionType(activeType);
-        setShowEndFlash(true);
-        setTimeout(() => setShowEndFlash(false), 1800);
-      }
 
       // Stop any in-flight discussion TTS audio
       discussionTTS.cleanup();
 
       resetLiveState();
-    }, [chatSessionType, resetLiveState, discussionTTS]);
+    }, [resetLiveState, discussionTTS]);
 
-    // Shared stop-discussion handler (used by both Roundtable and Canvas toolbar)
+    // Shared stop-discussion handler (the control bar's stop pill)
     const handleStopDiscussion = useCallback(async () => {
       await chatAreaRef.current?.stopActiveSession();
     }, []);
@@ -507,7 +785,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const handleContinueDiscussion = useCallback(() => {
       if (chatAreaRef.current?.continueActiveSoftClosingSession()) {
         setChatIsSoftClosing(false);
-        setSoftCloseDeadline(undefined);
       }
     }, []);
 
@@ -533,6 +810,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           hadLectureInterruption,
           engineMode: engine.getMode(),
           isExhausted: engine.isExhausted(),
+          lectureCompletionPending: engine.hasPendingLectureCompletion(),
           playbackCompleted,
         });
         if (!eligible) return;
@@ -572,6 +850,16 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       ref,
       () => ({
         teardown: async () => {
+          // Leaving playback unmounts the input, so surface a waiting raised
+          // hand's text instead of silently dropping it. It also stays unsent:
+          // if this root unmounts, the next visit puts it back into the input.
+          const droppedQuestion = dropQueuedQuestion();
+          if (droppedQuestion) {
+            toast.info(t('roundtable.queuedQuestionNotSent'), { description: droppedQuestion });
+          }
+          // Ending the session aborts a delivered one the server has not
+          // accepted yet: it stays unsent as well
+          detachUnsentQuestionFromSend();
           await chatAreaRef.current?.endActiveSession();
           if (discussionAbortRef.current) {
             discussionAbortRef.current.abort();
@@ -584,7 +872,14 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         acceptInteractivePick: (pick) => interactivePickHandlerRef.current(pick),
         cancelElementPick: () => setElementPickActive(false),
       }),
-      [discussionTTS, resetSceneState, setElementPickActive],
+      [
+        detachUnsentQuestionFromSend,
+        discussionTTS,
+        dropQueuedQuestion,
+        resetSceneState,
+        setElementPickActive,
+        t,
+      ],
     );
 
     const clearPresentationIdleTimer = useCallback(() => {
@@ -623,6 +918,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         // Escape is handled manually in our keydown handler instead
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (navigator as any).keyboard?.lock?.(['Escape']).catch(() => {});
+        // Fullscreen shows the stage alone (the dock holds the composer);
+        // leaving it puts the panels back as they were
+        const { sidebarCollapsed: sidebar, chatAreaCollapsed: chat } = useSettingsStore.getState();
+        panelsBeforePresentationRef.current = { sidebar, chat };
         setSidebarCollapsed(true);
         setChatAreaCollapsed(true);
       } catch {
@@ -642,12 +941,21 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           (navigator as any).keyboard?.unlock?.();
           setControlsVisible(true);
           clearPresentationIdleTimer();
+          // The composer goes back to the panel: restore the panels, and
+          // drop a recording that would otherwise go on in a collapsed one
+          const panels = panelsBeforePresentationRef.current;
+          panelsBeforePresentationRef.current = null;
+          if (panels) {
+            setSidebarCollapsed(panels.sidebar);
+            setChatAreaCollapsed(panels.chat);
+            if (panels.chat) composerRef.current?.dismiss();
+          }
         }
       };
 
       document.addEventListener('fullscreenchange', onFullscreenChange);
       return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
-    }, [clearPresentationIdleTimer]);
+    }, [clearPresentationIdleTimer, setChatAreaCollapsed, setSidebarCollapsed]);
 
     useEffect(() => {
       if (!isPresenting) {
@@ -687,6 +995,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     useEffect(() => {
       let cancelled = false;
       const initializeScene = async () => {
+        // A raised hand belongs to the scene it was asked in: give its text
+        // back rather than answer it elsewhere (catch-all for scene changes
+        // that bypass the gated switch).
+        cancelQueuedQuestion();
         const previousEngine = engineRef.current;
         engineRef.current = null;
         previousEngine?.stop();
@@ -722,6 +1034,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               )
             : { actionIndex: 0, position: null };
         let savedResumeActionIndex = sessionResumeCursor.actionIndex;
+        // Saved where a raised hand was answered: may rest on a non-speech action
+        const resumeAtBoundary = sessionResumeCursor.position?.atBoundary === true;
         const playbackStageId = stage?.id ?? currentScene?.stageId;
         if (currentScene && playbackStageId && !sessionResumeCursor.position) {
           try {
@@ -740,15 +1054,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
 
         if (cancelled) return;
 
-        const savedResumeAction = currentScene?.actions?.[savedResumeActionIndex];
-
         // Reset all roundtable/live state so scenes are fully isolated. Use the
         // saved action cursor immediately so mount/refresh cannot persist the
         // default first-speech cursor before the async engine jump finishes.
         resetSceneState({
           actionIndex: savedResumeActionIndex,
-          lectureSpeech:
-            savedResumeAction?.type === 'speech' ? (savedResumeAction as SpeechAction).text : null,
+          lectureSpeech: getSpeechTextAtOrBefore(currentScene?.actions, savedResumeActionIndex),
         });
 
         // A slide scene with no actions is still playable: the engine dwells on it
@@ -789,14 +1100,18 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         const engine = new PlaybackEngine([currentScene], actionEngine, audioPlayerRef.current, {
           onModeChange: (mode) => {
             setEngineMode(mode);
+            // Playing on or a Q&A ends a called hand's turn
+            refreshHandState();
           },
-          onProgress: (snapshot) => {
+          onProgress: (snapshot, progress) => {
             // Identity guard: a superseded engine (scene switch during an
             // async resume) must not publish its old scene's position over
             // the installed engine's cursor.
             if (engineRef.current !== engine) return;
+            // A jump or a restore drops a raised hand
+            refreshHandState();
             updateCurrentPlaybackActionIndex(snapshot.actionIndex);
-            saveSceneResumePosition(snapshot.sceneId, snapshot.actionIndex);
+            saveSceneResumePosition(snapshot.sceneId, snapshot.actionIndex, progress);
             if (playbackStageId && snapshot.sceneId) {
               scheduleCursorSave(playbackStageId, {
                 sceneId: snapshot.sceneId,
@@ -856,6 +1171,17 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               trigger.agentId = pickStudentAgent();
             }
             setDiscussionTrigger(trigger);
+            // The discussion a hand jumped ahead of is offered again
+            setDeferredDiscussion(null);
+          },
+          onHandCalled: (call: HandCall) => {
+            const deferred = call.deferredDiscussion;
+            // Name the agent now: the card offered later re-uses this object,
+            // so "X 的讨论排在你之后" and that card name the same agent
+            if (deferred && !deferred.agentId) deferred.agentId = pickStudentAgent();
+            setDeferredDiscussion(deferred ?? null);
+            refreshHandState();
+            handCalledUiRef.current();
           },
           onProactiveHide: () => {
             setDiscussionTrigger(null);
@@ -873,21 +1199,57 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             setDiscussionTrigger(null);
             // Stop any in-flight discussion TTS audio
             discussionTTS.cleanup();
-            // Clear roundtable state (idempotent — may already be cleared by doSessionCleanup)
+            // Clear live state (idempotent — may already be cleared by doSessionCleanup)
             resetLiveState();
-            // Only show flash for engine-initiated ends (not manual stop — that's handled by doSessionCleanup)
-            if (!manualStopRef.current) {
-              setEndFlashSessionType('discussion');
-              setShowEndFlash(true);
-              setTimeout(() => setShowEndFlash(false), 1800);
-            }
             // If all actions are exhausted (discussion was the last action), mark
-            // playback as completed so the bubble shows reset instead of play.
-            if (engineRef.current?.isExhausted()) {
+            // playback as completed so the bubble shows reset instead of play —
+            // unless a raised hand preempted the completion after the last line:
+            // Play then continues into it (onComplete) instead of restarting.
+            if (
+              engineRef.current?.isExhausted() &&
+              !engineRef.current.hasPendingLectureCompletion()
+            ) {
               setPlaybackCompleted(true);
             }
           },
           onUserInterrupt: (text) => {
+            // A question asked while called (or delivered) ends the hand's turn
+            refreshHandState();
+            const queued = queuedQuestionRef.current;
+            if (queued) {
+              queuedQuestionRef.current = null;
+              const isRaisedHand = text === queued.text;
+              if (
+                isRaisedHand &&
+                engineRef.current === engine &&
+                useStageStore.getState().currentSceneId === currentScene.id
+              ) {
+                // The raised hand reached its boundary (or pause flushed it):
+                // send it with the element reference frozen when it was asked
+                setQueuedQuestion({ id: queued.id, text: queued.text, status: 'delivered' });
+                // Still unsent until the server accepts it: a reload can land
+                // between this delivery and the request going out. Settling
+                // forgets only this record, so leaving can detach it first.
+                const unsent = unsentQuestionRef.current;
+                const settleUnsent = () => {
+                  if (unsentQuestionRef.current === unsent) forgetUnsentQuestion();
+                };
+                void Promise.resolve(
+                  sendMessageWithElementReference(text, queued.elementReference, settleUnsent),
+                ).finally(settleUnsent);
+                markQuestionSent();
+                return;
+              }
+              // Never answer it in another scene, nor drop it silently for a
+              // different message: give its text back instead
+              setQueuedQuestion({ id: queued.id, text: queued.text, status: 'cancelled' });
+              forgetUnsentQuestion();
+              if (isRaisedHand) {
+                // The scene changed before the scene-init effect cancelled it
+                engine.stop();
+                return;
+              }
+            }
             // User interrupted → start a discussion via chat
             const snapshot = pendingInterruptElementReferenceRef.current;
             pendingInterruptElementReferenceRef.current = undefined;
@@ -898,6 +1260,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             return ids.includes(agentId);
           },
           getPlaybackSpeed: () => useSettingsStore.getState().playbackSpeed || 1,
+          // The lecture's narrator: the classroom teacher (same pick as the
+          // participants block)
+          getLectureAgentId: () =>
+            agentsToParticipants(useSettingsStore.getState().selectedAgentIds).find(
+              (p) => p.role === 'teacher',
+            )?.id ?? null,
           onComplete: () => {
             // lectureSpeech intentionally NOT cleared — last sentence stays visible
             // until scene transition (auto-play) or user restarts. Scene change
@@ -914,7 +1282,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             // Auto-play: advance to next scene after a short pause
             const { autoPlayLecture } = useSettingsStore.getState();
             if (autoPlayLecture) {
-              setTimeout(() => {
+              const advance = () => {
                 const stageState = useStageStore.getState();
                 if (!useSettingsStore.getState().autoPlayLecture) return;
                 const allScenes = stageState.scenes;
@@ -947,6 +1315,16 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   autoStartRef.current = true;
                   stageState.setCurrentSceneId(PENDING_SCENE_ID);
                 }
+              };
+              setTimeout(() => {
+                // Typing no longer pauses the lecture: don't move the slide out
+                // from under a question the student is still composing — hold
+                // the advance until the input closes
+                if (studentComposingRef.current) {
+                  heldAutoAdvanceRef.current = { engine, advance };
+                  return;
+                }
+                advance();
               }, 1500);
             }
           },
@@ -974,15 +1352,24 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           })();
         } else {
           // Load saved playback state and restore position (but never auto-play).
-          if (savedResumeActionIndex > 0 && engine.canJumpToAction(savedResumeActionIndex)) {
+          if (
+            savedResumeActionIndex > 0 &&
+            engine.canJumpToAction(savedResumeActionIndex, { atBoundary: resumeAtBoundary })
+          ) {
             void engine
-              .jumpToAction(savedResumeActionIndex, { autoplay: false })
+              .jumpToAction(savedResumeActionIndex, {
+                autoplay: false,
+                atBoundary: resumeAtBoundary,
+              })
               .then((restored) => {
                 if (!restored || engineRef.current !== engine) return;
                 updateCurrentPlaybackActionIndex(savedResumeActionIndex);
-                const action = currentScene.actions?.[savedResumeActionIndex];
-                if (action?.type === 'speech') {
-                  setLectureSpeech(action.text);
+                const speech = getSpeechTextAtOrBefore(
+                  currentScene.actions,
+                  savedResumeActionIndex,
+                );
+                if (speech !== null) {
+                  setLectureSpeech(speech);
                 }
               });
           }
@@ -996,11 +1383,41 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       // eslint-disable-next-line react-hooks/exhaustive-deps -- Only re-run when scene changes, functions are stable refs
     }, [currentScene]);
 
+    // Put back a raised hand that an earlier visit left unsent: into the
+    // input, never sent by itself. Once per classroom while mounted, and only
+    // in playback, once the composer is mounted to take it (its host appears
+    // after the first commit). Declared after the scene-init effect, which
+    // already gave back a question raised in the previous classroom.
+    const restoredDraftStageIdRef = useRef<string | null>(null);
+    useEffect(() => {
+      if (mode !== 'playback' || !draftStageId || !composerHost) return;
+      if (restoredDraftStageIdRef.current === draftStageId) return;
+      restoredDraftStageIdRef.current = draftStageId;
+      const text = takeRaisedHandDraft(getSessionStorage(), draftStageId);
+      if (!text) return;
+      setQueuedQuestion({ id: ++queuedQuestionIdRef.current, text, status: 'restored' });
+      toast.info(t('roundtable.queuedQuestionRestored'));
+    }, [composerHost, draftStageId, mode, t]);
+
+    // Reload, tab close or leaving the site: keep an unsent raised hand as a
+    // draft (a synchronous write, no confirm dialog). Unlike beforeunload,
+    // pagehide keeps the page eligible for the back/forward cache.
+    useEffect(() => {
+      const onPageHide = () => persistUnsentQuestion();
+      window.addEventListener('pagehide', onPageHide);
+      return () => window.removeEventListener('pagehide', onPageHide);
+    }, [persistUnsentQuestion]);
+
     // Cleanup on unmount
     useEffect(() => {
       const audioPlayer = audioPlayerRef.current;
       const chatArea = chatAreaRef.current;
       return () => {
+        // A route change or Pro mode with a raised hand still unsent. ChatArea's
+        // unmount aborts a delivered one's request: that settling must not
+        // delete the draft written here
+        detachUnsentQuestionFromSend();
+        persistUnsentQuestion();
         if (cursorSaveTimerRef.current) clearTimeout(cursorSaveTimerRef.current);
         cursorSaveTimerRef.current = null;
         const pendingCursor = pendingCursorRef.current;
@@ -1051,8 +1468,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           prompt,
           agentId: agentId || 'default-1',
         });
-        // Auto-switch to chat tab when discussion starts
-        chatAreaRef.current?.switchToTab('chat');
+        // Auto-switch to the 互动 tab when a discussion starts
+        chatAreaRef.current?.switchToTab('interaction');
         // Immediately mark streaming for synchronized stop button
         setChatIsStreaming(true);
         setChatSessionType('discussion');
@@ -1076,6 +1493,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       return agent?.role !== 'teacher';
     }, [speakingAgentId]);
 
+    // The floor is the learner's: the director's cue, or a called raised hand
+    const isLearnerCued = isCueUser || handState === 'called';
+
     // Centralised derived playback view
     const playbackView = useMemo(
       () =>
@@ -1085,7 +1505,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           liveSpeech,
           speakingAgentId,
           thinkingState,
-          isCueUser,
+          isCueUser: isLearnerCued,
           isTopicPending,
           chatIsStreaming,
           discussionTrigger,
@@ -1100,7 +1520,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         liveSpeech,
         speakingAgentId,
         thinkingState,
-        isCueUser,
+        isLearnerCued,
         isTopicPending,
         chatIsStreaming,
         discussionTrigger,
@@ -1128,17 +1548,21 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           setPendingSceneId(targetSceneId);
           return false;
         }
+        // Before awaiting: a boundary during the await must not answer the
+        // raised hand in the scene being left
+        cancelQueuedQuestion();
         await chatAreaRef.current?.endActiveSession({ source: 'scene_switch' });
         if (requestId !== sceneSwitchRequestRef.current) return false;
         setCurrentSceneId(targetSceneId);
         return true;
       },
-      [currentSceneId, isTopicActive, setCurrentSceneId],
+      [cancelQueuedQuestion, currentSceneId, isTopicActive, setCurrentSceneId],
     );
 
     /** User confirmed scene switch via AlertDialog */
     const confirmSceneSwitch = useCallback(async () => {
       if (!pendingSceneId) return;
+      cancelQueuedQuestion();
       const targetSceneId = pendingSceneId;
       const requestId = ++sceneSwitchRequestRef.current;
       sceneSwitchConfirmingRef.current = true;
@@ -1151,7 +1575,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       } finally {
         sceneSwitchConfirmingRef.current = false;
       }
-    }, [pendingSceneId, setCurrentSceneId, doSessionCleanup]);
+    }, [cancelQueuedQuestion, pendingSceneId, setCurrentSceneId, doSessionCleanup]);
 
     /** User cancelled scene switch via AlertDialog */
     const cancelSceneSwitch = useCallback(() => {
@@ -1165,6 +1589,18 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       if (!engine) return;
 
       const mode = engine.getMode();
+      // Pausing with a raised hand means "answer me now": the question goes out
+      // immediately (the cut line replays when the lecture resumes).
+      if (mode === 'playing' && engine.flushQueuedInterrupt()) {
+        // A bare hand is called now: the line stops mid-way for the learner
+        if (engine.getMode() === 'paused') {
+          saveSceneResumePosition(currentScene?.id, currentPlaybackActionIndexRef.current);
+          if (lectureSessionIdRef.current) {
+            chatAreaRef.current?.pauseBuffer(lectureSessionIdRef.current);
+          }
+        }
+        return;
+      }
       if (mode === 'playing' || mode === 'live') {
         saveSceneResumePosition(currentScene?.id, currentPlaybackActionIndexRef.current);
         engine.pause();
@@ -1202,6 +1638,22 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         }
       }
     }, [playbackCompleted, currentScene, saveSceneResumePosition]);
+
+    // Volume, mute, speed, auto-play, the stop rule and the primary play action
+    // (resume a pending topic, else pause/resume the live answer, else the lecture)
+    const controls = usePlaybackControls({
+      engineMode,
+      sessionType: chatSessionType,
+      isTopicPending,
+      isInLiveFlow: !!playbackView.isInLiveFlow,
+      isLivePaused: isDiscussionPaused,
+      // Don't allow pause during thinking or before text arrives
+      canPauseLive: !thinkingState && !!liveSpeech,
+      onResumeTopic: doResumeTopic,
+      onLivePause: pauseLiveAnswer,
+      onLiveResume: resumeLiveAnswer,
+      onPlayPause: handlePlayPause,
+    });
 
     // get scene information
     const isPendingScene = currentSceneId === PENDING_SCENE_ID;
@@ -1491,8 +1943,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       setDraftElementReference(null);
     }, [currentSceneId, setDraftElementReference]);
 
-    // get action information
-    const totalActions = currentScene?.actions?.length || 0;
     const canJumpToAction = useCallback(
       (sceneId: string, actionIndex: number): boolean => {
         if (sceneId !== currentSceneId) return false;
@@ -1510,6 +1960,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         const engine = engineRef.current;
         if (!engine || sceneId !== currentSceneId || !currentScene) return;
         const autoplay = engine.getMode() === 'playing';
+        // A jump drops a raised hand (the engine clears it): give its text back
+        if (engine.canJumpToAction(actionIndex)) cancelQueuedQuestion();
         const jumped = await engine.jumpToAction(actionIndex, { autoplay });
         if (!jumped) return;
         setPlaybackCompleted(false);
@@ -1519,13 +1971,93 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           setLectureSpeech(action.text);
         }
       },
-      [currentScene, currentSceneId, updateCurrentPlaybackActionIndex],
+      [cancelQueuedQuestion, currentScene, currentSceneId, updateCurrentPlaybackActionIndex],
     );
 
     // whiteboard toggle
     const handleWhiteboardToggle = () => {
       setWhiteboardOpenManually(!whiteboardOpen);
     };
+
+    /**
+     * Bring the 互动 tab into view: a collapsed panel hides the only composer.
+     * The stacked section never collapses, so the desktop setting stays put.
+     */
+    const revealInteraction = useCallback(() => {
+      if (!stackedLayout && useSettingsStore.getState().chatAreaCollapsed) {
+        setChatAreaCollapsed(false);
+      }
+      chatAreaRef.current?.switchToTab('interaction');
+    }, [setChatAreaCollapsed, stackedLayout]);
+
+    // The director handed the floor to the learner, or a raised hand was
+    // called: show where to answer
+    useEffect(() => {
+      if (isLearnerCued && !isPresenting && mode === 'playback') revealInteraction();
+    }, [isLearnerCued, isPresenting, mode, revealInteraction]);
+
+    // A raised hand was called: put the caret in the composer — unless the
+    // learner is busy elsewhere (focus outside the panel, or the dock while
+    // presenting) or already composing (a recording keeps going)
+    useEffect(() => {
+      handCalledUiRef.current = () => {
+        if (mode !== 'playback' || suppressHandCallFocusRef.current) return;
+        if (studentComposingRef.current) return;
+        const active = document.activeElement;
+        const isFree = (container: HTMLElement | null) =>
+          !active || active === document.body || !!container?.contains(active);
+        if (isPresenting) {
+          if (isFree(stageRef.current)) presentationDockRef.current?.continueText();
+          return;
+        }
+        if (!isFree(panelRef.current)) return;
+        revealInteraction();
+        composerRef.current?.openTextInput();
+      };
+    });
+
+    // A 发起讨论 offer: the lecture waits on join / skip, so put the card in view
+    const discussionTriggerId = discussionTrigger?.id;
+    useEffect(() => {
+      if (discussionTriggerId && !isPresenting && mode === 'playback') revealInteraction();
+    }, [discussionTriggerId, isPresenting, mode, revealInteraction]);
+
+    // T / V / Escape / Space for the composer (#255): in the panel, or in the
+    // fullscreen dock's card (Escape closes the card, not fullscreen)
+    const asrAvailable = useASRAvailable();
+    useClassroomShortcuts({
+      enabled: mode === 'playback',
+      isComposerOpen: isPresentationInteractionActive,
+      onDismiss: () => {
+        if (isPresenting) presentationDockRef.current?.close();
+        else composerRef.current?.dismiss();
+      },
+      isInLiveFlow: !!playbackView.isInLiveFlow,
+      onToggleLivePause: controls.toggleLivePause,
+      focusComposer: () => {
+        if (isPresenting) {
+          presentationDockRef.current?.openText();
+          return;
+        }
+        revealInteraction();
+        composerRef.current?.focus();
+      },
+      toggleVoice: () => {
+        if (isPresenting) {
+          presentationDockRef.current?.toggleVoice();
+          return;
+        }
+        revealInteraction();
+        composerRef.current?.toggleVoice();
+      },
+      canUseVoice: asrAvailable,
+      // The composer's 举手 slot (in the panel, or the dock's card): its
+      // status row shows the hand
+      toggleHand: () => {
+        if (!isPresenting) revealInteraction();
+        composerRef.current?.toggleHand();
+      },
+    });
 
     const isPresentationShortcutTarget = useCallback((target: EventTarget | null) => {
       if (!(target instanceof HTMLElement)) return false;
@@ -1568,16 +2100,20 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             break;
           case ' ':
           case 'Spacebar':
-            // During active QA/discussion, Roundtable owns Space for
-            // buffer-level pause/resume — don't also fire engine play/pause.
+            // During active QA/discussion, the classroom shortcuts
+            // (useClassroomShortcuts) own Space for buffer-level
+            // pause/resume — don't also fire engine play/pause.
             if (chatSessionType === 'qa' || chatSessionType === 'discussion') break;
+            // A focused control (举手, a dock toggle, ...) keeps Space for its
+            // own activation instead of pausing the lecture
+            if (isSpaceActivatedTarget(event.target)) break;
             event.preventDefault();
             handlePlayPause();
             break;
           case 'Escape':
             // With keyboard.lock(), Escape no longer auto-exits fullscreen.
-            // If panels are open, roundtable handles Escape (close panels).
-            // If no panels are open, manually exit fullscreen.
+            // While composing, the classroom shortcuts close the composer card.
+            // Otherwise, manually exit fullscreen.
             if (isPresenting && !isPresentationInteractionActive) {
               event.preventDefault();
               togglePresentation();
@@ -1598,13 +2134,22 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             break;
           case 's':
           case 'S':
+            // Fullscreen keeps both panels collapsed (the dock replaces them)
+            if (isPresenting) return;
             event.preventDefault();
-            setSidebarCollapsed(!sidebarCollapsed);
+            // Stacked: the scenes live in the section's 场景 tab. Tablet
+            // landscape toggles between the rail and the full sidebar.
+            if (stackedLayout) chatAreaRef.current?.switchToTab('scenes');
+            else if (touchLayout) setRailSidebarOpen((open) => !open);
+            else setSidebarCollapsed(!sidebarCollapsed);
             break;
           case 'c':
           case 'C':
+            if (isPresenting) return;
             event.preventDefault();
-            setChatAreaCollapsed(!chatAreaCollapsed);
+            // The stacked section cannot collapse: C brings 互动 to the front
+            if (stackedLayout) chatAreaRef.current?.switchToTab('interaction');
+            else setChatAreaCollapsed(!chatAreaCollapsed);
             break;
           default:
             break;
@@ -1628,7 +2173,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       setTTSMuted,
       setTTSVolume,
       sidebarCollapsed,
+      stackedLayout,
       togglePresentation,
+      touchLayout,
       ttsMuted,
       ttsVolume,
     ]);
@@ -1660,7 +2207,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       }
     })();
 
-    // Build discussion request for Roundtable ProactiveCard from trigger
+    // Build discussion request for the ProactiveCard from trigger
     const discussionRequest: DiscussionAction | null = discussionTrigger
       ? {
           type: 'discussion',
@@ -1671,34 +2218,252 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         }
       : null;
 
-    // Scene viewer height — header is 80px when visible, roundtable is
-    // 192px in playback mode (autonomous hides it). Mode is guaranteed
-    // non-'edit' here since the parent Stage unmounts this component
-    // when entering Pro mode.
-    const sceneViewerHeight = (() => {
-      const headerHeight = isPresenting || hideHeader ? 0 : 80;
-      const roundtableHeight = mode === 'playback' && !isPresenting ? 192 : 0;
-      return `calc(100% - ${headerHeight + roundtableHeight}px)`;
+    // The teacher caption sits under slides only: interactive / quiz / PBL
+    // scenes are full-bleed, pending / complete pages have no line, and the
+    // presentation overlay speaks for it in fullscreen
+    const showCaption = !isPresenting && !isPendingScene && currentScene?.type === 'slide';
+    const sessionTypeForUi =
+      chatSessionType === 'qa' ? 'qa' : chatSessionType === 'discussion' ? 'discussion' : undefined;
+
+    // The raised hand's progress bar polls the line in flight
+    const getSpeechProgress = useCallback(
+      () => engineRef.current?.getSpeechProgress?.() ?? null,
+      [],
+    );
+
+    /** A question from the composer: raise a hand mid-line, else send it now. */
+    const handleMessageSend = (msg: string): MessageSendResult => {
+      const draft = showElementReference ? draftElementReferenceRef.current : null;
+      const elementReferenceSnapshot: ElementReferenceSendSnapshot | undefined = draft
+        ? {
+            reference: draft.reference,
+            selectionVersion: draft.selectionVersion,
+          }
+        : undefined;
+      // While the lecture plays, the question raises a hand: the
+      // teacher finishes the current line, then answers it.
+      const raised = raiseHand(msg, elementReferenceSnapshot);
+      if (raised) return raised;
+      // Called while idle (raised before Play): the question takes the floor.
+      // Paused or playing, handleUserInterrupt below ends the hand's turn.
+      if (engineRef.current?.getHandState() === 'called' && engineMode === 'idle') {
+        engineRef.current.lowerHand();
+        refreshHandState();
+      }
+      // Sent now: supersedes an unsent raised hand (e.g. one that
+      // Pro mode gave back into the input)
+      forgetUnsentQuestion();
+      // Always clear Level-1 pause state — the closure may hold a stale
+      // isDiscussionPaused value (e.g. voice input's onTranscription callback
+      // captures onMessageSend before React re-renders with the updated state).
+      setIsDiscussionPaused(false);
+      // Clear the sticky livePausedRef so the next agent-loop buffer
+      // starts unpaused. (pauseActiveLiveBuffer sets a ref that new
+      // buffers inherit — must be cleared before sendMessage creates one.)
+      chatAreaRef.current?.resumeActiveLiveBuffer();
+      // Flush any buffered / in-flight TTS audio from the previous
+      // agent turn so it doesn't leak into the next round.
+      discussionTTS.cleanup();
+      // Clear soft-paused state — user is continuing the topic
+      if (isTopicPending) {
+        setIsTopicPending(false);
+        setLiveSpeech(null);
+        setSpeakingAgentId(null);
+      }
+      setChatIsSoftClosing(false);
+      // User interrupts during playback — handleUserInterrupt triggers
+      // onUserInterrupt callback which already calls sendMessage, so skip
+      // the direct sendMessage below to avoid sending twice.
+      // Include 'paused' because onInputActivate pauses the engine before
+      // the user finishes typing — without this the interrupt position
+      // would never be saved and resuming after QA skips to the next sentence.
+      if (
+        engineRef.current &&
+        (engineMode === 'playing' || engineMode === 'live' || engineMode === 'paused')
+      ) {
+        pendingInterruptElementReferenceRef.current = elementReferenceSnapshot;
+        try {
+          engineRef.current.handleUserInterrupt(msg);
+        } finally {
+          pendingInterruptElementReferenceRef.current = undefined;
+        }
+      } else {
+        void sendMessageWithElementReference(msg, elementReferenceSnapshot);
+      }
+      markQuestionSent();
+    };
+
+    /** Which input became active: text keeps the lecture going, voice pauses it. */
+    const handleInputActivate = (kind: 'text' | 'voice') => {
+      // Level-1 pause: freeze buffer tick + TTS audio while SSE keeps buffering.
+      // User resumes manually via Space / pause button after closing the input.
+      // No isDiscussionPaused guard — always attempt to pause the buffer.
+      // The return value ensures UI state stays in sync with buffer state.
+      if (chatSessionType === 'qa' || chatSessionType === 'discussion') {
+        pauseLiveAnswer();
+      }
+      // Also pause playback engine — except typing during the lecture:
+      // a text question raises a hand and waits for the line, while
+      // voice must pause so the microphone doesn't record the teacher.
+      const engine = engineRef.current;
+      const mode = engine?.getMode();
+      // Voice stops the lecture like the pause button does: the text reveal
+      // freezes with the audio, and a reload resumes from here
+      const freezeLecture = () => {
+        saveSceneResumePosition(currentScene?.id, currentPlaybackActionIndexRef.current);
+        if (lectureSessionIdRef.current) {
+          chatAreaRef.current?.pauseBuffer(lectureSessionIdRef.current);
+        }
+      };
+      if (engine && mode === 'playing' && kind === 'voice' && engine.getHandState() === 'raised') {
+        // Speaking up with a hand raised: it is called now (pause = at once),
+        // and the recording keeps focus
+        suppressHandCallFocusRef.current = true;
+        try {
+          engine.flushQueuedInterrupt();
+        } finally {
+          suppressHandCallFocusRef.current = false;
+        }
+        if (engine.getMode() === 'paused') freezeLecture();
+        return;
+      }
+      if (engine && mode === 'live') {
+        engine.pause();
+      } else if (engine && mode === 'playing' && kind === 'voice') {
+        engine.pause();
+        freezeLecture();
+      }
+    };
+
+    // The fullscreen dock's side of a send (no-ops while the dock is not mounted)
+    const showPresentationUserMessage = useCallback(
+      (text: string) => presentationDockRef.current?.showUserMessage(text),
+      [],
+    );
+    const closePresentationComposer = useCallback(
+      () => presentationDockRef.current?.closeAfterSend(),
+      [],
+    );
+
+    const elementReferenceChip = draftElementReference
+      ? describeElementReferenceChip(draftElementReference, t)
+      : undefined;
+
+    // The discussion offer's agent, as the participants list names it
+    const discussionParticipant = discussionRequest
+      ? participants.find((p) => p.id === discussionRequest.agentId)
+      : undefined;
+    const discussionAgentConfig = discussionRequest
+      ? useAgentRegistry.getState().getAgent(discussionRequest.agentId || '')
+      : undefined;
+
+    // The stream's hand-raise rows: the hand, the queued question, the call
+    const deferredDiscussionAgentName = deferredDiscussion?.agentId
+      ? participants.find((p) => p.id === deferredDiscussion.agentId)?.name ||
+        useAgentRegistry.getState().getAgent(deferredDiscussion.agentId)?.name
+      : undefined;
+    const streamCueSpeaker = (() => {
+      if (!isLearnerCued) return null;
+      // A called hand is the teacher's call; the director's cue names its agent
+      const cueing =
+        (handState !== 'called' && cueAgentId
+          ? participants.find((p) => p.id === cueAgentId)
+          : undefined) ?? participants.find((p) => p.role === 'teacher');
+      return {
+        name: cueing?.name || t('roundtable.teacher'),
+        avatar: cueing?.avatar || DEFAULT_TEACHER_AVATAR,
+      };
     })();
+    const showHandStreamStatus =
+      handState !== null || queuedQuestion?.status === 'queued' || streamCueSpeaker !== null;
+
+    // The stacked chrome is off while presenting: fullscreen shows the stage
+    // and the dock, whatever the classroom's width
+    const stackedChrome = stackedLayout && !isPresenting;
+    const keyboardInset = useVisualViewportInset(stackedChrome && mode === 'playback');
+    const onlineCount = participants.filter((p) => p.isOnline).length;
+
+    const controlBar = (
+      <ControlBar
+        variant={isPresenting ? 'floating' : 'bar'}
+        density={touchLayout ? 'touch' : 'default'}
+        // Touch moves "n / m" into the header; keep it here when there is none
+        showPageCounter={!touchLayout || isPresenting || hideHeader}
+        // Phone: speed / volume / auto-play fold into a ⋯ sheet, which has to
+        // portal into the fullscreen element while presenting
+        condensed={phoneLayout}
+        portalContainer={isPresenting ? stageRef.current : undefined}
+        currentSceneIndex={currentSceneIndex}
+        scenesCount={totalScenesCount}
+        engineState={canvasEngineState}
+        showStop={controls.showStop}
+        stopKind={controls.stopKind}
+        onStop={handleStopDiscussion}
+        livePaused={isDiscussionPaused}
+        canToggleLivePause={controls.canToggleLivePause}
+        onToggleLivePause={controls.toggleLivePause}
+        onPrev={handlePreviousScene}
+        onNext={handleNextScene}
+        onPlayPause={controls.primaryAction}
+        whiteboardOpen={whiteboardOpen}
+        onToggleWhiteboard={handleWhiteboardToggle}
+        isPresenting={isPresenting}
+        onTogglePresentation={togglePresentation}
+        ttsEnabled={controls.ttsEnabled}
+        ttsMuted={controls.ttsMuted}
+        ttsVolume={controls.ttsVolume}
+        onToggleMute={controls.toggleMute}
+        onVolumeChange={controls.setTTSVolume}
+        autoPlayLecture={controls.autoPlayLecture}
+        onToggleAutoPlay={controls.toggleAutoPlay}
+        playbackSpeed={controls.playbackSpeed}
+        onCycleSpeed={controls.cycleSpeed}
+        showElementReference={showElementReference}
+        canPickElement={canPickElement}
+        elementPickActive={elementPickActive}
+        onToggleElementPick={handleToggleElementPick}
+      />
+    );
 
     return (
       <div
         ref={stageRef}
         className={cn(
-          'flex-1 flex overflow-hidden bg-gray-50 dark:bg-gray-900',
+          'flex-1 flex overflow-hidden bg-page',
+          // Stacked: header, stage and control bar over the interaction section
+          stackedChrome && 'flex-col',
           isPresenting && !controlsVisible && 'cursor-none',
         )}
+        // Lift the section's composer above the on-screen keyboard
+        style={keyboardInset > 0 ? { paddingBottom: keyboardInset } : undefined}
       >
-        <SceneSidebar
-          collapsed={sidebarCollapsed}
-          onCollapseChange={setSidebarCollapsed}
-          onSceneSelect={gatedSceneSwitch}
-          onRetryOutline={onRetryOutline}
-          isCourseComplete={isCourseComplete}
-        />
+        {/* Stacked layouts show the scenes in the section's 场景 tab instead.
+          The slot stays in place so the column and the panel never remount */}
+        {!stackedLayout && (
+          <SceneSidebar
+            {...(touchLayout
+              ? {
+                  variant: railSidebarOpen ? 'sidebar' : 'rail',
+                  density: 'touch',
+                  collapsed: isPresenting,
+                  onCollapseChange: (collapsed: boolean) => setRailSidebarOpen(!collapsed),
+                }
+              : { collapsed: sidebarCollapsed, onCollapseChange: setSidebarCollapsed })}
+            onSceneSelect={gatedSceneSwitch}
+            onRetryOutline={onRetryOutline}
+            isCourseComplete={isCourseComplete}
+          />
+        )}
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
+        {/* Main Content Area. Stacked, it is as tall as its content (the stage
+          sizes itself from the width) and gives way — the stage clips — only
+          when the section below would otherwise lose its composer */}
+        <div
+          className={cn(
+            'flex flex-col overflow-hidden min-w-0 relative',
+            stackedChrome ? 'min-h-0' : 'flex-1',
+          )}
+        >
           {/* Header — playback only. The Pro Switch fires `onEnterProMode`
             (passed by the parent Stage) which awaits our `teardown()`
             before the parent flips mode to 'edit'. */}
@@ -1716,23 +2481,29 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               hideBackControl={hideHeaderBackControl}
               hideGlobalControls={hideHeaderGlobalControls}
               hideCourseActions={hideHeaderCourseActions}
+              layout={phoneLayout ? 'phone' : touchLayout ? 'compact' : 'default'}
+              sceneIndex={currentSceneIndex}
+              sceneCount={totalScenesCount}
             />
           )}
 
           {/* Canvas Area — playback-only renderer. The parent Stage swaps
             this whole PlaybackChromeRoot out when entering edit mode, so
             no inline branching is needed here. */}
+          {/* Stacked, the canvas sizes itself from the width (see CanvasArea's
+            `stacked`) and may clip when the section below needs the room. One
+            element either way: entering fullscreen must not remount the scene */}
           <div
-            className="overflow-hidden relative flex-1 min-h-0 isolate"
-            style={{
-              height: sceneViewerHeight,
-            }}
+            className={
+              stackedChrome
+                ? 'overflow-hidden relative min-h-0 isolate'
+                : 'overflow-hidden relative flex-1 min-h-0 isolate'
+            }
             suppressHydrationWarning
           >
             <CanvasArea
+              stacked={stackedChrome ? (phoneLayout ? 'phone' : 'stacked') : undefined}
               currentScene={currentScene}
-              currentSceneIndex={currentSceneIndex}
-              scenesCount={totalScenesCount}
               mode={mode}
               engineState={canvasEngineState}
               isLiveSession={
@@ -1742,30 +2513,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 engineMode === 'live' ||
                 !!chatSessionType
               }
-              isSoftClosing={chatIsSoftClosing}
-              softCloseDeadline={softCloseDeadline}
               whiteboardOpen={whiteboardOpen}
-              sidebarCollapsed={sidebarCollapsed}
-              chatCollapsed={chatAreaCollapsed}
-              onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-              onToggleChat={() => setChatAreaCollapsed(!chatAreaCollapsed)}
-              onPrevSlide={handlePreviousScene}
-              onNextSlide={handleNextScene}
               onPlayPause={handlePlayPause}
               onWhiteboardClose={handleWhiteboardToggle}
+              pageNumber={currentSceneIndex + 1}
               isPresenting={isPresenting}
-              onTogglePresentation={togglePresentation}
-              showStopDiscussion={
-                engineMode === 'live' ||
-                ((chatIsStreaming || chatIsSoftClosing) &&
-                  (chatSessionType === 'qa' || chatSessionType === 'discussion'))
-              }
-              onStopDiscussion={handleStopDiscussion}
-              onContinueDiscussion={handleContinueDiscussion}
-              showElementReference={showElementReference}
-              canPickSlideElement={canPickElement}
               elementPickActive={elementPickActive}
-              onToggleElementPick={handleToggleElementPick}
               onPickElement={handlePickElement}
               whiteboardElementReference={
                 showElementReference &&
@@ -1775,7 +2528,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               }
               onPickWhiteboardElement={handlePickWhiteboardElement}
               onCancelElementPick={() => setElementPickActive(false)}
-              hideToolbar={mode === 'playback' || (isPresenting && !controlsVisible)}
               isPendingScene={isPendingScene}
               isCourseComplete={isCourseComplete}
               isGenerationFailed={
@@ -1787,203 +2539,145 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   ? () => onRetryOutline(generatingOutlines[0].id)
                   : undefined
               }
+              caption={
+                showCaption ? (
+                  <CaptionStrip
+                    playbackView={playbackView}
+                    participants={participants}
+                    speakingAgentId={speakingAgentId}
+                    currentSpeech={liveSpeech}
+                    lectureSpeech={lectureSpeech}
+                    idleText={firstSpeechText}
+                    playbackCompleted={playbackCompleted}
+                    isStreaming={chatIsStreaming}
+                    sessionType={sessionTypeForUi}
+                    thinkingState={thinkingState}
+                    isCueUser={isLearnerCued}
+                    isTopicPending={isTopicPending}
+                    isLivePaused={isDiscussionPaused}
+                    lectureResumeDeadline={lectureResumeDeadline}
+                    audioIndicatorState={audioIndicatorState}
+                    audioAgentId={audioAgentId}
+                    isDrawingOnBoard={whiteboardOpen && whiteboardDrawing !== null}
+                    // The stage column sets the height: 92px, 108px beside the PiP
+                    className="h-full"
+                  />
+                ) : null
+              }
             />
           </div>
 
-          {/* Roundtable Area */}
-          {mode === 'playback' && (
-            <div
+          {/* Re-open handles for collapsed side panels (the S / C keys work too) */}
+          {!isPresenting && !touchLayout && sidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              aria-label={t('stage.expandSceneSidebar')}
+              title={t('stage.expandSceneSidebar')}
+              className="absolute left-0 top-1/2 z-30 flex h-12 w-3 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-line bg-background/90 text-icon-muted transition-colors hover:w-4 hover:text-fg"
+            >
+              <ChevronRight className="size-3 shrink-0" />
+            </button>
+          )}
+          {!isPresenting && !stackedLayout && chatAreaCollapsed && (
+            <button
+              type="button"
+              onClick={() => setChatAreaCollapsed(false)}
+              aria-label={t('stage.expandInteractionPanel')}
+              title={t('stage.expandInteractionPanel')}
               className={cn(
-                'transition-opacity duration-300',
-                !isPresenting && 'shrink-0',
-                isPresenting && 'absolute inset-x-0 bottom-0 z-20',
+                'absolute right-0 top-1/2 z-30 flex -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-line bg-background/90 text-icon-muted transition-colors hover:text-fg',
+                // A 44px tab for touch: the persisted collapse can carry over from
+                // desktop, and without a keyboard (no C key) this is the way back
+                touchLayout ? 'h-14 w-11' : 'h-12 w-3 hover:w-4',
               )}
             >
-              <Roundtable
-                mode={mode}
-                initialParticipants={participants}
-                playbackView={playbackView}
-                currentSpeech={liveSpeech}
-                lectureSpeech={lectureSpeech}
-                idleText={firstSpeechText}
-                playbackCompleted={playbackCompleted}
-                discussionRequest={discussionRequest}
-                engineMode={engineMode}
-                isStreaming={chatIsStreaming}
-                audioIndicatorState={audioIndicatorState}
-                audioAgentId={audioAgentId}
-                sessionType={
-                  chatSessionType === 'qa'
-                    ? 'qa'
-                    : chatSessionType === 'discussion'
-                      ? 'discussion'
-                      : undefined
-                }
-                speakingAgentId={speakingAgentId}
-                speechProgress={speechProgress}
-                showEndFlash={showEndFlash}
-                endFlashSessionType={endFlashSessionType}
-                thinkingState={thinkingState}
-                isCueUser={isCueUser}
-                isSoftClosing={chatIsSoftClosing}
-                softCloseDeadline={softCloseDeadline}
-                isTopicPending={isTopicPending}
-                canSendMessage={canSendReferencedMessage}
-                onMessageSend={async (msg) => {
-                  const draft = showElementReference ? draftElementReferenceRef.current : null;
-                  const elementReferenceSnapshot: ElementReferenceSendSnapshot | undefined = draft
-                    ? {
-                        reference: draft.reference,
-                        selectionVersion: draft.selectionVersion,
-                      }
-                    : undefined;
-                  // Always clear Level-1 pause state — the closure may hold a stale
-                  // isDiscussionPaused value (e.g. voice input's onTranscription callback
-                  // captures onMessageSend before React re-renders with the updated state).
-                  setIsDiscussionPaused(false);
-                  // Clear the sticky livePausedRef so the next agent-loop buffer
-                  // starts unpaused. (pauseActiveLiveBuffer sets a ref that new
-                  // buffers inherit — must be cleared before sendMessage creates one.)
-                  chatAreaRef.current?.resumeActiveLiveBuffer();
-                  // Flush any buffered / in-flight TTS audio from the previous
-                  // agent turn so it doesn't leak into the next round.
-                  discussionTTS.cleanup();
-                  // Clear soft-paused state — user is continuing the topic
-                  if (isTopicPending) {
-                    setIsTopicPending(false);
-                    setLiveSpeech(null);
-                    setSpeakingAgentId(null);
-                  }
-                  setChatIsSoftClosing(false);
-                  // User interrupts during playback — handleUserInterrupt triggers
-                  // onUserInterrupt callback which already calls sendMessage, so skip
-                  // the direct sendMessage below to avoid sending twice.
-                  // Include 'paused' because onInputActivate pauses the engine before
-                  // the user finishes typing — without this the interrupt position
-                  // would never be saved and resuming after QA skips to the next sentence.
-                  if (
-                    engineRef.current &&
-                    (engineMode === 'playing' || engineMode === 'live' || engineMode === 'paused')
-                  ) {
-                    pendingInterruptElementReferenceRef.current = elementReferenceSnapshot;
-                    try {
-                      engineRef.current.handleUserInterrupt(msg);
-                    } finally {
-                      pendingInterruptElementReferenceRef.current = undefined;
-                    }
-                  } else {
-                    void sendMessageWithElementReference(msg, elementReferenceSnapshot);
-                  }
-                  // Auto-switch to chat tab when user sends a message
-                  chatAreaRef.current?.switchToTab('chat');
-                  setIsCueUser(false);
-                  // Immediately mark streaming for synchronized stop button
-                  setChatIsStreaming(true);
-                  setChatSessionType(chatSessionType || 'qa');
-                  // Optimistic thinking: show thinking dots immediately so there's
-                  // no blank gap between userMessage expiry and the SSE thinking event.
-                  // The real SSE event will overwrite this with the same or updated value.
-                  setThinkingState({ stage: 'director' });
-                }}
-                onDiscussionStart={() => {
-                  // User clicks "Join" on ProactiveCard
-                  engineRef.current?.confirmDiscussion();
-                }}
-                onDiscussionSkip={() => {
-                  // User clicks "Skip" on ProactiveCard
-                  engineRef.current?.skipDiscussion();
-                }}
-                onStopDiscussion={handleStopDiscussion}
-                onContinueDiscussion={handleContinueDiscussion}
-                onUserInputActivity={() => {
-                  handleContinueDiscussion();
-                }}
-                onInputActivate={() => {
-                  // Level-1 pause: freeze buffer tick + TTS audio while SSE keeps buffering.
-                  // User resumes manually via Space / pause button after closing the input.
-                  // No isDiscussionPaused guard — always attempt to pause the buffer.
-                  // The return value ensures UI state stays in sync with buffer state.
-                  if (chatSessionType === 'qa' || chatSessionType === 'discussion') {
-                    const paused = chatAreaRef.current?.pauseActiveLiveBuffer();
-                    if (paused) {
-                      discussionTTS.pause();
-                      setIsDiscussionPaused(true);
-                    }
-                  }
-                  // Also pause playback engine
-                  if (engineRef.current && (engineMode === 'playing' || engineMode === 'live')) {
-                    engineRef.current.pause();
-                  }
-                }}
-                onResumeTopic={doResumeTopic}
-                onPlayPause={handlePlayPause}
-                isDiscussionPaused={isDiscussionPaused}
-                onDiscussionPause={() => {
-                  const paused = chatAreaRef.current?.pauseActiveLiveBuffer();
-                  if (paused) {
-                    discussionTTS.pause();
-                    setIsDiscussionPaused(true);
-                  }
-                }}
-                onDiscussionResume={() => {
-                  chatAreaRef.current?.resumeActiveLiveBuffer();
-                  discussionTTS.resume();
-                  setIsDiscussionPaused(false);
-                }}
-                totalActions={totalActions}
-                currentActionIndex={currentPlaybackActionIndex ?? 0}
-                currentSceneIndex={currentSceneIndex}
-                scenesCount={totalScenesCount}
-                whiteboardOpen={whiteboardOpen}
-                sidebarCollapsed={sidebarCollapsed}
-                chatCollapsed={chatAreaCollapsed}
-                onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-                onToggleChat={() => setChatAreaCollapsed(!chatAreaCollapsed)}
-                onPrevSlide={handlePreviousScene}
-                onNextSlide={handleNextScene}
-                onWhiteboardClose={handleWhiteboardToggle}
-                isPresenting={isPresenting}
-                controlsVisible={controlsVisible}
-                onTogglePresentation={togglePresentation}
-                onPresentationInteractionChange={setIsPresentationInteractionActive}
-                fullscreenContainerRef={stageRef}
-                showElementReference={showElementReference}
-                canPickSlideElement={canPickElement}
-                elementPickActive={elementPickActive}
-                onToggleElementPick={handleToggleElementPick}
-                elementReferencePill={
-                  draftElementReference
-                    ? {
-                        sceneLabel:
-                          draftElementReference.reference.kind === 'whiteboard_element'
-                            ? t('whiteboard.title')
-                            : t('chat.lectureNotes.pageLabel', {
-                                n: (draftElementReference.sceneOrder ?? 0) + 1,
-                              }),
-                        elementType:
-                          draftElementReference.elementType === 'interactive'
-                            ? t('edit.sceneType.interactive')
-                            : getSlideElementTypeLabel(draftElementReference.elementType, t),
-                        displaySummary: draftElementReference.displaySummary,
-                      }
-                    : undefined
-                }
-                onClearElementReference={() => setDraftElementReference(null)}
-              />
+              <ChevronLeft className={cn('shrink-0', touchLayout ? 'size-[18px]' : 'size-3')} />
+            </button>
+          )}
+
+          {/* Fullscreen: the speech overlay, the auto-hiding control bar and
+            the dock that holds the composer. Otherwise the control bar is the
+            48px strip at the foot of the main column, and the interaction
+            panel holds participants and the composer. */}
+          {mode === 'playback' && isPresenting ? (
+            <PresentationDock
+              dockRef={presentationDockRef}
+              participants={participants}
+              playbackView={playbackView}
+              speakingAgentId={speakingAgentId}
+              currentSpeech={liveSpeech}
+              lectureSpeech={lectureSpeech}
+              idleText={firstSpeechText}
+              playbackCompleted={playbackCompleted}
+              isStreaming={chatIsStreaming}
+              sessionType={sessionTypeForUi}
+              thinkingState={thinkingState}
+              isCueUser={isLearnerCued}
+              isTopicPending={isTopicPending}
+              isLivePaused={isDiscussionPaused}
+              engineMode={engineMode}
+              audioIndicatorState={audioIndicatorState}
+              onBubbleClick={controls.primaryAction}
+              controlBar={controlBar}
+              controlsVisible={controlsVisible}
+              composerSlot={<ComposerSlot host={composerHost} active />}
+              composerRef={composerRef}
+              isComposing={isComposerComposing}
+              hasRaisedHand={queuedQuestion?.status === 'queued' || handState === 'raised'}
+              onInteractionChange={setIsDockInteractionActive}
+              discussionRequest={discussionRequest}
+              discussionAgent={discussionAgentConfig}
+              onDiscussionStart={() => engineRef.current?.confirmDiscussion()}
+              onDiscussionSkip={() => engineRef.current?.skipDiscussion()}
+              portalContainerRef={stageRef}
+            />
+          ) : isPresenting ? (
+            <div
+              className={cn(
+                'pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center px-4 transition-all duration-300',
+                controlsVisible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0',
+              )}
+            >
+              <div className={cn('max-w-full', controlsVisible && 'pointer-events-auto')}>
+                {controlBar}
+              </div>
             </div>
+          ) : (
+            controlBar
           )}
         </div>
 
         {/* Chat Area — playback / autonomous always renders it here; Pro
           (edit) mode unmounts this whole PlaybackChromeRoot, so the
           edit branch has no chat. */}
-        <div className="flex shrink-0">
+        <div
+          ref={panelRef}
+          className={cn('flex', stackedChrome ? 'w-full flex-1 flex-col' : 'shrink-0')}
+        >
           <ChatArea
             ref={chatAreaRef}
-            width={chatAreaWidth}
+            width={touchLayout ? TOUCH_PANEL_WIDTH : chatAreaWidth}
             onWidthChange={setChatAreaWidth}
-            collapsed={chatAreaCollapsed}
-            onCollapseChange={setChatAreaCollapsed}
+            density={touchLayout ? 'touch' : 'default'}
+            layout={stackedLayout ? (phoneLayout ? 'phone' : 'stacked') : 'panel'}
+            // The stacked section ignores the persisted collapse; fullscreen hides it
+            collapsed={stackedLayout ? isPresenting : chatAreaCollapsed}
+            onCollapseChange={stackedLayout ? undefined : setChatAreaCollapsed}
+            onlineCount={stackedLayout ? onlineCount : undefined}
+            // 场景: the sidebar's titled thumbnails as a two-column grid
+            scenes={
+              stackedLayout ? (
+                <SceneSidebar
+                  variant="grid"
+                  collapsed={false}
+                  onCollapseChange={() => undefined}
+                  onSceneSelect={gatedSceneSwitch}
+                  onRetryOutline={onRetryOutline}
+                  isCourseComplete={isCourseComplete}
+                />
+              ) : undefined
+            }
             activeBubbleId={activeBubbleId}
             onActiveBubble={(id) => setActiveBubbleId(id)}
             currentSceneId={currentSceneId}
@@ -2014,13 +2708,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 }
               });
             }}
-            onSpeechProgress={(ratio) => {
-              const epoch = sceneEpochRef.current;
-              queueMicrotask(() => {
-                if (sceneEpochRef.current !== epoch) return;
-                setSpeechProgress(ratio);
-              });
-            }}
             onThinking={(state) => {
               const epoch = sceneEpochRef.current;
               queueMicrotask(() => {
@@ -2028,19 +2715,107 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 setThinkingState(state);
               });
             }}
-            onCueUser={(_fromAgentId, _prompt) => {
+            onCueUser={(fromAgentId, _prompt) => {
               setIsCueUser(true);
+              setCueAgentId(fromAgentId ?? null);
             }}
             onLiveSessionError={handleLiveSessionError}
             onSoftCloseSession={() => {
               setThinkingState(null);
-              setSpeechProgress(null);
               setIsCueUser(false);
               setActiveBubbleId(null);
             }}
-            onSoftClosingChange={(softClosing, deadline) => {
+            onSoftClosingChange={(softClosing, deadline, endReason) => {
               setChatIsSoftClosing(softClosing);
-              setSoftCloseDeadline(deadline);
+              // The caption counts down to the lecture only when the close
+              // will really resume it (the same rule as handleSessionStop)
+              const engine = engineRef.current;
+              setLectureResumeDeadline(
+                softClosing &&
+                  deadline &&
+                  engine &&
+                  willResumeAfterSoftClose({
+                    endReason,
+                    hadLectureInterruption: engine.hasLectureInterruption(),
+                    isExhausted: engine.isExhausted(),
+                    lectureCompletionPending: engine.hasPendingLectureCompletion(),
+                    playbackCompleted,
+                  })
+                  ? deadline
+                  : undefined,
+              );
+            }}
+            onSoftCloseContinued={() => {
+              // The stream's "continue discussion": keep talking in the composer
+              if (isPresenting) {
+                presentationDockRef.current?.continueText();
+              } else {
+                revealInteraction();
+                composerRef.current?.openTextInput();
+              }
+            }}
+            header={
+              mode === 'playback' ? (
+                <Participants
+                  participants={participants}
+                  playbackView={playbackView}
+                  speakingAgentId={speakingAgentId}
+                  isLivePaused={isDiscussionPaused}
+                  thinkingState={thinkingState}
+                  discussionAgentId={
+                    discussionRequest?.agentId ??
+                    (handState === 'called' ? deferredDiscussion?.agentId : undefined)
+                  }
+                  userHandRaised={queuedQuestion?.status === 'queued' || handState !== null}
+                  layout={phoneLayout ? 'phone' : stackedLayout ? 'stacked' : 'panel'}
+                />
+              ) : undefined
+            }
+            streamTrailing={
+              // Fullscreen shows the offer and the hand over the dock instead
+              mode === 'playback' &&
+              !isPresenting &&
+              (showHandStreamStatus || discussionRequest) ? (
+                <>
+                  {showHandStreamStatus && (
+                    <HandRaiseStreamStatus
+                      handState={handState}
+                      pendingQuestion={
+                        queuedQuestion?.status === 'queued'
+                          ? { text: queuedQuestion.text, waitsFor: queuedQuestion.waitsFor }
+                          : null
+                      }
+                      deferredDiscussionAgentName={deferredDiscussionAgentName}
+                      cueSpeaker={streamCueSpeaker}
+                    />
+                  )}
+                  {discussionRequest && (
+                    <ProactiveCard
+                      key={discussionRequest.id}
+                      variant="inline"
+                      action={discussionRequest}
+                      mode={engineMode === 'paused' ? 'paused' : 'playback'}
+                      agentName={discussionParticipant?.name || discussionAgentConfig?.name}
+                      agentAvatar={discussionParticipant?.avatar || discussionAgentConfig?.avatar}
+                      onListen={() => engineRef.current?.confirmDiscussion()}
+                      onSkip={() => engineRef.current?.skipDiscussion()}
+                    />
+                  )}
+                </>
+              ) : undefined
+            }
+            // The composer itself is rendered once, below, into this slot
+            // (or into the fullscreen dock's card while presenting)
+            footer={
+              mode === 'playback' ? (
+                <ComposerSlot host={composerHost} active={!isPresenting} />
+              ) : undefined
+            }
+            // Out of sight, a live recording would go on unseen: drop it, keep
+            // the draft. Entering fullscreen hides the panel but hands the
+            // composer to the dock.
+            onFooterHidden={() => {
+              if (!isPresenting) composerRef.current?.dismiss();
             }}
             onStopSession={handleSessionStop}
             onSegmentSealed={discussionTTS.handleSegmentSealed}
@@ -2093,6 +2868,55 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* The one composer: its host sits in the panel's footer slot, or in
+          the fullscreen dock's card while presenting (ComposerSlot) */}
+        {mode === 'playback' &&
+          composerHost &&
+          createPortal(
+            <Composer
+              composerRef={composerRef}
+              speakingAgentId={speakingAgentId}
+              isStreaming={chatIsStreaming}
+              canSendMessage={canSendReferencedMessage}
+              onMessageSend={handleMessageSend}
+              onInputActivate={handleInputActivate}
+              onUserInputActivity={handleContinueDiscussion}
+              elementReferencePill={elementReferenceChip}
+              onClearElementReference={() => setDraftElementReference(null)}
+              queuedQuestion={queuedQuestion}
+              onCancelQueuedQuestion={cancelQueuedQuestion}
+              hand={{
+                state: handState,
+                waitsFor: handWaitsFor,
+                onRaise: raiseHandOnly,
+                onLower: lowerHand,
+              }}
+              getSpeechProgress={getSpeechProgress}
+              isCueUser={isLearnerCued}
+              isLiveSession={!!sessionTypeForUi}
+              isFollowUp={sessionTypeForUi === 'qa'}
+              onInteractionChange={setIsComposerComposing}
+              // Fullscreen only: the overlay's learner line and the card closing
+              onUserMessage={showPresentationUserMessage}
+              onSent={closePresentationComposer}
+              density={touchLayout ? 'touch' : 'default'}
+              layout={
+                isPresenting ? 'panel' : phoneLayout ? 'phone' : stackedLayout ? 'stacked' : 'panel'
+              }
+              className={
+                isPresenting
+                  ? 'border-t-0 bg-transparent p-0'
+                  : // TabletPortrait 10/16/16, ClassroomPhone 8/12/12
+                    phoneLayout
+                    ? 'px-3 pt-2 pb-3'
+                    : stackedLayout
+                      ? 'px-4 pt-2.5 pb-4'
+                      : undefined
+              }
+            />,
+            composerHost,
+          )}
       </div>
     );
   },

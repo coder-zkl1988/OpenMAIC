@@ -77,8 +77,8 @@ test('playback cursor persists to device KV and survives a fresh page', async ({
   await expect(page.getByTestId('scene-title').first()).toBeAttached({ timeout: 30_000 });
 
   // The central play affordance is a non-semantic motion.div overlay
-  // (canvas-area.tsx z-[102]); click it to start the lecture.
-  const overlayPlay = page.locator('div[class*="z-[102]"] div.pointer-events-auto').first();
+  // (canvas-area.tsx, data-testid="play-hint"); click it to start the lecture.
+  const overlayPlay = page.getByTestId('play-hint');
   await overlayPlay.waitFor({ state: 'visible', timeout: 15_000 });
   await overlayPlay.click();
 

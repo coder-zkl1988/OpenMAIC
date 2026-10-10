@@ -7,7 +7,8 @@
     "errorPrefix": "خطأ: ",
     "loadingClassroom": "جارٍ تحميل الفصل...",
     "retry": "إعادة المحاولة",
-    "close": "إغلاق"
+    "close": "إغلاق",
+    "switchLanguage": "تغيير اللغة"
   },
   "home": {
     "slogan": "التعلّم التوليدي في فصل تفاعلي متعدد الوكلاء",
@@ -216,18 +217,41 @@
     }
   },
   "chat": {
+    "panelLabel": "تفاعل الصف",
+    "collapsePanel": "طي لوحة التفاعل",
+    "conversationLog": "سجل المحادثة",
+    "softCloseCountdown": {
+      "qa": "ستنتهي الأسئلة خلال {{seconds}} ث، ثم يُستأنف الدرس",
+      "discussion": "ستنتهي المناقشة خلال {{seconds}} ث، ثم يُستأنف الدرس"
+    },
+    "actionTag": {
+      "group": "إجراءات السبورة",
+      "spotlight": "تسليط الضوء",
+      "laser": "مؤشر ليزر",
+      "play_video": "تشغيل الفيديو",
+      "discussion": "مناقشة",
+      "wb_open": "السبورة · فتح",
+      "wb_close": "السبورة · إغلاق",
+      "wb_clear": "السبورة · مسح",
+      "wb_delete": "السبورة · حذف",
+      "wb_draw_text": "السبورة · نص",
+      "wb_draw_shape": "السبورة · شكل",
+      "wb_draw_chart": "السبورة · مخطط",
+      "wb_draw_latex": "السبورة · معادلة",
+      "wb_draw_table": "السبورة · جدول",
+      "wb_draw_line": "السبورة · خط",
+      "wb_draw_code": "السبورة · كود",
+      "wb_edit_code": "السبورة · تعديل الكود"
+    },
     "lecture": "المحاضرة",
     "noConversations": "لا توجد محادثات",
     "startConversation": "اكتب رسالة أدناه لبدء المحادثة",
-    "noMessages": "لا توجد رسائل بعد",
-    "ended": "انتهت",
     "unknown": "غير معروف",
-    "stopDiscussion": "إيقاف النقاش",
-    "endQA": "إنهاء الأسئلة والأجوبة",
     "softClosing": "متابعة النقاش",
     "error": {
       "emptyAgentResponses": "أعاد الوكلاء استجابات فارغة; توقف النقاش. حاول مرة أخرى أو راجع إعدادات النموذج.",
-      "streamInterrupted": "انتهى تدفق البيانات بشكل غير متوقع; لم يكتمل النقاش. يرجى المحاولة مرة أخرى."
+      "streamInterrupted": "انتهى تدفق البيانات بشكل غير متوقع; لم يكتمل النقاش. يرجى المحاولة مرة أخرى.",
+      "modelBusy": "خدمة النموذج مشغولة حاليًا. أرسل رسالتك مرة أخرى لاحقًا، أو اختر نموذجًا متاحًا في إعدادات النماذج."
     },
     "elementReference": {
       "whiteboardChanged": "تغيّر عنصر السبورة المشار إليه أو لم يعد متاحًا. اختره مجددًا أو أزل الإشارة قبل الإرسال.",
@@ -252,7 +276,8 @@
     },
     "tabs": {
       "lecture": "الملاحظات",
-      "chat": "المحادثة"
+      "chat": "التفاعل",
+      "scenes": "المشاهد"
     },
     "lectureNotes": {
       "empty": "ستظهر الملاحظات هنا بعد تشغيل المحاضرة",
@@ -310,8 +335,8 @@
     "discussion": "نقاش",
     "join": "انضمام",
     "skip": "تخطي",
-    "pause": "إيقاف مؤقت",
-    "resume": "استئناف"
+    "offerLabel": "{{name}} يريد بدء نقاش",
+    "autoSkipHint": "سيتم التخطي تلقائيًا بعد {{seconds}} ثوانٍ"
   },
   "voice": {
     "startListening": "إدخال صوتي",
@@ -319,6 +344,72 @@
   },
   "stage": {
     "currentScene": "المشهد الحالي",
+    "collapseSceneSidebar": "طي قائمة المشاهد",
+    "expandSceneSidebar": "توسيع قائمة المشاهد",
+    "sceneRail": "المشاهد",
+    "sceneRailItem": "الصفحة {{n}}: {{title}}",
+    "headerMenu": "المزيد: اللغة والسمة والإعدادات ووضع Pro والتصدير",
+    "exportMenu": "تصدير",
+    "expandInteractionPanel": "توسيع لوحة التفاعل",
+    "pageCounter": "الصفحة {{current}} / {{total}}",
+    "previousScene": "المشهد السابق",
+    "nextScene": "المشهد التالي",
+    "play": "تشغيل",
+    "pause": "إيقاف مؤقت",
+    "pauseAnswer": "إيقاف الإجابة مؤقتًا",
+    "resumeAnswer": "استئناف الإجابة",
+    "playbackSpeed": "سرعة التشغيل",
+    "playbackMenu": "المزيد: سرعة التشغيل ومستوى الصوت والتشغيل التلقائي",
+    "mute": "كتم الصوت",
+    "unmute": "إلغاء كتم الصوت",
+    "volume": "مستوى الصوت",
+    "whiteboardToggle": "السبورة",
+    "caption": {
+      "lecturing": "يشرح الآن",
+      "paused": "متوقف مؤقتًا، حان دورك للتحدث",
+      "answering": "يجيب",
+      "discussing": "يناقش",
+      "resumeIn": "يُستأنف الدرس بعد {{seconds}} ث",
+      "answeringYou": "يجيب عن سؤالك",
+      "drawing": "يكتب على السبورة"
+    },
+    "pip": {
+      "badge": "الشرائح · الصفحة {{n}}",
+      "return": "العودة إلى الشرائح",
+      "returnLabel": "العودة إلى الشرائح (الصفحة {{n}})"
+    },
+    "composer": {
+      "raiseHand": "رفع اليد",
+      "raiseHandHint": "ارفع يدك: سيمنحك المعلم الكلمة بعد انتهاء هذه الجملة",
+      "raiseHandInLiveSession": "يمكنك التحدث مباشرة أثناء الأسئلة",
+      "lowerHand": "إنزال",
+      "lowerHandHint": "أنزل يدك واسحب السؤال",
+      "cuePlaceholder": "قل سؤالك أو اكتبه",
+      "cueStatus": "حان دورك للتحدث · الدرس متوقف مؤقتًا",
+      "send": "إرسال",
+      "cancelRecording": "إلغاء التسجيل",
+      "handRaised": "يدك مرفوعة · سيأتي دورك بعد هذه الجملة",
+      "handRaisedStep": "يدك مرفوعة · سيأتي دورك بعد هذه الخطوة",
+      "raisedPlaceholder": "يمكنك كتابة سؤالك مسبقًا...",
+      "followUpPlaceholder": "اطرح سؤال متابعة...",
+      "referencePlaceholder": "{{type}}: ماذا تريد أن تسأل عنه؟",
+      "handLowered": "تم إنزال اليد"
+    },
+    "handRaise": {
+      "raised": "رفعت يدك",
+      "aheadOfDiscussion": "رفعت يدك، ونقاش {{name}} يأتي بعدك",
+      "calledBy": "{{name}} يطلب منك التحدث",
+      "pendingQuestion": "في الانتظار · سيُجاب بعد هذه الجملة",
+      "pendingQuestionStep": "في الانتظار · سيُجاب بعد هذه الخطوة"
+    },
+    "participants": {
+      "label": "المشاركون",
+      "online": "{{count}} متصل الآن",
+      "speaking": "يتحدث",
+      "wantsToSpeak": "يريد التحدث",
+      "handRaised": "رافع يده",
+      "more": "{{count}} مشاركين آخرين"
+    },
     "generating": "جارٍ التوليد...",
     "paused": "متوقف مؤقتًا",
     "generationFailed": "فشل التوليد",
@@ -765,18 +856,26 @@
     "title": "السبورة التفاعلية",
     "open": "فتح السبورة",
     "clear": "مسح السبورة",
-    "minimize": "تصغير السبورة",
+    "minimize": "العودة إلى الشرائح",
     "ready": "السبورة جاهزة",
     "readyHint": "ستظهر العناصر هنا عند إضافتها بواسطة الذكاء الاصطناعي",
     "clearSuccess": "تم مسح السبورة بنجاح",
     "clearError": "فشل مسح السبورة: ",
-    "resetView": "إعادة تعيين العرض",
     "restoreError": "فشل استعادة السبورة: ",
     "history": "السجل",
     "restore": "استعادة",
     "noHistory": "لا يوجد سجل بعد",
     "restored": "تمت استعادة السبورة",
-    "elementCount": "{{count}} عنصر"
+    "elementCount": "{{count}} عنصر",
+    "drawing": "{{name}} يكتب على السبورة",
+    "drawingAnonymous": "جارٍ الكتابة على السبورة",
+    "zoom": "التكبير/التصغير",
+    "zoomIn": "تكبير",
+    "zoomOut": "تصغير",
+    "fit": "ملاءمة النافذة",
+    "historyWithCount": "السجل ({{count}})",
+    "undo": "تراجع",
+    "restoreSnapshot": "استعادة #{{index}}"
   },
   "quiz": {
     "title": "اختبار",
@@ -816,21 +915,22 @@
     "noSpeechDetected": "لم يتم اكتشاف كلام، يرجى المحاولة مرة أخرى",
     "discussionEnded": "انتهى النقاش",
     "qaEnded": "انتهت الأسئلة والأجوبة",
-    "softClosing": "متابعة النقاش",
     "thinking": "يفكر",
-    "yourTurn": "دورك",
     "stopDiscussion": "إيقاف النقاش",
+    "stopQA": "إنهاء الأسئلة",
     "autoPlay": "تشغيل تلقائي",
     "autoPlayOff": "إيقاف التشغيل التلقائي",
     "speed": "السرعة",
-    "previousLine": "Previous line",
-    "nextLine": "Next line",
-    "lineProgress": "Line {{current}} / {{total}}",
     "voiceInput": "إدخال صوتي",
     "voiceInputDisabled": "الإدخال الصوتي معطّل",
     "textInput": "إدخال نصي",
     "stopRecording": "إيقاف التسجيل",
-    "startRecording": "بدء التسجيل"
+    "handRaisedQueued": "رفعت يدك — سيجيبك المعلم بعد انتهاء هذه الجملة",
+    "handRaisedQueuedStep": "رفعت يدك — سيجيبك المعلم بعد انتهاء هذه الخطوة",
+    "handRaisedDelivered": "تم إرسال سؤالك",
+    "cancelQueuedQuestion": "إلغاء",
+    "queuedQuestionNotSent": "لم يتم إرسال سؤالك برفع اليد",
+    "queuedQuestionRestored": "تمت استعادة سؤالك غير المرسل"
   },
   "pbl": {
     "emptyProject": "لم يتم توليد مشروع التعلم القائم على المشاريع بعد. يرجى إنشاؤه عبر توليد المقرر.",
@@ -1066,7 +1166,6 @@
     "yesterday": "أمس",
     "daysAgo": "أيام مضت",
     "slides": "شرائح",
-    "nameCopied": "تم نسخ الاسم",
     "deleteConfirmTitle": "حذف",
     "delete": "حذف",
     "rename": "إعادة تسمية",
@@ -1091,8 +1190,10 @@
     "deleteFolderTitle": "حذف المجلد «{{name}}»",
     "deleteFolderEmptyDesc": "هذا المجلد فارغ. لا يمكن التراجع عن الحذف.",
     "deleteFolderUngroupDesc": "تبقى الدورات في «دوراتي»، تصبح غير مصنّفة.",
+    "moreActions": "إجراءات إضافية",
+    "openCourse": "فتح الدورة {{name}}",
+    "openFolder": "فتح المجلد {{name}}",
     "moveToFolder": "نقل إلى مجلد",
-    "moveToFolderLabel": "نقل إلى مجلد",
     "ungrouped": "غير مصنّف",
     "searchResults": "نتائج البحث",
     "folderCreateFailed": "فشل إنشاء المجلد",
@@ -1122,6 +1223,7 @@
     "formatListSeparator": "، ",
     "generateFailed": "فشل توليد الفصل، يرجى المحاولة مرة أخرى",
     "requirementPlaceholder": "أخبرني بأي شيء تريد تعلمه، مثلاً:\n\"علمني بايثون من الصفر في 30 دقيقة\"\n\"اشرح تحويل فورييه على السبورة\"\n\"كيف تلعب لعبة أفالون\"",
+    "requirementLabel": "ما تريد تعلمه",
     "requirementRequired": "يرجى إدخال متطلبات المقرر",
     "fileTooLarge": "الملف كبير جدًا. يرجى اختيار ملف أصغر من 50 ميغابايت",
     "courseMaterialCountLimit": "يمكنك رفع ما يصل إلى 5 ملفات لمواد المقرر",
@@ -1256,6 +1358,7 @@
     "language": "اللغة",
     "languageDesc": "اختر لغة الواجهة",
     "theme": "المظهر",
+    "themeWithCurrent": "المظهر: {{theme}}",
     "themeDesc": "اختر وضع المظهر (فاتح/داكن/النظام)",
     "themeOptions": {
       "light": "فاتح",
@@ -2308,12 +2411,14 @@
     "title": "الملف الشخصي",
     "defaultNickname": "متعلّم",
     "chooseAvatar": "اختر صورة رمزية",
+    "avatarOption": "الصورة الرمزية {{n}}",
     "uploadAvatar": "رفع",
     "bioPlaceholder": "أخبرنا عن نفسك — سيقوم المعلم الذكي بتخصيص الدروس لك...",
     "avatarHint": "ستظهر صورتك الرمزية في نقاشات الفصل والمحادثات",
     "fileTooLarge": "الصورة كبيرة جدًا — يرجى اختيار صورة أقل من 5 ميغابايت",
     "invalidFileType": "يرجى اختيار ملف صورة",
-    "editTooltip": "انقر لتعديل الملف الشخصي"
+    "editTooltip": "انقر لتعديل الملف الشخصي",
+    "edit": "تعديل الملف الشخصي"
   },
   "media": {
     "imageCapability": "توليد الصور",

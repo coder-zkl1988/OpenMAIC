@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { PPTElement } from '@openmaic/dsl';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import { useEscapeLayer } from '@/lib/hooks/use-escape-layer';
 import type { Scene } from '@/lib/types/stage';
 
 const ELEMENT_ID_PREFIX = 'screen-element-';
@@ -160,6 +161,8 @@ function sameOutlines(left: Outline[], right: Outline[]): boolean {
 
 export interface SlideElementPickOverlayProps {
   scene: Extract<Scene, { type: 'slide' }>;
+  /** Limits paint-node lookups to the slide (a board element may share an id) */
+  scopeRef?: RefObject<HTMLDivElement | null>;
   onPick: (element: PPTElement) => void;
   onCancel: () => void;
 }
@@ -234,17 +237,9 @@ export function ElementPickOverlay({
     };
   }, [refreshOutlines]);
 
-  useEffect(() => {
-    if (!picking) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      onCancel();
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [onCancel, picking]);
+  // Escape cancels picking, unless a layer opened above it (the whiteboard
+  // history popover) takes the key first.
+  useEscapeLayer(picking, onCancel);
 
   const renderedIds = useMemo(() => new Set(outlines.map((outline) => outline.id)), [outlines]);
   const fallbackElements = useMemo(
@@ -349,7 +344,11 @@ export function ElementPickOverlay({
         />
       ))}
 
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-gray-950/80 px-3 py-1.5 text-xs font-medium text-white shadow-lg pointer-events-none">
+      <div
+        role="status"
+        data-testid={`${testId}-hint`}
+        className="absolute top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-neutral-950/85 px-3 py-1.5 text-xs font-medium text-white shadow-lg pointer-events-none"
+      >
         {t('chat.elementReference.instruction')}
       </div>
 

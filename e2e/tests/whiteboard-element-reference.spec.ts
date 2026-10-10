@@ -80,7 +80,7 @@ test('selects a panned/zoomed whiteboard element, sends its identity, and retain
   await expect(outline).toHaveCount(1);
   await expect(outline).toHaveAttribute('data-element-id', 'board-fact');
   await page.keyboard.press('T');
-  const input = page.getByPlaceholder('Type your message...', { exact: true });
+  const input = page.getByTestId('classroom-composer').locator('textarea');
   await expect(input).toBeVisible();
   await expect(outline).toBeVisible();
   await input.fill('Why is this true?');
