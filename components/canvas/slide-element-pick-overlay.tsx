@@ -160,6 +160,8 @@ function sameOutlines(left: Outline[], right: Outline[]): boolean {
 
 export interface SlideElementPickOverlayProps {
   scene: Extract<Scene, { type: 'slide' }>;
+  /** Limits paint-node lookups to the slide (a board element may share an id) */
+  scopeRef?: RefObject<HTMLDivElement | null>;
   onPick: (element: PPTElement) => void;
   onCancel: () => void;
 }

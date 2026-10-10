@@ -98,6 +98,19 @@ describe('CaptionStrip', () => {
     expect(avatar().className).toContain('ring-primary');
   });
 
+  it('says 边讲边写 while the teacher writes on the open board, never over a pause', () => {
+    render(
+      { engineMode: 'playing', lectureSpeech: 'Let me write the formula down.' },
+      { isDrawingOnBoard: true },
+    );
+    expect(strip().getAttribute('data-status')).toBe('lecturing');
+    expect(status()?.textContent).toBe('stage.caption.drawing');
+    expect(status()?.querySelectorAll('i')).toHaveLength(4);
+
+    render({ engineMode: 'paused', lectureSpeech: 'Where were we?' }, { isDrawingOnBoard: true });
+    expect(status()?.textContent).toBe('stage.caption.paused');
+  });
+
   it.each([
     ['paused lecture', { engineMode: 'paused', lectureSpeech: 'Where were we?' }],
     ['cued learner', { engineMode: 'live', isCueUser: true, sessionType: 'qa' }],

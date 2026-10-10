@@ -23,6 +23,8 @@ export interface CaptionStripProps extends Omit<CaptionModelInput, 'names' | 'us
    * lecture resumes by itself at this time ('5 秒后继续讲课')
    */
   readonly lectureResumeDeadline?: number;
+  /** The board is open and the AI is writing on it: the chip reads 边讲边写 */
+  readonly isDrawingOnBoard?: boolean;
   readonly className?: string;
 }
 
@@ -38,6 +40,9 @@ export const CAPTION_STATUS_LABEL_KEYS: Readonly<Record<CaptionStatus, string | 
 
 /** Statuses where someone is speaking (the chip shows the wave) */
 const SPEAKING_STATUSES: readonly CaptionStatus[] = ['lecturing', 'answering', 'discussion'];
+/** Writing on the board shows as 边讲边写 over these (not paused or thinking) */
+const DRAWING_STATUSES: readonly CaptionStatus[] = [...SPEAKING_STATUSES, 'idle'];
+export const CAPTION_DRAWING_LABEL_KEY = 'stage.caption.drawing';
 
 // The caption-wave keyframes own the bars' transform; the static 0.6 scale is
 // the reduced-motion fallback only (the `scale` property would compose with it)
@@ -81,6 +86,7 @@ export function CaptionStrip({
   audioIndicatorState,
   audioAgentId,
   lectureResumeDeadline,
+  isDrawingOnBoard,
   className,
   ...input
 }: CaptionStripProps) {
@@ -97,14 +103,19 @@ export function CaptionStrip({
     : describeCaptionSpeaker('teacher', { participants: input.participants, names });
 
   const resumeSeconds = useSoftCloseCountdown(lectureResumeDeadline);
+  const isDrawing =
+    !!isDrawingOnBoard && resumeSeconds === undefined && DRAWING_STATUSES.includes(caption.status);
   // The soft close's countdown back to the lecture replaces the status
   const statusText =
     resumeSeconds !== undefined
       ? t('stage.caption.resumeIn', { seconds: resumeSeconds })
-      : CAPTION_STATUS_LABEL_KEYS[caption.status]
-        ? t(CAPTION_STATUS_LABEL_KEYS[caption.status]!)
-        : null;
-  const isSpeaking = resumeSeconds === undefined && SPEAKING_STATUSES.includes(caption.status);
+      : isDrawing
+        ? t(CAPTION_DRAWING_LABEL_KEY)
+        : CAPTION_STATUS_LABEL_KEYS[caption.status]
+          ? t(CAPTION_STATUS_LABEL_KEYS[caption.status]!)
+          : null;
+  const isSpeaking =
+    isDrawing || (resumeSeconds === undefined && SPEAKING_STATUSES.includes(caption.status));
   // The learner's question is with the director: say so instead of dots
   const isAnsweringYou =
     caption.status === 'thinking' && !caption.text && input.sessionType === 'qa';

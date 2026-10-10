@@ -19,7 +19,8 @@ vi.mock('@/lib/hooks/use-audio-recorder', () => ({
   },
 }));
 vi.mock('@/lib/hooks/use-asr-available', () => ({ useASRAvailable: () => true }));
-vi.mock('@/lib/hooks/use-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+const translate = vi.hoisted(() => vi.fn((key: string, _options?: Record<string, unknown>) => key));
+vi.mock('@/lib/hooks/use-i18n', () => ({ useI18n: () => ({ t: translate }) }));
 
 import { Composer } from '@/components/classroom/interaction/composer';
 import { describeElementReferenceChip } from '@/components/classroom/interaction/element-reference-chip';
@@ -74,6 +75,27 @@ describe('Composer: the element-reference chip and sending with it', () => {
     const clear = chip.querySelector('button[aria-label="chat.elementReference.clear"]')!;
     act(() => (clear as HTMLButtonElement).click());
     expect(onClearElementReference).toHaveBeenCalledOnce();
+  });
+
+  it('frames the placeholder by the referenced element, under the cue and the follow-up', async () => {
+    await act(async () => root.render(createElement(Composer, { elementReferencePill: CHIP })));
+    // 关于这个公式，你想问什么？
+    expect(textarea().placeholder).toBe('stage.composer.referencePlaceholder');
+    expect(translate).toHaveBeenCalledWith('stage.composer.referencePlaceholder', {
+      type: '公式',
+    });
+
+    await act(async () =>
+      root.render(createElement(Composer, { elementReferencePill: CHIP, isFollowUp: true })),
+    );
+    expect(textarea().placeholder).toBe('stage.composer.followUpPlaceholder');
+    await act(async () =>
+      root.render(createElement(Composer, { elementReferencePill: CHIP, isCueUser: true })),
+    );
+    expect(textarea().placeholder).toBe('stage.composer.cuePlaceholder');
+
+    await act(async () => root.render(createElement(Composer, {})));
+    expect(textarea().placeholder).toBe('roundtable.inputPlaceholder');
   });
 
   it('keeps typed text and allows sending it after the reference is fixed', async () => {

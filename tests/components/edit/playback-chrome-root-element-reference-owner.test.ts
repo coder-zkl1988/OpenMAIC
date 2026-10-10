@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   registryAgents: {} as Record<string, { name: string }>,
   sendMessage: vi.fn(),
   whiteboardOpen: false,
+  /** Who is drawing on the board (canvasStore.whiteboardDrawing) */
+  whiteboardDrawing: null as { agentId?: string } | null,
   runtimeProjection: null as {
     stageId: string;
     lastSeq: number | null;
@@ -180,6 +182,7 @@ vi.mock('@/lib/store/canvas', () => ({
   useCanvasStore: {
     use: {
       whiteboardOpen: () => mocks.whiteboardOpen,
+      whiteboardDrawing: () => mocks.whiteboardDrawing,
       runtimeWhiteboardProjection: () => mocks.runtimeProjection,
       whiteboardClearing: () => false,
       setWhiteboardOpenManually: () => (open: boolean) => {
@@ -188,6 +191,7 @@ vi.mock('@/lib/store/canvas', () => ({
     },
     getState: () => ({
       whiteboardOpen: mocks.whiteboardOpen,
+      whiteboardDrawing: mocks.whiteboardDrawing,
       runtimeWhiteboardProjection: mocks.runtimeProjection,
       whiteboardClearing: false,
     }),
@@ -652,6 +656,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.registryAgents = {};
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     mocks.whiteboardOpen = false;
+    mocks.whiteboardDrawing = null;
     mocks.runtimeProjection = null;
     stageState.stage.whiteboard = [];
     mocks.sendMessage.mockReset();
@@ -2093,6 +2098,25 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       stageState.currentSceneId = interactiveScene.id;
       await rerenderOwner();
       expect(mocks.canvasProps?.caption).toBeNull();
+    });
+
+    it('feeds the board mode: the PiP page, and 边讲边写 only while the open board is drawn on', async () => {
+      const captionProps = () =>
+        (mocks.canvasProps?.caption as { props: Record<string, unknown> } | null)?.props;
+      mocks.whiteboardDrawing = { agentId: 'teacher-1' };
+      await renderOwner();
+      expect(mocks.canvasProps?.pageNumber).toBe(1);
+      // The stage column sizes the caption (92px, 108px beside the PiP)
+      expect(captionProps()?.className).toBe('h-full');
+      expect(captionProps()?.isDrawingOnBoard).toBe(false);
+
+      mocks.whiteboardOpen = true;
+      await rerenderOwner();
+      expect(captionProps()?.isDrawingOnBoard).toBe(true);
+
+      mocks.whiteboardDrawing = null;
+      await rerenderOwner();
+      expect(captionProps()?.isDrawingOnBoard).toBe(false);
     });
   });
 

@@ -367,7 +367,13 @@
       "answering": "回答中",
       "discussing": "讨论中",
       "resumeIn": "{{seconds}} 秒后继续讲课",
-      "answeringYou": "正在回答你的问题"
+      "answeringYou": "正在回答你的问题",
+      "drawing": "边讲边写"
+    },
+    "pip": {
+      "badge": "课件 · 第 {{n}} 页",
+      "return": "返回课件",
+      "returnLabel": "返回课件（第 {{n}} 页）"
     },
     "composer": {
       "raiseHand": "举手",
@@ -383,6 +389,7 @@
       "handRaisedStep": "已举手 · 这一步结束就请你发言",
       "raisedPlaceholder": "可以先写下问题...",
       "followUpPlaceholder": "继续追问...",
+      "referencePlaceholder": "关于这个{{type}}，你想问什么？",
       "handLowered": "已放下手"
     },
     "handRaise": {
@@ -846,7 +853,7 @@
     "title": "互动白板",
     "open": "打开白板",
     "clear": "清空白板",
-    "minimize": "最小化白板",
+    "minimize": "返回课件",
     "ready": "白板已就绪",
     "readyHint": "AI 添加元素后将在此显示",
     "clearSuccess": "白板已清空",

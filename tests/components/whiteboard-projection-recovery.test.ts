@@ -70,7 +70,7 @@ import { Whiteboard } from '@/components/whiteboard';
 
 function WhiteboardHarness() {
   const isOpen = useCanvasStore((state) => state.whiteboardOpen);
-  return createElement(Whiteboard, { isOpen, onClose: vi.fn() });
+  return createElement(Whiteboard, { isOpen });
 }
 
 afterEach(() => {

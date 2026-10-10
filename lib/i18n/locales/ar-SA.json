@@ -367,7 +367,13 @@
       "answering": "يجيب",
       "discussing": "يناقش",
       "resumeIn": "يُستأنف الدرس بعد {{seconds}} ث",
-      "answeringYou": "يجيب عن سؤالك"
+      "answeringYou": "يجيب عن سؤالك",
+      "drawing": "يكتب على السبورة"
+    },
+    "pip": {
+      "badge": "الشرائح · الصفحة {{n}}",
+      "return": "العودة إلى الشرائح",
+      "returnLabel": "العودة إلى الشرائح (الصفحة {{n}})"
     },
     "composer": {
       "raiseHand": "رفع اليد",
@@ -383,6 +389,7 @@
       "handRaisedStep": "يدك مرفوعة · سيأتي دورك بعد هذه الخطوة",
       "raisedPlaceholder": "يمكنك كتابة سؤالك مسبقًا...",
       "followUpPlaceholder": "اطرح سؤال متابعة...",
+      "referencePlaceholder": "{{type}}: ماذا تريد أن تسأل عنه؟",
       "handLowered": "تم إنزال اليد"
     },
     "handRaise": {
@@ -846,7 +853,7 @@
     "title": "السبورة التفاعلية",
     "open": "فتح السبورة",
     "clear": "مسح السبورة",
-    "minimize": "تصغير السبورة",
+    "minimize": "العودة إلى الشرائح",
     "ready": "السبورة جاهزة",
     "readyHint": "ستظهر العناصر هنا عند إضافتها بواسطة الذكاء الاصطناعي",
     "clearSuccess": "تم مسح السبورة بنجاح",

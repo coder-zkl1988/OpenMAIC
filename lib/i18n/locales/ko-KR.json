@@ -367,7 +367,13 @@
       "answering": "답변 중",
       "discussing": "토론 중",
       "resumeIn": "{{seconds}}초 후 수업 재개",
-      "answeringYou": "질문에 답하는 중"
+      "answeringYou": "질문에 답하는 중",
+      "drawing": "판서하며 설명 중"
+    },
+    "pip": {
+      "badge": "슬라이드 · {{n}}페이지",
+      "return": "슬라이드로 돌아가기",
+      "returnLabel": "슬라이드로 돌아가기 ({{n}}페이지)"
     },
     "composer": {
       "raiseHand": "손들기",
@@ -383,6 +389,7 @@
       "handRaisedStep": "손을 들었어요 · 이 단계가 끝나면 발언할 차례예요",
       "raisedPlaceholder": "질문을 먼저 적어 두세요...",
       "followUpPlaceholder": "이어서 질문하기...",
+      "referencePlaceholder": "이 {{type}}에 대해 무엇을 묻고 싶나요?",
       "handLowered": "손을 내렸어요"
     },
     "handRaise": {
@@ -846,7 +853,7 @@
     "title": "인터랙티브 화이트보드",
     "open": "화이트보드 열기",
     "clear": "화이트보드 지우기",
-    "minimize": "화이트보드 최소화",
+    "minimize": "슬라이드로 돌아가기",
     "ready": "화이트보드가 준비되었습니다",
     "readyHint": "AI가 요소를 추가하면 여기에 표시됩니다",
     "clearSuccess": "화이트보드를 성공적으로 지웠습니다",

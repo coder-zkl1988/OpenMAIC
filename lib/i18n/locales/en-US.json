@@ -367,7 +367,13 @@
       "answering": "Answering",
       "discussing": "Discussing",
       "resumeIn": "Lecture resumes in {{seconds}}s",
-      "answeringYou": "Answering your question"
+      "answeringYou": "Answering your question",
+      "drawing": "Writing on the board"
+    },
+    "pip": {
+      "badge": "Slides · page {{n}}",
+      "return": "Back to slides",
+      "returnLabel": "Back to slides (page {{n}})"
     },
     "composer": {
       "raiseHand": "Raise hand",
@@ -383,6 +389,7 @@
       "handRaisedStep": "Hand raised · you're up when this step ends",
       "raisedPlaceholder": "You can write your question first...",
       "followUpPlaceholder": "Ask a follow-up...",
+      "referencePlaceholder": "{{type}}: what would you like to ask about it?",
       "handLowered": "Hand lowered"
     },
     "handRaise": {

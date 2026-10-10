@@ -780,7 +780,13 @@
       "answering": "Respondendo",
       "discussing": "Discutindo",
       "resumeIn": "A aula continua em {{seconds}} s",
-      "answeringYou": "Respondendo sua pergunta"
+      "answeringYou": "Respondendo sua pergunta",
+      "drawing": "Escrevendo no quadro"
+    },
+    "pip": {
+      "badge": "Slides · página {{n}}",
+      "return": "Voltar aos slides",
+      "returnLabel": "Voltar aos slides (página {{n}})"
     },
     "composer": {
       "raiseHand": "Levantar a mão",
@@ -796,6 +802,7 @@
       "handRaisedStep": "Mão levantada · sua vez ao fim desta etapa",
       "raisedPlaceholder": "Você pode escrever sua pergunta antes...",
       "followUpPlaceholder": "Faça uma pergunta de acompanhamento...",
+      "referencePlaceholder": "{{type}}: o que você quer perguntar sobre isso?",
       "handLowered": "Mão abaixada"
     },
     "handRaise": {
@@ -846,7 +853,7 @@
     "title": "Quadro Interativo",
     "open": "Abrir Quadro",
     "clear": "Limpar Quadro",
-    "minimize": "Minimizar Quadro",
+    "minimize": "Voltar aos slides",
     "ready": "O quadro está pronto",
     "readyHint": "Os elementos aparecerão aqui quando adicionados pela IA",
     "clearSuccess": "Quadro limpo com sucesso",

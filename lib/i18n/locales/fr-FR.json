@@ -367,7 +367,13 @@
       "answering": "Répond",
       "discussing": "En discussion",
       "resumeIn": "Le cours reprend dans {{seconds}} s",
-      "answeringYou": "Réponse à votre question"
+      "answeringYou": "Réponse à votre question",
+      "drawing": "Écrit au tableau"
+    },
+    "pip": {
+      "badge": "Diapositives · page {{n}}",
+      "return": "Retour aux diapositives",
+      "returnLabel": "Retour aux diapositives (page {{n}})"
     },
     "composer": {
       "raiseHand": "Lever la main",
@@ -383,6 +389,7 @@
       "handRaisedStep": "Main levée · à vous après cette étape",
       "raisedPlaceholder": "Vous pouvez déjà écrire votre question...",
       "followUpPlaceholder": "Poser une question de suivi...",
+      "referencePlaceholder": "{{type}} : que voulez-vous demander à ce sujet ?",
       "handLowered": "Main baissée"
     },
     "handRaise": {
@@ -846,7 +853,7 @@
     "title": "Tableau blanc interactif",
     "open": "Ouvrir le tableau blanc",
     "clear": "Effacer le tableau blanc",
-    "minimize": "Réduire le tableau blanc",
+    "minimize": "Retour aux diapositives",
     "ready": "Le tableau blanc est prêt",
     "readyHint": "Les éléments ajoutés par l’IA apparaîtront ici",
     "clearSuccess": "Tableau blanc effacé",

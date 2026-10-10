@@ -2,16 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import {
-  CircleCheck,
-  Eraser,
-  History,
-  Maximize,
-  Minimize2,
-  Minus,
-  PencilLine,
-  Plus,
-} from 'lucide-react';
+import { CircleCheck, Eraser, History, Maximize, Minus, PencilLine, Plus } from 'lucide-react';
 import type { PPTElement } from '@openmaic/dsl';
 import type { WhiteboardElementReference } from '@/lib/types/chat';
 import { ElementPickOverlay } from '@/components/canvas/slide-element-pick-overlay';
@@ -39,10 +30,12 @@ import { refreshWhiteboardRuntimeProjection } from '@/lib/whiteboard/runtime/bro
 const ZOOM_STEP = 1.25;
 /** How long the in-card "cleared · Undo" status stays up. */
 const UNDO_TOAST_MS = 8000;
+/** The card's open / close (ClassroomWhiteboard.dc.html), well within WB_OPEN_MS / WB_CLOSE_MS. */
+const CARD_EASE = [0.32, 0.72, 0, 1] as const;
+const CARD_OPEN_DELAY_S = 0.08;
 
 interface WhiteboardProps {
   readonly isOpen: boolean;
-  readonly onClose: () => void;
   readonly elementPickActive?: boolean;
   readonly whiteboardElementReference?: WhiteboardElementReference;
   readonly onPickElement?: (element: PPTElement) => void;
@@ -108,17 +101,20 @@ const zoomButton =
   'flex size-7 items-center justify-center rounded-lg text-icon transition-colors hover:bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-line disabled:pointer-events-none aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent aria-disabled:hover:text-icon';
 
 /**
- * Whiteboard component
+ * The whiteboard card. The stage column gives it the slide's slot; returning
+ * to the slide is the PiP or the control bar's 白板 toggle, so the card has no
+ * close button of its own. It unmounts after its exit, so a closed board is
+ * gone from the page (and the runtime refresh keys on each open).
  */
 export function Whiteboard({
   isOpen,
-  onClose,
   elementPickActive,
   whiteboardElementReference,
   onPickElement,
   onCancelElementPick,
 }: WhiteboardProps) {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const stage = useStageStore.use.stage();
   const isClearing = useCanvasStore.use.whiteboardClearing();
   const drawing = useCanvasStore.use.whiteboardDrawing();
@@ -269,25 +265,28 @@ export function Whiteboard({
         {isOpen && (
           <motion.section
             aria-label={t('whiteboard.title')}
-            initial={{ opacity: 0, scale: 0.92, y: 30 }}
+            initial={{ opacity: 0, scale: 0.97 }}
             animate={{
               opacity: 1,
               scale: 1,
-              y: 0,
-              transition: {
-                type: 'spring',
-                stiffness: 120,
-                damping: 18,
-                mass: 1.2,
-              },
+              transition: reduceMotion
+                ? { duration: 0 }
+                : {
+                    opacity: { duration: 0.3, ease: 'easeOut', delay: CARD_OPEN_DELAY_S },
+                    scale: { duration: 0.45, ease: CARD_EASE, delay: CARD_OPEN_DELAY_S },
+                  },
             }}
             exit={{
               opacity: 0,
-              scale: 0.95,
-              y: 16,
-              transition: { duration: 0.5, ease: [0.4, 0, 0.2, 1] },
+              scale: 0.97,
+              transition: reduceMotion
+                ? { duration: 0 }
+                : {
+                    opacity: { duration: 0.3, ease: 'easeOut' },
+                    scale: { duration: 0.45, ease: CARD_EASE },
+                  },
             }}
-            className="absolute inset-4 pointer-events-auto bg-background rounded-[18px] border border-accent-line ring-4 ring-accent-soft shadow-[0_24px_60px_-24px_rgba(0,0,0,0.2)] flex flex-col overflow-hidden z-[120]"
+            className="absolute inset-0 pointer-events-auto bg-background rounded-[18px] border border-accent-line ring-4 ring-accent-soft shadow-[0_24px_60px_-24px_rgba(0,0,0,0.2)] flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="h-11 shrink-0 pl-3 pr-2 border-b border-line flex items-center gap-2.5">
@@ -439,16 +438,6 @@ export function Whiteboard({
                     </button>
                   </>
                 )}
-                <span aria-hidden="true" className="mx-1 h-4 w-px bg-line" />
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className={headerIconButton}
-                  aria-label={t('whiteboard.minimize')}
-                  title={t('whiteboard.minimize')}
-                >
-                  <Minimize2 className="size-4" aria-hidden="true" />
-                </button>
               </div>
             </div>
 

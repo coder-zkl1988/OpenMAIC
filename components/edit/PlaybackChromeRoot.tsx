@@ -318,6 +318,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
 
     // Whiteboard state (from canvas store so AI tools can open it)
     const whiteboardOpen = useCanvasStore.use.whiteboardOpen();
+    const whiteboardDrawing = useCanvasStore.use.whiteboardDrawing();
     const runtimeProjection = useCanvasStore.use.runtimeWhiteboardProjection();
     const whiteboardClearing = useCanvasStore.use.whiteboardClearing();
     const { whiteboard: displayedWhiteboard, source: displayedWhiteboardSource } =
@@ -2427,6 +2428,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               whiteboardOpen={whiteboardOpen}
               onPlayPause={handlePlayPause}
               onWhiteboardClose={handleWhiteboardToggle}
+              pageNumber={currentSceneIndex + 1}
               isPresenting={isPresenting}
               elementPickActive={elementPickActive}
               onPickElement={handlePickElement}
@@ -2468,6 +2470,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                     lectureResumeDeadline={lectureResumeDeadline}
                     audioIndicatorState={audioIndicatorState}
                     audioAgentId={audioAgentId}
+                    isDrawingOnBoard={whiteboardOpen && whiteboardDrawing !== null}
+                    // The stage column sets the height: 92px, 108px beside the PiP
+                    className="h-full"
                   />
                 ) : null
               }

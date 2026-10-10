@@ -367,7 +367,13 @@
       "answering": "Respondiendo",
       "discussing": "Debatiendo",
       "resumeIn": "La clase continúa en {{seconds}} s",
-      "answeringYou": "Respondiendo tu pregunta"
+      "answeringYou": "Respondiendo tu pregunta",
+      "drawing": "Escribiendo en el pizarrón"
+    },
+    "pip": {
+      "badge": "Diapositivas · página {{n}}",
+      "return": "Volver a las diapositivas",
+      "returnLabel": "Volver a las diapositivas (página {{n}})"
     },
     "composer": {
       "raiseHand": "Levantar la mano",
@@ -383,6 +389,7 @@
       "handRaisedStep": "Mano levantada · te toca al terminar este paso",
       "raisedPlaceholder": "Puedes escribir tu pregunta antes...",
       "followUpPlaceholder": "Haz una pregunta de seguimiento...",
+      "referencePlaceholder": "{{type}}: ¿qué quieres preguntar sobre esto?",
       "handLowered": "Mano bajada"
     },
     "handRaise": {
@@ -846,7 +853,7 @@
     "title": "Pizarrón interactivo",
     "open": "Abrir pizarrón",
     "clear": "Limpiar pizarrón",
-    "minimize": "Minimizar pizarrón",
+    "minimize": "Volver a las diapositivas",
     "ready": "El pizarrón está listo",
     "readyHint": "Los elementos aparecerán aquí cuando la IA los agregue",
     "clearSuccess": "El pizarrón se limpió correctamente",

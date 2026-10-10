@@ -367,7 +367,13 @@
       "answering": "Đang trả lời",
       "discussing": "Đang thảo luận",
       "resumeIn": "Tiếp tục bài giảng sau {{seconds}} giây",
-      "answeringYou": "Đang trả lời câu hỏi của bạn"
+      "answeringYou": "Đang trả lời câu hỏi của bạn",
+      "drawing": "Vừa giảng vừa viết bảng"
+    },
+    "pip": {
+      "badge": "Bài giảng · trang {{n}}",
+      "return": "Quay lại bài giảng",
+      "returnLabel": "Quay lại bài giảng (trang {{n}})"
     },
     "composer": {
       "raiseHand": "Giơ tay",
@@ -383,6 +389,7 @@
       "handRaisedStep": "Đã giơ tay · đến lượt bạn khi xong bước này",
       "raisedPlaceholder": "Bạn có thể viết câu hỏi trước...",
       "followUpPlaceholder": "Hỏi tiếp...",
+      "referencePlaceholder": "{{type}}: bạn muốn hỏi gì về nội dung này?",
       "handLowered": "Đã hạ tay"
     },
     "handRaise": {
@@ -846,7 +853,7 @@
     "title": "Bảng tương tác",
     "open": "Mở bảng",
     "clear": "Xóa bảng",
-    "minimize": "Thu nhỏ bảng",
+    "minimize": "Quay lại bài giảng",
     "ready": "Bảng đã sẵn sàng",
     "readyHint": "Các phần tử sẽ hiện ở đây khi AI thêm vào",
     "clearSuccess": "Đã xóa bảng",

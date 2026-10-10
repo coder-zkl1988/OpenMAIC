@@ -367,7 +367,13 @@
       "answering": "回答中",
       "discussing": "ディスカッション中",
       "resumeIn": "{{seconds}} 秒後に授業を再開",
-      "answeringYou": "あなたの質問に回答しています"
+      "answeringYou": "あなたの質問に回答しています",
+      "drawing": "板書しながら説明中"
+    },
+    "pip": {
+      "badge": "スライド · {{n}} ページ",
+      "return": "スライドに戻る",
+      "returnLabel": "スライドに戻る（{{n}} ページ）"
     },
     "composer": {
       "raiseHand": "挙手",
@@ -383,6 +389,7 @@
       "handRaisedStep": "挙手中 · このステップが終わったら指名されます",
       "raisedPlaceholder": "先に質問を書いておけます...",
       "followUpPlaceholder": "続けて質問する...",
+      "referencePlaceholder": "この{{type}}について、何を聞きたいですか？",
       "handLowered": "手を下ろしました"
     },
     "handRaise": {
@@ -846,7 +853,7 @@
     "title": "インタラクティブホワイトボード",
     "open": "ホワイトボードを開く",
     "clear": "ホワイトボードをクリア",
-    "minimize": "ホワイトボードを最小化",
+    "minimize": "スライドに戻る",
     "ready": "ホワイトボードの準備ができました",
     "readyHint": "AIが追加すると要素がここに表示されます",
     "clearSuccess": "ホワイトボードをクリアしました",

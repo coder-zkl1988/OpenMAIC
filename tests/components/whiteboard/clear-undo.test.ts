@@ -99,7 +99,7 @@ async function renderBoard(props: Partial<Parameters<typeof Whiteboard>[0]> = {}
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root!.render(createElement(Whiteboard, { isOpen: true, onClose: vi.fn(), ...props }));
+    root!.render(createElement(Whiteboard, { isOpen: true, ...props }));
   });
 }
 
@@ -412,17 +412,13 @@ describe('Whiteboard history popover across a close', () => {
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
 
     // A programmatic close (AI wb_close) while the popover is open…
-    await act(async () =>
-      root!.render(createElement(Whiteboard, { isOpen: false, onClose: vi.fn() })),
-    );
+    await act(async () => root!.render(createElement(Whiteboard, { isOpen: false })));
     const composer = document.createElement('textarea');
     document.body.appendChild(composer);
     composer.focus();
 
     // …then the board opens again on its own.
-    await act(async () =>
-      root!.render(createElement(Whiteboard, { isOpen: true, onClose: vi.fn() })),
-    );
+    await act(async () => root!.render(createElement(Whiteboard, { isOpen: true })));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(
       document

@@ -367,7 +367,13 @@
       "answering": "Antwortet",
       "discussing": "Diskutiert",
       "resumeIn": "Unterricht geht in {{seconds}} s weiter",
-      "answeringYou": "Beantwortet deine Frage"
+      "answeringYou": "Beantwortet deine Frage",
+      "drawing": "Schreibt an die Tafel"
+    },
+    "pip": {
+      "badge": "Folien · Seite {{n}}",
+      "return": "Zurück zu den Folien",
+      "returnLabel": "Zurück zu den Folien (Seite {{n}})"
     },
     "composer": {
       "raiseHand": "Melden",
@@ -383,6 +389,7 @@
       "handRaisedStep": "Gemeldet · du bist nach diesem Schritt dran",
       "raisedPlaceholder": "Du kannst deine Frage schon aufschreiben...",
       "followUpPlaceholder": "Nachfrage stellen...",
+      "referencePlaceholder": "{{type}}: Was möchtest du dazu fragen?",
       "handLowered": "Hand gesenkt"
     },
     "handRaise": {
@@ -846,7 +853,7 @@
     "title": "Interaktives Whiteboard",
     "open": "Whiteboard öffnen",
     "clear": "Whiteboard leeren",
-    "minimize": "Whiteboard minimieren",
+    "minimize": "Zurück zu den Folien",
     "ready": "Das Whiteboard ist bereit",
     "readyHint": "Elemente erscheinen hier, wenn die KI sie hinzufügt",
     "clearSuccess": "Whiteboard erfolgreich geleert",

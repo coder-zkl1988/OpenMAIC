@@ -371,7 +371,10 @@ export function Composer({
       ? t('stage.composer.raisedPlaceholder')
       : isFollowUp
         ? t('stage.composer.followUpPlaceholder')
-        : t('roundtable.inputPlaceholder');
+        : // A referenced element frames the question (WhiteboardStates.dc.html)
+          elementReferencePill
+          ? t('stage.composer.referencePlaceholder', { type: elementReferencePill.elementType })
+          : t('roundtable.inputPlaceholder');
 
   return (
     <div
