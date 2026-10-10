@@ -250,7 +250,8 @@
     "softClosing": "Continuar debate",
     "error": {
       "emptyAgentResponses": "Los agentes devolvieron respuestas vacías; el debate se detuvo. Inténtalo de nuevo o revisa la configuración de tu modelo.",
-      "streamInterrupted": "El streaming terminó inesperadamente; el debate no se completó. Inténtalo de nuevo."
+      "streamInterrupted": "El streaming terminó inesperadamente; el debate no se completó. Inténtalo de nuevo.",
+      "modelBusy": "El servicio del modelo está saturado. Vuelve a enviar tu mensaje más tarde o elige un modelo disponible en la configuración de modelos."
     },
     "elementReference": {
       "whiteboardChanged": "El elemento del pizarrón cambió o ya no está disponible. Vuelve a seleccionarlo o quita la referencia antes de enviar.",

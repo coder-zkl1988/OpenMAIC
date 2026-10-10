@@ -250,7 +250,8 @@
     "softClosing": "Tiếp tục thảo luận",
     "error": {
       "emptyAgentResponses": "Các tác nhân trả về nội dung rỗng nên thảo luận đã dừng. Hãy thử lại hoặc kiểm tra cài đặt model.",
-      "streamInterrupted": "Luồng dữ liệu dừng bất ngờ, thảo luận chưa hoàn tất. Vui lòng thử lại."
+      "streamInterrupted": "Luồng dữ liệu dừng bất ngờ, thảo luận chưa hoàn tất. Vui lòng thử lại.",
+      "modelBusy": "Dịch vụ mô hình hiện đang quá tải. Hãy gửi lại tin nhắn sau hoặc chọn một mô hình khả dụng trong phần cài đặt mô hình."
     },
     "elementReference": {
       "whiteboardChanged": "Phần tử bảng trắng đã thay đổi hoặc không còn khả dụng. Hãy chọn lại hoặc xóa tham chiếu trước khi gửi.",

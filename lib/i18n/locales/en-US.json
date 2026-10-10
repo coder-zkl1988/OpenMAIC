@@ -250,7 +250,8 @@
     "softClosing": "Continue discussion",
     "error": {
       "emptyAgentResponses": "Agents returned empty responses; discussion stopped. Try again or check your model settings.",
-      "streamInterrupted": "Stream ended unexpectedly; discussion didn't complete. Please try again."
+      "streamInterrupted": "Stream ended unexpectedly; discussion didn't complete. Please try again.",
+      "modelBusy": "The model service is currently busy. Send your message again later, or select an available model in model settings."
     },
     "elementReference": {
       "whiteboardChanged": "The referenced whiteboard element has changed or is no longer available. Select it again or remove the reference before sending.",

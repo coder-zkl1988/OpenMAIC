@@ -250,7 +250,8 @@
     "softClosing": "Poursuivre la discussion",
     "error": {
       "emptyAgentResponses": "Les agents n’ont renvoyé aucune réponse ; la discussion s’est arrêtée. Réessayez ou vérifiez les paramètres de votre modèle.",
-      "streamInterrupted": "Le flux s’est interrompu de façon inattendue ; la discussion n’a pas abouti. Veuillez réessayer."
+      "streamInterrupted": "Le flux s’est interrompu de façon inattendue ; la discussion n’a pas abouti. Veuillez réessayer.",
+      "modelBusy": "Le service du modèle est actuellement surchargé. Renvoie ton message plus tard ou choisis un modèle disponible dans les paramètres des modèles."
     },
     "elementReference": {
       "whiteboardChanged": "L’élément du tableau blanc a changé ou n’est plus disponible. Sélectionnez-le à nouveau ou retirez la référence avant d’envoyer.",

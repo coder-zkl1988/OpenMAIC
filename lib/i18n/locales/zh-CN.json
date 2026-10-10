@@ -250,7 +250,8 @@
     "softClosing": "继续讨论",
     "error": {
       "emptyAgentResponses": "智能体连续无响应,讨论已停止。请重新尝试或检查模型配置。",
-      "streamInterrupted": "数据流意外中断,讨论未能完成。请重新尝试。"
+      "streamInterrupted": "数据流意外中断,讨论未能完成。请重新尝试。",
+      "modelBusy": "模型服务当前繁忙。请稍后再次发送消息，或在模型设置中切换可用模型。"
     },
     "elementReference": {
       "whiteboardChanged": "引用的白板元素已变化或不可用，请重新选择或移除引用后再发送。",

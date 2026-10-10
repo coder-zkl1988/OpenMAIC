@@ -431,21 +431,39 @@ export async function runPiSingleRequest(
   let sseBuffer = '';
   let sawDoneEvent = false;
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    sseBuffer += decoder.decode(value, { stream: true });
-    const parts = sseBuffer.split('\n\n');
-    sseBuffer = parts.pop() || '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      sseBuffer += decoder.decode(value, { stream: true });
+      const parts = sseBuffer.split('\n\n');
+      sseBuffer = parts.pop() || '';
 
-    for (const part of parts) {
-      if (!part.trim() || part.startsWith(':')) continue;
-      const dataLine = part.split('\n').find((line) => line.startsWith('data: '));
-      if (!dataLine) continue;
-      const event = JSON.parse(dataLine.slice(6)) as StatelessEvent;
-      if (event.type === 'done') sawDoneEvent = true;
-      consumer.onEvent(event);
+      for (const part of parts) {
+        if (!part.trim() || part.startsWith(':')) continue;
+        const dataLine = part.split('\n').find((line) => line.startsWith('data: '));
+        if (!dataLine) continue;
+        const event = JSON.parse(dataLine.slice(6)) as StatelessEvent;
+        if (event.type === 'error') {
+          if (controller.signal.aborted) return;
+          // A reported service failure belongs in the session, not the dev error overlay.
+          log.warn('[Pi] Chat service error:', event.data.message);
+          clearLiveSessionAfterError(
+            sessionId,
+            /\boverload(?:ed)?\b/i.test(event.data.message)
+              ? t('chat.error.modelBusy')
+              : event.data.message,
+          );
+          onStopSessionRef.current?.({ sessionId, source: 'error' });
+          await reader.cancel().catch(() => undefined);
+          return;
+        }
+        if (event.type === 'done') sawDoneEvent = true;
+        consumer.onEvent(event);
+      }
     }
+  } finally {
+    reader.releaseLock();
   }
 
   const doneData = sawDoneEvent ? await consumer.onIterationEnd() : null;

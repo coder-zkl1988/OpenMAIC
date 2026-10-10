@@ -250,7 +250,8 @@
     "softClosing": "繼續討論",
     "error": {
       "emptyAgentResponses": "智能體連續無回應,討論已停止。請重新嘗試或檢查模型設定。",
-      "streamInterrupted": "資料串流意外中斷,討論未能完成。請重新嘗試。"
+      "streamInterrupted": "資料串流意外中斷,討論未能完成。請重新嘗試。",
+      "modelBusy": "模型服務目前繁忙。請稍後再次傳送訊息，或在模型設定中切換可用模型。"
     },
     "elementReference": {
       "whiteboardChanged": "引用的白板元素已變更或無法使用，請重新選擇或移除引用後再傳送。",
