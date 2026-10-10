@@ -444,6 +444,17 @@ body[data-maic-editor='true'] .editable-element-text li,
   }
 }
 
+/* Caption strip "speaking" wave (Classroom.dc.html .wave) */
+@keyframes caption-wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
 /* Hide scrollbar by default, show on hover */
 @utility scrollbar-hide {
   &::-webkit-scrollbar {

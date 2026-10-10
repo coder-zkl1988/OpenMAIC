@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "Взаимодействие на уроке",
+    "collapsePanel": "Свернуть панель взаимодействия",
+    "conversationLog": "История разговора",
+    "softCloseCountdown": {
+      "qa": "Вопросы завершатся через {{seconds}} с, затем лекция продолжится",
+      "discussion": "Обсуждение завершится через {{seconds}} с, затем лекция продолжится"
+    },
+    "actionTag": {
+      "group": "Действия на доске",
+      "spotlight": "Подсветка",
+      "laser": "Лазерная указка",
+      "play_video": "Воспроизвести видео",
+      "discussion": "Обсудить",
+      "wb_open": "Доска · Открыть",
+      "wb_close": "Доска · Закрыть",
+      "wb_clear": "Доска · Очистить",
+      "wb_delete": "Доска · Удалить",
+      "wb_draw_text": "Доска · Текст",
+      "wb_draw_shape": "Доска · Фигура",
+      "wb_draw_chart": "Доска · Диаграмма",
+      "wb_draw_latex": "Доска · Формула",
+      "wb_draw_table": "Доска · Таблица",
+      "wb_draw_line": "Доска · Линия",
+      "wb_draw_code": "Доска · Код",
+      "wb_edit_code": "Доска · Изменить код"
+    },
     "lecture": "Лекция",
     "noConversations": "Нет диалогов",
     "startConversation": "Введите сообщение, чтобы начать диалог",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "Заметки",
-      "chat": "Чат"
+      "chat": "Взаимодействие"
     },
     "lectureNotes": {
       "empty": "Заметки появятся здесь после воспроизведения лекции",
@@ -265,7 +291,7 @@
     },
     "badge": {
       "qa": "Вопросы",
-      "discussion": "ДИСКУС",
+      "discussion": "Обсуждение",
       "lecture": "ЛЕКЦ"
     }
   },
@@ -321,6 +347,26 @@
   "stage": {
     "currentScene": "Текущая сцена",
     "collapseSceneSidebar": "Свернуть список сцен",
+    "expandSceneSidebar": "Развернуть список сцен",
+    "expandInteractionPanel": "Развернуть панель взаимодействия",
+    "pageCounter": "Страница {{current}} / {{total}}",
+    "previousScene": "Предыдущая сцена",
+    "nextScene": "Следующая сцена",
+    "play": "Воспроизвести",
+    "pause": "Пауза",
+    "pauseAnswer": "Приостановить ответ",
+    "resumeAnswer": "Продолжить ответ",
+    "playbackSpeed": "Скорость воспроизведения",
+    "mute": "Выключить звук",
+    "unmute": "Включить звук",
+    "volume": "Громкость",
+    "whiteboardToggle": "Доска",
+    "caption": {
+      "lecturing": "Объясняет",
+      "paused": "Пауза — ваша очередь говорить",
+      "answering": "Отвечает",
+      "discussing": "Обсуждают"
+    },
     "generating": "Генерация...",
     "paused": "Пауза",
     "generationFailed": "Ошибка генерации",
@@ -830,6 +876,7 @@
     "thinking": "Размышляет",
     "yourTurn": "Ваша очередь",
     "stopDiscussion": "Завершить обсуждение",
+    "stopQA": "Завершить вопросы",
     "autoPlay": "Автовоспр.",
     "autoPlayOff": "Остановить",
     "speed": "Скорость",

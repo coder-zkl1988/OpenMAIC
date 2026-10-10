@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "Unterrichtsinteraktion",
+    "collapsePanel": "Interaktionsbereich einklappen",
+    "conversationLog": "Gesprächsverlauf",
+    "softCloseCountdown": {
+      "qa": "Die Fragerunde endet in {{seconds}} s, dann geht der Vortrag weiter",
+      "discussion": "Die Diskussion endet in {{seconds}} s, dann geht der Vortrag weiter"
+    },
+    "actionTag": {
+      "group": "Tafelaktionen",
+      "spotlight": "Spotlight",
+      "laser": "Laserpointer",
+      "play_video": "Video abspielen",
+      "discussion": "Diskutieren",
+      "wb_open": "Tafel · Öffnen",
+      "wb_close": "Tafel · Schließen",
+      "wb_clear": "Tafel · Leeren",
+      "wb_delete": "Tafel · Entfernen",
+      "wb_draw_text": "Tafel · Text",
+      "wb_draw_shape": "Tafel · Form",
+      "wb_draw_chart": "Tafel · Diagramm",
+      "wb_draw_latex": "Tafel · Formel",
+      "wb_draw_table": "Tafel · Tabelle",
+      "wb_draw_line": "Tafel · Linie",
+      "wb_draw_code": "Tafel · Code",
+      "wb_edit_code": "Tafel · Code bearbeiten"
+    },
     "lecture": "Vortrag",
     "noConversations": "Keine Chats",
     "startConversation": "Gib unten eine Nachricht ein, um den Chat zu beginnen",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "Notizen",
-      "chat": "Chat"
+      "chat": "Interaktion"
     },
     "lectureNotes": {
       "empty": "Nach der Wiedergabe des Vortrags erscheinen hier Notizen",
@@ -265,7 +291,7 @@
     },
     "badge": {
       "qa": "Q&A",
-      "discussion": "Disk.",
+      "discussion": "Diskussion",
       "lecture": "Vortrag"
     }
   },
@@ -321,6 +347,26 @@
   "stage": {
     "currentScene": "Aktuelle Szene",
     "collapseSceneSidebar": "Szenenliste einklappen",
+    "expandSceneSidebar": "Szenenliste ausklappen",
+    "expandInteractionPanel": "Interaktionsbereich ausklappen",
+    "pageCounter": "Seite {{current}} / {{total}}",
+    "previousScene": "Vorherige Szene",
+    "nextScene": "Nächste Szene",
+    "play": "Abspielen",
+    "pause": "Pausieren",
+    "pauseAnswer": "Antwort pausieren",
+    "resumeAnswer": "Antwort fortsetzen",
+    "playbackSpeed": "Wiedergabegeschwindigkeit",
+    "mute": "Stummschalten",
+    "unmute": "Stummschaltung aufheben",
+    "volume": "Lautstärke",
+    "whiteboardToggle": "Whiteboard",
+    "caption": {
+      "lecturing": "Erklärt",
+      "paused": "Pausiert – du bist dran",
+      "answering": "Antwortet",
+      "discussing": "Diskutiert"
+    },
     "generating": "Wird generiert...",
     "paused": "Pausiert",
     "generationFailed": "Generierung fehlgeschlagen",
@@ -829,6 +875,7 @@
     "thinking": "Denkt nach",
     "yourTurn": "Du bist dran",
     "stopDiscussion": "Diskussion beenden",
+    "stopQA": "Fragerunde beenden",
     "softClosing": "Diskussion fortsetzen",
     "autoPlay": "Automatische Wiedergabe",
     "autoPlayOff": "Automatische Wiedergabe beenden",

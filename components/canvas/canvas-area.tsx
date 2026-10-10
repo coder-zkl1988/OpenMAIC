@@ -7,8 +7,6 @@ import { cn } from '@/lib/utils';
 import { SceneRenderer } from '@/components/stage/scene-renderer';
 import { SceneProvider } from '@/lib/contexts/scene-context';
 import { Whiteboard } from '@/components/whiteboard';
-import { CanvasToolbar } from '@/components/canvas/canvas-toolbar';
-import type { CanvasToolbarProps } from '@/components/canvas/canvas-toolbar';
 import type { Scene, StageMode } from '@/lib/types/stage';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { ClassroomCompletePageConnected } from '@/components/scene-renderers/classroom-complete';
@@ -18,10 +16,16 @@ import type { PPTElement } from '@openmaic/dsl';
 import type { WhiteboardElementReference } from '@/lib/types/chat';
 import { SlideElementPickOverlay } from '@/components/canvas/slide-element-pick-overlay';
 
-interface CanvasAreaProps extends CanvasToolbarProps {
+interface CanvasAreaProps {
   readonly currentScene: Scene | null;
   readonly mode: StageMode;
-  readonly hideToolbar?: boolean;
+  readonly engineState: 'idle' | 'playing' | 'paused';
+  /** A Q&A / discussion owns the slide: no click-to-play, no play hint */
+  readonly isLiveSession?: boolean;
+  readonly whiteboardOpen: boolean;
+  readonly onPlayPause: () => void;
+  readonly onWhiteboardClose: () => void;
+  readonly isPresenting?: boolean;
   readonly isPendingScene?: boolean;
   readonly isCourseComplete?: boolean;
   readonly isGenerationFailed?: boolean;
@@ -33,32 +37,19 @@ interface CanvasAreaProps extends CanvasToolbarProps {
   readonly onPickWhiteboardElement?: (element: PPTElement) => void;
   readonly onPickElement?: (element: PPTElement) => void;
   readonly onCancelElementPick?: () => void;
+  /** The caption strip under the slide (the shell decides when it shows) */
+  readonly caption?: ReactNode;
 }
 
 export function CanvasArea({
   currentScene,
-  currentSceneIndex,
-  scenesCount,
   mode,
   engineState,
   isLiveSession,
-  isSoftClosing,
-  softCloseDeadline,
   whiteboardOpen,
-  sidebarCollapsed,
-  chatCollapsed,
-  onToggleSidebar,
-  onToggleChat,
-  onPrevSlide,
-  onNextSlide,
   onPlayPause,
   onWhiteboardClose,
   isPresenting,
-  onTogglePresentation,
-  showStopDiscussion,
-  onStopDiscussion,
-  onContinueDiscussion,
-  hideToolbar,
   isPendingScene,
   isCourseComplete,
   isGenerationFailed,
@@ -69,9 +60,18 @@ export function CanvasArea({
   onPickElement,
   onPickWhiteboardElement,
   onCancelElementPick,
+  caption,
 }: CanvasAreaProps) {
   const { t } = useI18n();
   const inWorkbenchPanel = useInWorkbenchPanel();
+  const isInteractive = currentScene?.type === 'interactive';
+  // The course-complete page adapts its own layout to the height it gets
+  // (compact below FULL_MIN, full above FULL_SAFE), so it takes the whole slot
+  // instead of a width-driven 16:9 box
+  const showCompletePage = !!isPendingScene && !currentScene && !!isCourseComplete;
+  // The standalone classroom lays the slide and its caption out as one column
+  // (Classroom.dc.html); a workbench pane and fullscreen keep the slim frame
+  const stageColumn = !isInteractive && !inWorkbenchPanel && !isPresenting;
   const showControls = mode === 'playback' && !whiteboardOpen;
   const showPlayHint =
     showControls &&
@@ -105,25 +105,29 @@ export function CanvasArea({
   );
 
   return (
-    <div className="w-full h-full flex flex-col bg-page group/canvas">
-      {/* Slide area — takes remaining space */}
+    <div
+      className={cn(
+        'w-full h-full flex flex-col items-center bg-page group/canvas',
+        stageColumn ? 'gap-3 px-4 pt-1 pb-4' : 'p-2',
+        isInteractive && 'bg-blue-50/30 dark:bg-blue-900/10',
+      )}
+    >
+      {/* Slide slot — takes the height the caption leaves */}
       <div
         className={cn(
-          'flex-1 min-h-0 relative overflow-hidden flex items-center justify-center p-2 transition-colors duration-500',
-          currentScene?.type === 'interactive'
-            ? 'bg-blue-50/30 dark:bg-blue-900/10'
-            : 'bg-gray-50/30 dark:bg-gray-900/30',
+          'flex-1 min-h-0 w-full relative flex items-center justify-center',
+          stageColumn && 'max-w-[1280px]',
+          isInteractive && 'overflow-hidden',
         )}
       >
         <StageViewport
-          workbench={inWorkbenchPanel}
-          interactive={currentScene?.type === 'interactive'}
+          fill={isInteractive || showCompletePage}
           className={cn(
-            'bg-white dark:bg-gray-800 shadow-2xl rounded-lg overflow-hidden relative transition-all duration-700',
+            'bg-card overflow-hidden relative transition-[box-shadow,background-color] duration-700',
             showControls && !isLiveSession && currentScene?.type === 'slide' && 'cursor-pointer',
-            currentScene?.type === 'interactive'
-              ? 'shadow-blue-200/50 dark:shadow-blue-900/50 ring-1 ring-blue-900/5 dark:ring-blue-500/10'
-              : 'shadow-gray-200/50 dark:shadow-gray-800/50 ring-1 ring-gray-950/5 dark:ring-white/5',
+            isInteractive
+              ? 'rounded-lg shadow-2xl shadow-blue-200/50 dark:shadow-blue-900/50 ring-1 ring-blue-900/5 dark:ring-blue-500/10'
+              : 'rounded-[10px] shadow-[0_25px_50px_-12px_rgba(229,231,235,0.6),0_0_0_1px_rgba(3,7,18,0.06)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.06)]',
           )}
           onClick={handleSlideClick}
         >
@@ -165,7 +169,7 @@ export function CanvasArea({
 
           {/* Pending Scene Loading / Completion Overlay */}
           <AnimatePresence>
-            {isPendingScene && !currentScene && isCourseComplete && (
+            {showCompletePage && (
               <motion.div
                 key="course-complete"
                 initial={{ opacity: 0 }}
@@ -238,14 +242,8 @@ export function CanvasArea({
             )}
           </AnimatePresence>
 
-          {/* Scene Number Badge */}
-          {currentScene && (
-            <div className="absolute top-4 right-4 text-gray-200 dark:text-gray-700 font-black text-4xl opacity-50 pointer-events-none select-none mix-blend-multiply dark:mix-blend-screen">
-              {(currentSceneIndex + 1).toString().padStart(2, '0')}
-            </div>
-          )}
-
-          {/* Play hint — breathing button when idle or paused (slides only) */}
+          {/* Play hint — breathing button when idle or paused (slides only); the
+              control bar's play button is the labelled control */}
           <AnimatePresence>
             {showPlayHint && (
               <motion.div
@@ -256,6 +254,7 @@ export function CanvasArea({
                 className="absolute inset-0 z-[102] flex items-center justify-center pointer-events-none"
               >
                 <motion.div
+                  data-testid="play-hint"
                   className="opacity-50 group-hover/canvas:opacity-100 transition-opacity duration-300 pointer-events-auto cursor-pointer"
                   exit={{ pointerEvents: 'none' }}
                   onClick={(e) => {
@@ -288,70 +287,34 @@ export function CanvasArea({
         </StageViewport>
       </div>
 
-      {/* ── Canvas Toolbar — in document flow, only when not merged into roundtable ── */}
-      {!hideToolbar && (
-        <CanvasToolbar
-          className={cn(
-            'shrink-0 h-9 px-2',
-            'bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl',
-            'border-t border-gray-200/40 dark:border-gray-700/40',
-          )}
-          currentSceneIndex={currentSceneIndex}
-          scenesCount={scenesCount}
-          engineState={engineState}
-          isLiveSession={isLiveSession}
-          isSoftClosing={isSoftClosing}
-          softCloseDeadline={softCloseDeadline}
-          whiteboardOpen={whiteboardOpen}
-          sidebarCollapsed={sidebarCollapsed}
-          chatCollapsed={chatCollapsed}
-          onToggleSidebar={onToggleSidebar}
-          onToggleChat={onToggleChat}
-          onPrevSlide={onPrevSlide}
-          onNextSlide={onNextSlide}
-          onPlayPause={onPlayPause}
-          onWhiteboardClose={onWhiteboardClose}
-          isPresenting={isPresenting}
-          onTogglePresentation={onTogglePresentation}
-          showStopDiscussion={showStopDiscussion}
-          onStopDiscussion={onStopDiscussion}
-          onContinueDiscussion={onContinueDiscussion}
-        />
+      {caption && (
+        <div className={cn('w-full shrink-0', stageColumn && 'max-w-[1280px]')}>{caption}</div>
       )}
     </div>
   );
 }
 
 function StageViewport({
-  workbench,
-  interactive,
+  fill,
   className,
   onClick,
   children,
 }: {
-  readonly workbench: boolean;
-  readonly interactive: boolean;
+  /** Take the whole slot (interactive scenes, the course-complete page) */
+  readonly fill: boolean;
   readonly className?: string;
   readonly onClick?: (event: React.MouseEvent) => void;
   readonly children: ReactNode;
 }) {
-  if (interactive) {
+  if (fill) {
     return (
       <div className={cn('h-full w-full', className)} onClick={onClick}>
         {children}
       </div>
     );
   }
-  if (!workbench) {
-    return (
-      <div
-        className={cn('aspect-[16/9] h-full max-h-full max-w-full', className)}
-        onClick={onClick}
-      >
-        {children}
-      </div>
-    );
-  }
+  // Contain-fit 16:9 in whatever the slot leaves (the caption below, a
+  // workbench pane's width): never height-driven, so the slide cannot overflow
   return (
     <ContainBox fit="contain" className={className}>
       <div className="relative h-full w-full" onClick={onClick}>

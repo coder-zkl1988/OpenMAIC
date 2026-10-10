@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "授業の交流",
+    "collapsePanel": "交流パネルを閉じる",
+    "conversationLog": "会話の記録",
+    "softCloseCountdown": {
+      "qa": "{{seconds}} 秒後にQ&Aを終了し、講義に戻ります",
+      "discussion": "{{seconds}} 秒後にディスカッションを終了し、講義に戻ります"
+    },
+    "actionTag": {
+      "group": "板書の操作",
+      "spotlight": "スポットライト",
+      "laser": "レーザー",
+      "play_video": "動画を再生",
+      "discussion": "ディスカッション",
+      "wb_open": "板書 · 開く",
+      "wb_close": "板書 · 閉じる",
+      "wb_clear": "板書 · クリア",
+      "wb_delete": "板書 · 削除",
+      "wb_draw_text": "板書 · テキスト",
+      "wb_draw_shape": "板書 · 図形",
+      "wb_draw_chart": "板書 · グラフ",
+      "wb_draw_latex": "板書 · 数式",
+      "wb_draw_table": "板書 · 表",
+      "wb_draw_line": "板書 · 線",
+      "wb_draw_code": "板書 · コード",
+      "wb_edit_code": "板書 · コード編集"
+    },
     "lecture": "講義",
     "noConversations": "会話はありません",
     "startConversation": "下にメッセージを入力して会話を始めましょう",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "ノート",
-      "chat": "チャット"
+      "chat": "交流"
     },
     "lectureNotes": {
       "empty": "講義の再生後にノートがここに表示されます",
@@ -321,6 +347,26 @@
   "stage": {
     "currentScene": "現在のシーン",
     "collapseSceneSidebar": "シーン一覧を折りたたむ",
+    "expandSceneSidebar": "シーン一覧を展開",
+    "expandInteractionPanel": "インタラクションパネルを展開",
+    "pageCounter": "{{current}} / {{total}} ページ",
+    "previousScene": "前のシーン",
+    "nextScene": "次のシーン",
+    "play": "再生",
+    "pause": "一時停止",
+    "pauseAnswer": "回答を一時停止",
+    "resumeAnswer": "回答を再開",
+    "playbackSpeed": "再生速度",
+    "mute": "ミュート",
+    "unmute": "ミュート解除",
+    "volume": "音量",
+    "whiteboardToggle": "ホワイトボード",
+    "caption": {
+      "lecturing": "説明中",
+      "paused": "一時停止中・あなたの番です",
+      "answering": "回答中",
+      "discussing": "ディスカッション中"
+    },
     "generating": "生成中...",
     "paused": "一時停止中",
     "generationFailed": "生成に失敗しました",
@@ -830,6 +876,7 @@
     "thinking": "思考中",
     "yourTurn": "あなたの番です",
     "stopDiscussion": "ディスカッションを終了",
+    "stopQA": "質疑応答を終了",
     "autoPlay": "自動再生",
     "autoPlayOff": "自動再生を停止",
     "speed": "速度",

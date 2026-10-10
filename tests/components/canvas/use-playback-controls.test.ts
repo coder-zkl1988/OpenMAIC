@@ -177,6 +177,16 @@ describe('usePlaybackControls', () => {
       expect(actions.onPlayPause).not.toHaveBeenCalled();
     });
 
+    it('reports when the control bar may toggle the live answer', () => {
+      render({ canPauseLive: false });
+      expect(controls.canToggleLivePause).toBe(false);
+      render({ canPauseLive: true });
+      expect(controls.canToggleLivePause).toBe(true);
+      // A paused answer can always be resumed
+      render({ canPauseLive: false, isLivePaused: true });
+      expect(controls.canToggleLivePause).toBe(true);
+    });
+
     it('plays or pauses the lecture otherwise', () => {
       render(actions);
       act(() => controls.primaryAction());

@@ -21,10 +21,12 @@ import { useI18n } from '@/lib/hooks/use-i18n';
 import { SceneSidebar } from '@/components/stage/scene-sidebar';
 import { Header } from '@/components/header';
 import { CanvasArea } from '@/components/canvas/canvas-area';
-import { Roundtable } from '@/components/roundtable';
+import { Roundtable, type RoundtableComposerHandle } from '@/components/roundtable';
+import { ControlBar } from '@/components/classroom/control-bar';
+import { CaptionStrip } from '@/components/classroom/caption-strip';
 import type { MessageSendResult } from '@/components/classroom/interaction/use-composer-controller';
 import type { QueuedQuestionState } from '@/components/classroom/interaction/use-queued-question-effects';
-import { getStopControl } from '@/components/canvas/use-playback-controls';
+import { usePlaybackControls } from '@/components/canvas/use-playback-controls';
 import { PlaybackEngine, computePlaybackView, shouldAutoResumeLecture } from '@/lib/playback';
 import type { EngineMode, TriggerEvent, Effect } from '@/lib/playback';
 import {
@@ -66,7 +68,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { VisuallyHidden } from 'radix-ui';
 import type { PPTElement } from '@openmaic/dsl';
 import {
@@ -261,7 +263,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     // Streaming state for stop button (Issue 1)
     const [chatIsStreaming, setChatIsStreaming] = useState(false);
     const [chatIsSoftClosing, setChatIsSoftClosing] = useState(false);
-    const [softCloseDeadline, setSoftCloseDeadline] = useState<number | undefined>();
     const [chatSessionType, setChatSessionType] = useState<string | null>(null);
 
     // Topic pending state: session is soft-paused, bubble stays visible, waiting for user input
@@ -345,6 +346,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const engineRef = useRef<PlaybackEngine | null>(null);
     const audioPlayerRef = useRef(createAudioPlayer());
     const chatAreaRef = useRef<ChatAreaRef>(null);
+    // The roundtable's composer (until it moves into the panel): the control
+    // bar's soft-close "continue" reopens its text input
+    const roundtableComposerRef = useRef<RoundtableComposerHandle>(null);
     const lectureSessionIdRef = useRef<string | null>(null);
     const lectureActionCounterRef = useRef(0);
     const currentPlaybackActionIndexRef = useRef<number | null>(currentPlaybackActionIndex);
@@ -405,8 +409,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
 
     /** UI side effects of a question going out, immediately or from a raised hand. */
     const markQuestionSent = useCallback(() => {
-      // Auto-switch to chat tab when user sends a message
-      chatAreaRef.current?.switchToTab('chat');
+      // Auto-switch to the 互动 tab when the user sends a message
+      chatAreaRef.current?.switchToTab('interaction');
       setIsCueUser(false);
       // Immediately mark streaming for synchronized stop button
       setChatIsStreaming(true);
@@ -593,6 +597,21 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     // Discussion buffer-level pause state (distinct from soft-pause which aborts SSE)
     const [isDiscussionPaused, setIsDiscussionPaused] = useState(false);
 
+    /** Level-1 pause of the live answer: the text reveal and TTS freeze, SSE keeps buffering */
+    const pauseLiveAnswer = useCallback(() => {
+      const paused = chatAreaRef.current?.pauseActiveLiveBuffer();
+      if (paused) {
+        discussionTTS.pause();
+        setIsDiscussionPaused(true);
+      }
+    }, [discussionTTS]);
+
+    const resumeLiveAnswer = useCallback(() => {
+      chatAreaRef.current?.resumeActiveLiveBuffer();
+      discussionTTS.resume();
+      setIsDiscussionPaused(false);
+    }, [discussionTTS]);
+
     /**
      * Resume a soft-paused topic: re-call /chat with existing session messages.
      * The director picks the next agent to continue.
@@ -680,7 +699,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const handleContinueDiscussion = useCallback(() => {
       if (chatAreaRef.current?.continueActiveSoftClosingSession()) {
         setChatIsSoftClosing(false);
-        setSoftCloseDeadline(undefined);
       }
     }, []);
 
@@ -1334,8 +1352,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           prompt,
           agentId: agentId || 'default-1',
         });
-        // Auto-switch to chat tab when discussion starts
-        chatAreaRef.current?.switchToTab('chat');
+        // Auto-switch to the 互动 tab when a discussion starts
+        chatAreaRef.current?.switchToTab('interaction');
         // Immediately mark streaming for synchronized stop button
         setChatIsStreaming(true);
         setChatSessionType('discussion');
@@ -1492,6 +1510,22 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         }
       }
     }, [playbackCompleted, currentScene, saveSceneResumePosition]);
+
+    // Volume, mute, speed, auto-play, the stop rule and the primary play action
+    // (resume a pending topic, else pause/resume the live answer, else the lecture)
+    const controls = usePlaybackControls({
+      engineMode,
+      sessionType: chatSessionType,
+      isTopicPending,
+      isInLiveFlow: !!playbackView.isInLiveFlow,
+      isLivePaused: isDiscussionPaused,
+      // Don't allow pause during thinking or before text arrives
+      canPauseLive: !thinkingState && !!liveSpeech,
+      onResumeTopic: doResumeTopic,
+      onLivePause: pauseLiveAnswer,
+      onLiveResume: resumeLiveAnswer,
+      onPlayPause: handlePlayPause,
+    });
 
     // get scene information
     const isPendingScene = currentSceneId === PENDING_SCENE_ID;
@@ -1964,15 +1998,47 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         }
       : null;
 
-    // Scene viewer height — header is 56px when visible, roundtable is
-    // 192px in playback mode (autonomous hides it). Mode is guaranteed
-    // non-'edit' here since the parent Stage unmounts this component
-    // when entering Pro mode.
-    const sceneViewerHeight = (() => {
-      const headerHeight = isPresenting || hideHeader ? 0 : 56;
-      const roundtableHeight = mode === 'playback' && !isPresenting ? 192 : 0;
-      return `calc(100% - ${headerHeight + roundtableHeight}px)`;
-    })();
+    // The teacher caption sits under slides only: interactive / quiz / PBL
+    // scenes are full-bleed, pending / complete pages have no line, and the
+    // presentation overlay speaks for it in fullscreen
+    const showCaption = !isPresenting && !isPendingScene && currentScene?.type === 'slide';
+    const sessionTypeForUi =
+      chatSessionType === 'qa' ? 'qa' : chatSessionType === 'discussion' ? 'discussion' : undefined;
+
+    const controlBar = (
+      <ControlBar
+        variant={isPresenting ? 'floating' : 'bar'}
+        currentSceneIndex={currentSceneIndex}
+        scenesCount={totalScenesCount}
+        engineState={canvasEngineState}
+        showStop={controls.showStop}
+        stopKind={controls.stopKind}
+        onStop={handleStopDiscussion}
+        livePaused={isDiscussionPaused}
+        canToggleLivePause={controls.canToggleLivePause}
+        onToggleLivePause={controls.toggleLivePause}
+        onPrev={handlePreviousScene}
+        onNext={handleNextScene}
+        onPlayPause={controls.primaryAction}
+        whiteboardOpen={whiteboardOpen}
+        onToggleWhiteboard={handleWhiteboardToggle}
+        isPresenting={isPresenting}
+        onTogglePresentation={togglePresentation}
+        ttsEnabled={controls.ttsEnabled}
+        ttsMuted={controls.ttsMuted}
+        ttsVolume={controls.ttsVolume}
+        onToggleMute={controls.toggleMute}
+        onVolumeChange={controls.setTTSVolume}
+        autoPlayLecture={controls.autoPlayLecture}
+        onToggleAutoPlay={controls.toggleAutoPlay}
+        playbackSpeed={controls.playbackSpeed}
+        onCycleSpeed={controls.cycleSpeed}
+        showElementReference={showElementReference}
+        canPickElement={canPickElement}
+        elementPickActive={elementPickActive}
+        onToggleElementPick={handleToggleElementPick}
+      />
+    );
 
     return (
       <div
@@ -2015,17 +2081,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           {/* Canvas Area — playback-only renderer. The parent Stage swaps
             this whole PlaybackChromeRoot out when entering edit mode, so
             no inline branching is needed here. */}
-          <div
-            className="overflow-hidden relative flex-1 min-h-0 isolate"
-            style={{
-              height: sceneViewerHeight,
-            }}
-            suppressHydrationWarning
-          >
+          <div className="overflow-hidden relative flex-1 min-h-0 isolate" suppressHydrationWarning>
             <CanvasArea
               currentScene={currentScene}
-              currentSceneIndex={currentSceneIndex}
-              scenesCount={totalScenesCount}
               mode={mode}
               engineState={canvasEngineState}
               isLiveSession={
@@ -2035,26 +2093,11 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 engineMode === 'live' ||
                 !!chatSessionType
               }
-              isSoftClosing={chatIsSoftClosing}
-              softCloseDeadline={softCloseDeadline}
               whiteboardOpen={whiteboardOpen}
-              sidebarCollapsed={sidebarCollapsed}
-              chatCollapsed={chatAreaCollapsed}
-              onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-              onToggleChat={() => setChatAreaCollapsed(!chatAreaCollapsed)}
-              onPrevSlide={handlePreviousScene}
-              onNextSlide={handleNextScene}
               onPlayPause={handlePlayPause}
               onWhiteboardClose={handleWhiteboardToggle}
               isPresenting={isPresenting}
-              onTogglePresentation={togglePresentation}
-              showStopDiscussion={getStopControl({ engineMode, sessionType: chatSessionType }).show}
-              onStopDiscussion={handleStopDiscussion}
-              onContinueDiscussion={handleContinueDiscussion}
-              showElementReference={showElementReference}
-              canPickSlideElement={canPickElement}
               elementPickActive={elementPickActive}
-              onToggleElementPick={handleToggleElementPick}
               onPickElement={handlePickElement}
               whiteboardElementReference={
                 showElementReference &&
@@ -2064,7 +2107,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               }
               onPickWhiteboardElement={handlePickWhiteboardElement}
               onCancelElementPick={() => setElementPickActive(false)}
-              hideToolbar={mode === 'playback' || (isPresenting && !controlsVisible)}
               isPendingScene={isPendingScene}
               isCourseComplete={isCourseComplete}
               isGenerationFailed={
@@ -2076,10 +2118,55 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   ? () => onRetryOutline(generatingOutlines[0].id)
                   : undefined
               }
+              caption={
+                showCaption ? (
+                  <CaptionStrip
+                    playbackView={playbackView}
+                    participants={participants}
+                    speakingAgentId={speakingAgentId}
+                    currentSpeech={liveSpeech}
+                    lectureSpeech={lectureSpeech}
+                    idleText={firstSpeechText}
+                    playbackCompleted={playbackCompleted}
+                    isStreaming={chatIsStreaming}
+                    sessionType={sessionTypeForUi}
+                    thinkingState={thinkingState}
+                    isCueUser={isCueUser}
+                    isTopicPending={isTopicPending}
+                    isLivePaused={isDiscussionPaused}
+                    audioIndicatorState={audioIndicatorState}
+                    audioAgentId={audioAgentId}
+                  />
+                ) : null
+              }
             />
           </div>
 
-          {/* Roundtable Area */}
+          {/* Re-open handles for collapsed side panels (the S / C keys work too) */}
+          {!isPresenting && sidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              aria-label={t('stage.expandSceneSidebar')}
+              title={t('stage.expandSceneSidebar')}
+              className="absolute left-0 top-1/2 z-30 flex h-12 w-3 -translate-y-1/2 items-center justify-center rounded-r-md border border-l-0 border-line bg-background/90 text-icon-muted transition-colors hover:w-4 hover:text-fg"
+            >
+              <ChevronRight className="size-3 shrink-0" />
+            </button>
+          )}
+          {!isPresenting && chatAreaCollapsed && (
+            <button
+              type="button"
+              onClick={() => setChatAreaCollapsed(false)}
+              aria-label={t('stage.expandInteractionPanel')}
+              title={t('stage.expandInteractionPanel')}
+              className="absolute right-0 top-1/2 z-30 flex h-12 w-3 -translate-y-1/2 items-center justify-center rounded-l-md border border-r-0 border-line bg-background/90 text-icon-muted transition-colors hover:w-4 hover:text-fg"
+            >
+              <ChevronLeft className="size-3 shrink-0" />
+            </button>
+          )}
+
+          {/* Roundtable Area — participants + composer until they move into the panel */}
           {mode === 'playback' && (
             <div
               className={cn(
@@ -2100,22 +2187,13 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 engineMode={engineMode}
                 isStreaming={chatIsStreaming}
                 audioIndicatorState={audioIndicatorState}
-                audioAgentId={audioAgentId}
-                sessionType={
-                  chatSessionType === 'qa'
-                    ? 'qa'
-                    : chatSessionType === 'discussion'
-                      ? 'discussion'
-                      : undefined
-                }
+                sessionType={sessionTypeForUi}
                 speakingAgentId={speakingAgentId}
                 speechProgress={speechProgress}
                 showEndFlash={showEndFlash}
                 endFlashSessionType={endFlashSessionType}
                 thinkingState={thinkingState}
                 isCueUser={isCueUser}
-                isSoftClosing={chatIsSoftClosing}
-                softCloseDeadline={softCloseDeadline}
                 isTopicPending={isTopicPending}
                 canSendMessage={canSendReferencedMessage}
                 onMessageSend={(msg) => {
@@ -2180,8 +2258,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   // User clicks "Skip" on ProactiveCard
                   engineRef.current?.skipDiscussion();
                 }}
-                onStopDiscussion={handleStopDiscussion}
-                onContinueDiscussion={handleContinueDiscussion}
                 onUserInputActivity={() => {
                   handleContinueDiscussion();
                 }}
@@ -2191,11 +2267,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   // No isDiscussionPaused guard — always attempt to pause the buffer.
                   // The return value ensures UI state stays in sync with buffer state.
                   if (chatSessionType === 'qa' || chatSessionType === 'discussion') {
-                    const paused = chatAreaRef.current?.pauseActiveLiveBuffer();
-                    if (paused) {
-                      discussionTTS.pause();
-                      setIsDiscussionPaused(true);
-                    }
+                    pauseLiveAnswer();
                   }
                   // Also pause playback engine — except typing during the lecture:
                   // a text question raises a hand and waits for the line, while
@@ -2209,39 +2281,16 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 onResumeTopic={doResumeTopic}
                 onPlayPause={handlePlayPause}
                 isDiscussionPaused={isDiscussionPaused}
-                onDiscussionPause={() => {
-                  const paused = chatAreaRef.current?.pauseActiveLiveBuffer();
-                  if (paused) {
-                    discussionTTS.pause();
-                    setIsDiscussionPaused(true);
-                  }
-                }}
-                onDiscussionResume={() => {
-                  chatAreaRef.current?.resumeActiveLiveBuffer();
-                  discussionTTS.resume();
-                  setIsDiscussionPaused(false);
-                }}
+                onDiscussionPause={pauseLiveAnswer}
+                onDiscussionResume={resumeLiveAnswer}
                 totalActions={totalActions}
                 currentActionIndex={currentPlaybackActionIndex ?? 0}
-                currentSceneIndex={currentSceneIndex}
-                scenesCount={totalScenesCount}
-                whiteboardOpen={whiteboardOpen}
-                sidebarCollapsed={sidebarCollapsed}
                 chatCollapsed={chatAreaCollapsed}
-                onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-                onToggleChat={() => setChatAreaCollapsed(!chatAreaCollapsed)}
-                onPrevSlide={handlePreviousScene}
-                onNextSlide={handleNextScene}
-                onWhiteboardClose={handleWhiteboardToggle}
                 isPresenting={isPresenting}
                 controlsVisible={controlsVisible}
-                onTogglePresentation={togglePresentation}
                 onPresentationInteractionChange={setIsPresentationInteractionActive}
                 fullscreenContainerRef={stageRef}
-                showElementReference={showElementReference}
-                canPickSlideElement={canPickElement}
-                elementPickActive={elementPickActive}
-                onToggleElementPick={handleToggleElementPick}
+                composerRef={roundtableComposerRef}
                 elementReferencePill={
                   draftElementReference
                     ? {
@@ -2264,6 +2313,23 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 onCancelQueuedQuestion={cancelQueuedQuestion}
               />
             </div>
+          )}
+
+          {/* Control bar — the 48px strip at the foot of the main column, or an
+            auto-hiding floating pill while presenting */}
+          {isPresenting ? (
+            <div
+              className={cn(
+                'pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center px-4 transition-all duration-300',
+                controlsVisible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0',
+              )}
+            >
+              <div className={cn('max-w-full', controlsVisible && 'pointer-events-auto')}>
+                {controlBar}
+              </div>
+            </div>
+          ) : (
+            controlBar
           )}
         </div>
 
@@ -2331,9 +2397,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               setIsCueUser(false);
               setActiveBubbleId(null);
             }}
-            onSoftClosingChange={(softClosing, deadline) => {
+            onSoftClosingChange={(softClosing) => {
               setChatIsSoftClosing(softClosing);
-              setSoftCloseDeadline(deadline);
+            }}
+            onSoftCloseContinued={() => {
+              // The stream's "continue discussion": keep talking in the composer
+              roundtableComposerRef.current?.openTextInput();
             }}
             onStopSession={handleSessionStop}
             onSegmentSealed={discussionTTS.handleSegmentSealed}

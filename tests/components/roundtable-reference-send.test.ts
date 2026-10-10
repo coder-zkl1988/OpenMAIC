@@ -19,7 +19,6 @@ vi.mock('@/lib/hooks/use-audio-recorder', () => ({
   },
 }));
 vi.mock('@/lib/hooks/use-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock('@/components/canvas/canvas-toolbar', () => ({ CanvasToolbar: () => null }));
 vi.mock('@/components/ui/avatar-display', () => ({ AvatarDisplay: () => null }));
 vi.mock('@/components/chat/proactive-card', () => ({ ProactiveCard: () => null }));
 vi.mock('@/components/roundtable/presentation-speech-overlay', () => ({

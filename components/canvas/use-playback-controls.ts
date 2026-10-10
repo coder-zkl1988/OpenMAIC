@@ -132,6 +132,8 @@ export function usePlaybackControls({
     cycleSpeed,
     showStop: stop.show,
     stopKind: stop.kind,
+    /** The live answer can be paused now, or is paused and can be resumed */
+    canToggleLivePause: !!isLivePaused || canPauseLive,
     toggleLivePause,
     primaryAction,
   };

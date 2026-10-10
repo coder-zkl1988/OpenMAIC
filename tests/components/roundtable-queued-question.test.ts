@@ -6,6 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const audio = vi.hoisted(() => ({
   onTranscription: undefined as ((text: string) => void) | undefined,
 }));
+// The fullscreen overlay's last props (it shows the learner's delivered line)
+const overlay = vi.hoisted(() => ({
+  props: undefined as
+    | { playbackView?: { sourceText?: string; bubbleRole?: string | null } }
+    | undefined,
+}));
 vi.mock('@/lib/hooks/use-audio-recorder', () => ({
   useAudioRecorder: (options: { onTranscription: (text: string) => void }) => {
     audio.onTranscription = options.onTranscription;
@@ -20,11 +26,13 @@ vi.mock('@/lib/hooks/use-audio-recorder', () => ({
 }));
 vi.mock('@/lib/hooks/use-asr-available', () => ({ useASRAvailable: () => true }));
 vi.mock('@/lib/hooks/use-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock('@/components/canvas/canvas-toolbar', () => ({ CanvasToolbar: () => null }));
 vi.mock('@/components/ui/avatar-display', () => ({ AvatarDisplay: () => null }));
 vi.mock('@/components/chat/proactive-card', () => ({ ProactiveCard: () => null }));
 vi.mock('@/components/roundtable/presentation-speech-overlay', () => ({
-  PresentationSpeechOverlay: () => null,
+  PresentationSpeechOverlay: (props: typeof overlay.props) => {
+    overlay.props = props;
+    return null;
+  },
 }));
 import { Roundtable, type QueuedQuestionState } from '@/components/roundtable';
 
@@ -116,6 +124,17 @@ describe('Roundtable raised hand (queued question)', () => {
     return [...container.querySelectorAll('p')].map((p) => p.textContent).join('\n');
   }
 
+  it('is a slim participants + composer strip: no playback toolbar, no speech bubble', async () => {
+    await render({ lectureSpeech: 'The teacher is speaking', engineMode: 'playing' });
+    // The shell's control bar and caption strip own these now
+    expect(container.querySelector('[data-testid="control-bar"]')).toBeNull();
+    for (const label of ['Play', 'Pause', 'Next scene', 'stage.play', 'stage.nextScene']) {
+      expect(container.querySelector(`button[aria-label="${label}"]`)).toBeNull();
+    }
+    expect(bubbleText()).not.toContain('The teacher is speaking');
+    expect(container.firstElementChild?.className).toContain('h-24');
+  });
+
   it('reports which input opened: text keeps the lecture, voice pauses it', async () => {
     await render();
     act(() => iconButton('message-square').click());
@@ -200,7 +219,7 @@ describe('Roundtable raised hand (queued question)', () => {
     expect(props.onMessageSend).toHaveBeenCalledTimes(2);
   });
 
-  it('shows the user bubble once the question is delivered', async () => {
+  it('clears the input once the question is delivered (the line itself shows in the panel)', async () => {
     await render();
     act(() => iconButton('message-square').click());
     typeAndSend(QUESTION);
@@ -208,13 +227,23 @@ describe('Roundtable raised hand (queued question)', () => {
 
     await setQueued('delivered');
     expect(indicator()).toBeNull();
-    expect(bubbleText()).toContain(QUESTION);
+    // No duplicate speech bubble in the strip
+    expect(bubbleText()).not.toContain(QUESTION);
     // The closed input fades out on animation frames, still showing the sent
     // text until its exit ends: wait for it rather than for a set render count
     await vi.waitFor(async () => {
       await act(() => new Promise((resolve) => setTimeout(resolve, 16)));
       expect(container.querySelector('textarea')?.value ?? '').toBe('');
     });
+  });
+
+  it('shows a delivered question as the learner line of the fullscreen overlay', async () => {
+    await render({ isPresenting: true, controlsVisible: true });
+    await setQueued('queued');
+    expect(overlay.props?.playbackView?.sourceText ?? '').not.toContain(QUESTION);
+
+    await setQueued('delivered');
+    expect(overlay.props?.playbackView).toMatchObject({ sourceText: QUESTION, bubbleRole: 'user' });
   });
 
   it('hands a user on Cancel to the text-input toggle when the question is delivered', async () => {

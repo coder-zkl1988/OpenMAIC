@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "Classroom interaction",
+    "collapsePanel": "Collapse interaction panel",
+    "conversationLog": "Conversation history",
+    "softCloseCountdown": {
+      "qa": "Q&A ends in {{seconds}}s, then the lecture continues",
+      "discussion": "Discussion ends in {{seconds}}s, then the lecture continues"
+    },
+    "actionTag": {
+      "group": "Whiteboard actions",
+      "spotlight": "Spotlight",
+      "laser": "Laser",
+      "play_video": "Play video",
+      "discussion": "Discuss",
+      "wb_open": "Whiteboard · Open",
+      "wb_close": "Whiteboard · Close",
+      "wb_clear": "Whiteboard · Clear",
+      "wb_delete": "Whiteboard · Delete",
+      "wb_draw_text": "Whiteboard · Text",
+      "wb_draw_shape": "Whiteboard · Shape",
+      "wb_draw_chart": "Whiteboard · Chart",
+      "wb_draw_latex": "Whiteboard · Formula",
+      "wb_draw_table": "Whiteboard · Table",
+      "wb_draw_line": "Whiteboard · Line",
+      "wb_draw_code": "Whiteboard · Code",
+      "wb_edit_code": "Whiteboard · Edit code"
+    },
     "lecture": "Lecture",
     "noConversations": "No conversations",
     "startConversation": "Type a message below to begin chatting",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "Notes",
-      "chat": "Chat"
+      "chat": "Interaction"
     },
     "lectureNotes": {
       "empty": "Notes will appear here after lecture playback",
@@ -265,7 +291,7 @@
     },
     "badge": {
       "qa": "Q&A",
-      "discussion": "DISC",
+      "discussion": "Discussion",
       "lecture": "LEC"
     }
   },
@@ -321,6 +347,26 @@
   "stage": {
     "currentScene": "Current Scene",
     "collapseSceneSidebar": "Collapse scene list",
+    "expandSceneSidebar": "Expand scene sidebar",
+    "expandInteractionPanel": "Expand interaction panel",
+    "pageCounter": "Page {{current}} / {{total}}",
+    "previousScene": "Previous scene",
+    "nextScene": "Next scene",
+    "play": "Play",
+    "pause": "Pause",
+    "pauseAnswer": "Pause answer",
+    "resumeAnswer": "Resume answer",
+    "playbackSpeed": "Playback speed",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "volume": "Volume",
+    "whiteboardToggle": "Whiteboard",
+    "caption": {
+      "lecturing": "Explaining",
+      "paused": "Paused, your turn to speak",
+      "answering": "Answering",
+      "discussing": "Discussing"
+    },
     "generating": "Generating...",
     "paused": "Paused",
     "generationFailed": "Generation failed",
@@ -829,6 +875,7 @@
     "thinking": "Thinking",
     "yourTurn": "Your turn",
     "stopDiscussion": "Stop Discussion",
+    "stopQA": "Stop Q&A",
     "softClosing": "Continue discussion",
     "autoPlay": "Auto-play",
     "autoPlayOff": "Stop auto-play",

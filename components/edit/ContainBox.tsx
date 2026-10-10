@@ -155,7 +155,12 @@ export function ContainBox({
   return (
     <div
       ref={hostRef}
-      className="flex h-full min-h-0 w-full items-center justify-center overflow-hidden"
+      className={cn(
+        'flex h-full min-h-0 w-full items-center justify-center',
+        // A contain box always fits, so the host need not clip — the box's
+        // own shadow stays visible. Fill-width clips the extra height.
+        fit === 'fill-width' && 'overflow-hidden',
+      )}
     >
       <div
         className={cn('relative', className)}

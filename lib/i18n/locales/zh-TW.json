@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "課堂互動",
+    "collapsePanel": "收起互動欄",
+    "conversationLog": "對話紀錄",
+    "softCloseCountdown": {
+      "qa": "{{seconds}} 秒後結束問答，回到講課",
+      "discussion": "{{seconds}} 秒後結束討論，回到講課"
+    },
+    "actionTag": {
+      "group": "白板操作",
+      "spotlight": "聚焦",
+      "laser": "雷射筆",
+      "play_video": "播放影片",
+      "discussion": "討論",
+      "wb_open": "板書 · 開啟",
+      "wb_close": "板書 · 關閉",
+      "wb_clear": "板書 · 清空",
+      "wb_delete": "板書 · 刪除",
+      "wb_draw_text": "板書 · 文字",
+      "wb_draw_shape": "板書 · 圖形",
+      "wb_draw_chart": "板書 · 圖表",
+      "wb_draw_latex": "板書 · 公式",
+      "wb_draw_table": "板書 · 表格",
+      "wb_draw_line": "板書 · 線條",
+      "wb_draw_code": "板書 · 程式碼",
+      "wb_edit_code": "板書 · 改程式碼"
+    },
     "lecture": "授課",
     "noConversations": "暫無對話",
     "startConversation": "輸入訊息開始對話",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "筆記",
-      "chat": "對話"
+      "chat": "互動"
     },
     "lectureNotes": {
       "empty": "播放課程後，筆記將在此顯示",
@@ -321,6 +347,26 @@
   "stage": {
     "currentScene": "目前場景",
     "collapseSceneSidebar": "收起場景欄",
+    "expandSceneSidebar": "展開場景欄",
+    "expandInteractionPanel": "展開互動欄",
+    "pageCounter": "第 {{current}} / {{total}} 頁",
+    "previousScene": "上一頁",
+    "nextScene": "下一頁",
+    "play": "播放",
+    "pause": "暫停",
+    "pauseAnswer": "暫停回答",
+    "resumeAnswer": "繼續回答",
+    "playbackSpeed": "播放速度",
+    "mute": "靜音",
+    "unmute": "取消靜音",
+    "volume": "音量",
+    "whiteboardToggle": "白板",
+    "caption": {
+      "lecturing": "講解中",
+      "paused": "已暫停，等你發言",
+      "answering": "回答中",
+      "discussing": "討論中"
+    },
     "generating": "生成中...",
     "paused": "已暫停",
     "generationFailed": "生成失敗",
@@ -814,6 +860,7 @@
     "thinking": "思考中",
     "yourTurn": "輪到你發言了",
     "stopDiscussion": "結束討論",
+    "stopQA": "結束問答",
     "softClosing": "繼續討論",
     "autoPlay": "自動播放",
     "autoPlayOff": "關閉自動播放",

@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "Interação da aula",
+    "collapsePanel": "Recolher o painel de interação",
+    "conversationLog": "Histórico da conversa",
+    "softCloseCountdown": {
+      "qa": "As perguntas terminam em {{seconds}} s e a aula continua",
+      "discussion": "A discussão termina em {{seconds}} s e a aula continua"
+    },
+    "actionTag": {
+      "group": "Ações do quadro",
+      "spotlight": "Destaque",
+      "laser": "Laser",
+      "play_video": "Reproduzir vídeo",
+      "discussion": "Debater",
+      "wb_open": "Quadro · Abrir",
+      "wb_close": "Quadro · Fechar",
+      "wb_clear": "Quadro · Limpar",
+      "wb_delete": "Quadro · Excluir",
+      "wb_draw_text": "Quadro · Texto",
+      "wb_draw_shape": "Quadro · Forma",
+      "wb_draw_chart": "Quadro · Gráfico",
+      "wb_draw_latex": "Quadro · Fórmula",
+      "wb_draw_table": "Quadro · Tabela",
+      "wb_draw_line": "Quadro · Linha",
+      "wb_draw_code": "Quadro · Código",
+      "wb_edit_code": "Quadro · Editar código"
+    },
     "lecture": "Aula",
     "noConversations": "Sem conversas",
     "startConversation": "Digite uma mensagem abaixo para começar",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "Anotações",
-      "chat": "Conversa"
+      "chat": "Interação"
     },
     "lectureNotes": {
       "empty": "As anotações aparecerão aqui após a reprodução da aula",
@@ -265,7 +291,7 @@
     },
     "badge": {
       "qa": "P&R",
-      "discussion": "DEB",
+      "discussion": "Debate",
       "lecture": "AULA"
     }
   },
@@ -734,6 +760,26 @@
   "stage": {
     "currentScene": "Cena Atual",
     "collapseSceneSidebar": "Recolher lista de cenas",
+    "expandSceneSidebar": "Expandir lista de cenas",
+    "expandInteractionPanel": "Expandir painel de interação",
+    "pageCounter": "Página {{current}} / {{total}}",
+    "previousScene": "Cena anterior",
+    "nextScene": "Próxima cena",
+    "play": "Reproduzir",
+    "pause": "Pausar",
+    "pauseAnswer": "Pausar resposta",
+    "resumeAnswer": "Retomar resposta",
+    "playbackSpeed": "Velocidade de reprodução",
+    "mute": "Silenciar",
+    "unmute": "Ativar som",
+    "volume": "Volume",
+    "whiteboardToggle": "Quadro",
+    "caption": {
+      "lecturing": "Explicando",
+      "paused": "Pausado, sua vez de falar",
+      "answering": "Respondendo",
+      "discussing": "Discutindo"
+    },
     "generating": "Gerando...",
     "paused": "Pausado",
     "generationFailed": "Falha na geração",
@@ -830,6 +876,7 @@
     "thinking": "Pensando",
     "yourTurn": "Sua vez",
     "stopDiscussion": "Encerrar Discussão",
+    "stopQA": "Encerrar perguntas",
     "autoPlay": "Reprodução automática",
     "autoPlayOff": "Parar reprodução automática",
     "speed": "Velocidade",

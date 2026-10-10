@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "수업 상호작용",
+    "collapsePanel": "상호작용 패널 접기",
+    "conversationLog": "대화 기록",
+    "softCloseCountdown": {
+      "qa": "{{seconds}}초 후 Q&A를 마치고 강의로 돌아갑니다",
+      "discussion": "{{seconds}}초 후 토론을 마치고 강의로 돌아갑니다"
+    },
+    "actionTag": {
+      "group": "판서 작업",
+      "spotlight": "스포트라이트",
+      "laser": "레이저",
+      "play_video": "동영상 재생",
+      "discussion": "토론",
+      "wb_open": "판서 · 열기",
+      "wb_close": "판서 · 닫기",
+      "wb_clear": "판서 · 지우기",
+      "wb_delete": "판서 · 삭제",
+      "wb_draw_text": "판서 · 텍스트",
+      "wb_draw_shape": "판서 · 도형",
+      "wb_draw_chart": "판서 · 차트",
+      "wb_draw_latex": "판서 · 수식",
+      "wb_draw_table": "판서 · 표",
+      "wb_draw_line": "판서 · 선",
+      "wb_draw_code": "판서 · 코드",
+      "wb_edit_code": "판서 · 코드 편집"
+    },
     "lecture": "강의",
     "noConversations": "대화 없음",
     "startConversation": "아래에 메시지를 입력하여 채팅을 시작하세요",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "노트",
-      "chat": "채팅"
+      "chat": "상호작용"
     },
     "lectureNotes": {
       "empty": "강의 재생 후 여기에 노트가 표시됩니다",
@@ -321,6 +347,26 @@
   "stage": {
     "currentScene": "현재 장면",
     "collapseSceneSidebar": "장면 목록 접기",
+    "expandSceneSidebar": "장면 목록 펼치기",
+    "expandInteractionPanel": "상호작용 패널 펼치기",
+    "pageCounter": "{{current}} / {{total}} 페이지",
+    "previousScene": "이전 장면",
+    "nextScene": "다음 장면",
+    "play": "재생",
+    "pause": "일시정지",
+    "pauseAnswer": "답변 일시정지",
+    "resumeAnswer": "답변 재개",
+    "playbackSpeed": "재생 속도",
+    "mute": "음소거",
+    "unmute": "음소거 해제",
+    "volume": "볼륨",
+    "whiteboardToggle": "화이트보드",
+    "caption": {
+      "lecturing": "설명 중",
+      "paused": "일시정지됨 · 발언할 차례입니다",
+      "answering": "답변 중",
+      "discussing": "토론 중"
+    },
     "generating": "생성 중...",
     "paused": "일시정지됨",
     "generationFailed": "생성 실패",
@@ -830,6 +876,7 @@
     "thinking": "생각 중",
     "yourTurn": "내 차례",
     "stopDiscussion": "토론 중단",
+    "stopQA": "질의응답 종료",
     "autoPlay": "자동 재생",
     "autoPlayOff": "자동 재생 끄기",
     "speed": "속도",

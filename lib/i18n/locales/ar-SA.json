@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "تفاعل الصف",
+    "collapsePanel": "طي لوحة التفاعل",
+    "conversationLog": "سجل المحادثة",
+    "softCloseCountdown": {
+      "qa": "ستنتهي الأسئلة خلال {{seconds}} ث، ثم يُستأنف الدرس",
+      "discussion": "ستنتهي المناقشة خلال {{seconds}} ث، ثم يُستأنف الدرس"
+    },
+    "actionTag": {
+      "group": "إجراءات السبورة",
+      "spotlight": "تسليط الضوء",
+      "laser": "مؤشر ليزر",
+      "play_video": "تشغيل الفيديو",
+      "discussion": "مناقشة",
+      "wb_open": "السبورة · فتح",
+      "wb_close": "السبورة · إغلاق",
+      "wb_clear": "السبورة · مسح",
+      "wb_delete": "السبورة · حذف",
+      "wb_draw_text": "السبورة · نص",
+      "wb_draw_shape": "السبورة · شكل",
+      "wb_draw_chart": "السبورة · مخطط",
+      "wb_draw_latex": "السبورة · معادلة",
+      "wb_draw_table": "السبورة · جدول",
+      "wb_draw_line": "السبورة · خط",
+      "wb_draw_code": "السبورة · كود",
+      "wb_edit_code": "السبورة · تعديل الكود"
+    },
     "lecture": "المحاضرة",
     "noConversations": "لا توجد محادثات",
     "startConversation": "اكتب رسالة أدناه لبدء المحادثة",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "الملاحظات",
-      "chat": "المحادثة"
+      "chat": "التفاعل"
     },
     "lectureNotes": {
       "empty": "ستظهر الملاحظات هنا بعد تشغيل المحاضرة",
@@ -321,6 +347,26 @@
   "stage": {
     "currentScene": "المشهد الحالي",
     "collapseSceneSidebar": "طي قائمة المشاهد",
+    "expandSceneSidebar": "توسيع قائمة المشاهد",
+    "expandInteractionPanel": "توسيع لوحة التفاعل",
+    "pageCounter": "الصفحة {{current}} / {{total}}",
+    "previousScene": "المشهد السابق",
+    "nextScene": "المشهد التالي",
+    "play": "تشغيل",
+    "pause": "إيقاف مؤقت",
+    "pauseAnswer": "إيقاف الإجابة مؤقتًا",
+    "resumeAnswer": "استئناف الإجابة",
+    "playbackSpeed": "سرعة التشغيل",
+    "mute": "كتم الصوت",
+    "unmute": "إلغاء كتم الصوت",
+    "volume": "مستوى الصوت",
+    "whiteboardToggle": "السبورة",
+    "caption": {
+      "lecturing": "يشرح الآن",
+      "paused": "متوقف مؤقتًا، حان دورك للتحدث",
+      "answering": "يجيب",
+      "discussing": "يناقش"
+    },
     "generating": "جارٍ التوليد...",
     "paused": "متوقف مؤقتًا",
     "generationFailed": "فشل التوليد",
@@ -830,6 +876,7 @@
     "thinking": "يفكر",
     "yourTurn": "دورك",
     "stopDiscussion": "إيقاف النقاش",
+    "stopQA": "إنهاء الأسئلة",
     "autoPlay": "تشغيل تلقائي",
     "autoPlayOff": "إيقاف التشغيل التلقائي",
     "speed": "السرعة",

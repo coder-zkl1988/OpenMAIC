@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "课堂互动",
+    "collapsePanel": "收起互动栏",
+    "conversationLog": "对话记录",
+    "softCloseCountdown": {
+      "qa": "{{seconds}} 秒后结束问答，回到讲课",
+      "discussion": "{{seconds}} 秒后结束讨论，回到讲课"
+    },
+    "actionTag": {
+      "group": "白板操作",
+      "spotlight": "聚焦",
+      "laser": "激光笔",
+      "play_video": "播放视频",
+      "discussion": "讨论",
+      "wb_open": "板书 · 打开",
+      "wb_close": "板书 · 关闭",
+      "wb_clear": "板书 · 清空",
+      "wb_delete": "板书 · 删除",
+      "wb_draw_text": "板书 · 文字",
+      "wb_draw_shape": "板书 · 图形",
+      "wb_draw_chart": "板书 · 图表",
+      "wb_draw_latex": "板书 · 公式",
+      "wb_draw_table": "板书 · 表格",
+      "wb_draw_line": "板书 · 线条",
+      "wb_draw_code": "板书 · 代码",
+      "wb_edit_code": "板书 · 改代码"
+    },
     "lecture": "授课",
     "noConversations": "暂无对话",
     "startConversation": "输入消息开始对话",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "笔记",
-      "chat": "对话"
+      "chat": "互动"
     },
     "lectureNotes": {
       "empty": "播放课程后，笔记将在此显示",
@@ -321,6 +347,26 @@
   "stage": {
     "currentScene": "当前场景",
     "collapseSceneSidebar": "收起场景栏",
+    "expandSceneSidebar": "展开场景栏",
+    "expandInteractionPanel": "展开互动栏",
+    "pageCounter": "第 {{current}} / {{total}} 页",
+    "previousScene": "上一页",
+    "nextScene": "下一页",
+    "play": "播放",
+    "pause": "暂停",
+    "pauseAnswer": "暂停回答",
+    "resumeAnswer": "继续回答",
+    "playbackSpeed": "播放速度",
+    "mute": "静音",
+    "unmute": "取消静音",
+    "volume": "音量",
+    "whiteboardToggle": "白板",
+    "caption": {
+      "lecturing": "讲解中",
+      "paused": "已暂停，等你发言",
+      "answering": "回答中",
+      "discussing": "讨论中"
+    },
     "generating": "生成中...",
     "paused": "已暂停",
     "generationFailed": "生成失败",
@@ -829,6 +875,7 @@
     "thinking": "思考中",
     "yourTurn": "轮到你发言了",
     "stopDiscussion": "结束讨论",
+    "stopQA": "结束问答",
     "softClosing": "继续讨论",
     "autoPlay": "自动播放",
     "autoPlayOff": "关闭自动播放",

@@ -165,9 +165,13 @@ describe('header / CommandBar cross-fade contract', () => {
     expect(header).toMatch(/<header className="[^"]*\bh-14\b[^"]*\bpr-5\b/);
   });
 
-  it('sizes the playback scene viewer against the 56px header', () => {
+  it('lets the stage column flex between the header and the control bar', () => {
     const root = source('components/edit/PlaybackChromeRoot.tsx');
-    expect(root).toContain('const headerHeight = isPresenting || hideHeader ? 0 : 56;');
+    // No height arithmetic against the header / roundtable heights: the canvas
+    // wrapper is flex-1 and the 48px control bar sits in the same column
+    expect(root).not.toContain('sceneViewerHeight');
+    expect(root).toContain('<div className="overflow-hidden relative flex-1 min-h-0 isolate"');
+    expect(root).toContain('<ControlBar');
   });
 
   it('scopes the classroom surface root with data-ui="v2"', () => {

@@ -217,6 +217,32 @@
     }
   },
   "chat": {
+    "panelLabel": "Tương tác lớp học",
+    "collapsePanel": "Thu gọn bảng tương tác",
+    "conversationLog": "Lịch sử trò chuyện",
+    "softCloseCountdown": {
+      "qa": "Phần hỏi đáp kết thúc sau {{seconds}} giây, rồi quay lại bài giảng",
+      "discussion": "Thảo luận kết thúc sau {{seconds}} giây, rồi quay lại bài giảng"
+    },
+    "actionTag": {
+      "group": "Thao tác trên bảng",
+      "spotlight": "Làm nổi bật",
+      "laser": "Bút laser",
+      "play_video": "Phát video",
+      "discussion": "Thảo luận",
+      "wb_open": "Bảng · Mở",
+      "wb_close": "Bảng · Đóng",
+      "wb_clear": "Bảng · Xóa sạch",
+      "wb_delete": "Bảng · Xóa",
+      "wb_draw_text": "Bảng · Văn bản",
+      "wb_draw_shape": "Bảng · Hình",
+      "wb_draw_chart": "Bảng · Biểu đồ",
+      "wb_draw_latex": "Bảng · Công thức",
+      "wb_draw_table": "Bảng · Bảng biểu",
+      "wb_draw_line": "Bảng · Đường kẻ",
+      "wb_draw_code": "Bảng · Mã",
+      "wb_edit_code": "Bảng · Sửa mã"
+    },
     "lecture": "Bài giảng",
     "noConversations": "Chưa có cuộc trò chuyện",
     "startConversation": "Nhập tin nhắn bên dưới để bắt đầu",
@@ -253,7 +279,7 @@
     },
     "tabs": {
       "lecture": "Ghi chú",
-      "chat": "Trò chuyện"
+      "chat": "Tương tác"
     },
     "lectureNotes": {
       "empty": "Ghi chú sẽ hiện ở đây sau khi phát bài giảng",
@@ -264,8 +290,8 @@
       "jumpUnavailable": "Dòng này không nhảy tới được"
     },
     "badge": {
-      "qa": "HỎI ĐÁP",
-      "discussion": "THẢO LUẬN",
+      "qa": "Hỏi đáp",
+      "discussion": "Thảo luận",
       "lecture": "GIẢNG"
     }
   },
@@ -321,6 +347,26 @@
   "stage": {
     "currentScene": "Cảnh hiện tại",
     "collapseSceneSidebar": "Thu gọn danh sách cảnh",
+    "expandSceneSidebar": "Mở rộng danh sách cảnh",
+    "expandInteractionPanel": "Mở rộng bảng tương tác",
+    "pageCounter": "Trang {{current}} / {{total}}",
+    "previousScene": "Cảnh trước",
+    "nextScene": "Cảnh tiếp theo",
+    "play": "Phát",
+    "pause": "Tạm dừng",
+    "pauseAnswer": "Tạm dừng câu trả lời",
+    "resumeAnswer": "Tiếp tục câu trả lời",
+    "playbackSpeed": "Tốc độ phát",
+    "mute": "Tắt tiếng",
+    "unmute": "Bật tiếng",
+    "volume": "Âm lượng",
+    "whiteboardToggle": "Bảng",
+    "caption": {
+      "lecturing": "Đang giảng",
+      "paused": "Đã tạm dừng, đến lượt bạn nói",
+      "answering": "Đang trả lời",
+      "discussing": "Đang thảo luận"
+    },
     "generating": "Đang tạo…",
     "paused": "Đã tạm dừng",
     "generationFailed": "Tạo không thành công",
@@ -829,6 +875,7 @@
     "thinking": "Đang suy nghĩ",
     "yourTurn": "Đến lượt bạn",
     "stopDiscussion": "Dừng thảo luận",
+    "stopQA": "Kết thúc hỏi đáp",
     "softClosing": "Tiếp tục thảo luận",
     "autoPlay": "Tự động phát",
     "autoPlayOff": "Dừng tự động phát",

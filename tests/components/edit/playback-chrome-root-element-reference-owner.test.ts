@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   } | null,
   roundtableProps: undefined as Record<string, unknown> | undefined,
   canvasProps: undefined as Record<string, unknown> | undefined,
+  controlBarProps: undefined as Record<string, unknown> | undefined,
+  captionProps: undefined as Record<string, unknown> | undefined,
   piEnabled: true,
   coursewareReferenceEnabled: true,
   topicActive: false,
@@ -55,6 +57,7 @@ const mocks = vi.hoisted(() => ({
   shouldAutoResume: vi.fn((_args: unknown) => false),
   lastSendResult: undefined as unknown,
   chatAreaProps: undefined as Record<string, unknown> | undefined,
+  openTextInput: vi.fn(),
 }));
 
 const textElement = {
@@ -235,23 +238,15 @@ vi.mock('@/components/roundtable', async () => {
   return {
     Roundtable: (props: Record<string, unknown>) => {
       mocks.roundtableProps = props;
+      React.useImperativeHandle(props.composerRef as React.Ref<unknown>, () => ({
+        openTextInput: mocks.openTextInput,
+      }));
       const pill = props.elementReferencePill as
         | { sceneLabel: string; displaySummary: string; elementType: string }
         | undefined;
       return React.createElement(
         'div',
         null,
-        props.showElementReference
-          ? React.createElement(
-              'button',
-              {
-                type: 'button',
-                'data-testid': 'toggle-pick',
-                onClick: () => (props.onToggleElementPick as (() => void) | undefined)?.(),
-              },
-              'toggle pick',
-            )
-          : null,
         React.createElement(
           'button',
           {
@@ -276,6 +271,32 @@ vi.mock('@/components/roundtable', async () => {
     },
   };
 });
+// The shell-owned control bar: the "Reference content" entry, prev / next and play
+vi.mock('@/components/classroom/control-bar', async () => {
+  const React = await import('react');
+  return {
+    ControlBar: (props: Record<string, unknown>) => {
+      mocks.controlBarProps = props;
+      return props.showElementReference
+        ? React.createElement(
+            'button',
+            {
+              type: 'button',
+              'data-testid': 'toggle-pick',
+              onClick: () => (props.onToggleElementPick as (() => void) | undefined)?.(),
+            },
+            'toggle pick',
+          )
+        : null;
+    },
+  };
+});
+vi.mock('@/components/classroom/caption-strip', () => ({
+  CaptionStrip: (props: Record<string, unknown>) => {
+    mocks.captionProps = props;
+    return null;
+  },
+}));
 vi.mock('@/components/chat/chat-area', async () => {
   const React = await import('react');
   return {
@@ -490,6 +511,8 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.sendMessage.mockResolvedValue(undefined);
     mocks.roundtableProps = undefined;
     mocks.canvasProps = undefined;
+    mocks.controlBarProps = undefined;
+    mocks.captionProps = undefined;
     mocks.piEnabled = true;
     mocks.coursewareReferenceEnabled = true;
     mocks.topicActive = false;
@@ -580,7 +603,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.whiteboardOpen = true;
     stageState.stage.whiteboard = [board];
     await renderOwner();
-    expect(mocks.roundtableProps?.canPickSlideElement).toBe(true);
+    expect(mocks.controlBarProps?.canPickElement).toBe(true);
     click('toggle-pick');
     act(() =>
       (mocks.canvasProps?.onPickWhiteboardElement as (element: unknown) => void)(textElement),
@@ -622,7 +645,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       }
       mocks.runtimeProjection = { stageId: 'stage-1', lastSeq: 7, whiteboard: board };
       await renderOwner();
-      expect(mocks.roundtableProps?.canPickSlideElement).toBe(false);
+      expect(mocks.controlBarProps?.canPickElement).toBe(false);
       click('toggle-pick');
       expect(mocks.canvasProps?.elementPickActive).toBe(false);
       act(() =>
@@ -694,7 +717,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
 
       expect(mocks.whiteboardOpen).toBe(!startsOpen);
       // The destination surface is pickable, so only the transition cancels.
-      expect(mocks.roundtableProps?.canPickSlideElement).toBe(true);
+      expect(mocks.controlBarProps?.canPickElement).toBe(true);
       expect(mocks.canvasProps?.elementPickActive).toBe(false);
     });
 
@@ -834,9 +857,9 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.piEnabled = false;
     await renderOwner();
 
-    expect(mocks.roundtableProps).toMatchObject({
+    expect(mocks.controlBarProps).toMatchObject({
       showElementReference: false,
-      canPickSlideElement: false,
+      canPickElement: false,
       elementPickActive: false,
     });
     expect(container.querySelector('[data-testid="toggle-pick"]')).toBeNull();
@@ -857,9 +880,9 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.coursewareReferenceEnabled = false;
     await rerenderOwner();
 
-    expect(mocks.roundtableProps).toMatchObject({
+    expect(mocks.controlBarProps).toMatchObject({
       showElementReference: false,
-      canPickSlideElement: false,
+      canPickElement: false,
       elementPickActive: false,
     });
     expect(container.querySelector('[data-testid="toggle-pick"]')).toBeNull();
@@ -880,9 +903,9 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       onInteractivePickerChange: (state: unknown) => pickerStates.push(state),
     });
 
-    expect(mocks.roundtableProps).toMatchObject({
+    expect(mocks.controlBarProps).toMatchObject({
       showElementReference: true,
-      canPickSlideElement: true,
+      canPickElement: true,
     });
     click('toggle-pick');
     expect(pickerStates).toContainEqual({
@@ -1041,7 +1064,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     expect(container.querySelector('[data-testid="owner-pill"]')).not.toBeNull();
 
     act(() => {
-      (mocks.roundtableProps?.onNextSlide as (() => void) | undefined)?.();
+      (mocks.controlBarProps?.onNext as (() => void) | undefined)?.();
     });
     await act(async () => {
       await Promise.resolve();
@@ -1063,7 +1086,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     click('pick-text');
 
     act(() => {
-      (mocks.roundtableProps?.onNextSlide as (() => void) | undefined)?.();
+      (mocks.controlBarProps?.onNext as (() => void) | undefined)?.();
     });
 
     expect(stageState.setCurrentSceneId).not.toHaveBeenCalled();
@@ -1272,7 +1295,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     it('cancels before awaiting a scene switch so it is never answered in the old scene', async () => {
       await raiseHandWithTextReference();
 
-      act(() => (mocks.roundtableProps?.onNextSlide as () => void)());
+      act(() => (mocks.controlBarProps?.onNext as () => void)());
       expect(mocks.cancelQueuedInterrupt).toHaveBeenCalledOnce();
       expect(queuedQuestion()).toMatchObject({ text: 'Explain this', status: 'cancelled' });
       expect(stageState.setCurrentSceneId).not.toHaveBeenCalled();
@@ -1807,6 +1830,71 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
         atBoundary: false,
       });
       expect(mocks.roundtableProps?.lectureSpeech).toBe('Second');
+    });
+  });
+
+  describe('shell-owned control bar and caption', () => {
+    it('feeds the control bar: page counter inputs, transport and the reference entry', async () => {
+      await renderOwner();
+      expect(mocks.controlBarProps).toMatchObject({
+        variant: 'bar',
+        currentSceneIndex: 0,
+        // Two scenes plus the course-complete slot
+        scenesCount: 3,
+        engineState: 'idle',
+        showStop: false,
+        whiteboardOpen: false,
+        showElementReference: true,
+        canPickElement: true,
+      });
+      // The roundtable no longer carries any of the bar's controls
+      for (const key of ['onNextSlide', 'onPrevSlide', 'onToggleElementPick', 'onStopDiscussion']) {
+        expect(mocks.roundtableProps).not.toHaveProperty(key);
+      }
+    });
+
+    it('applies the one stop rule: a live engine shows the stop pill', async () => {
+      mocks.engineMode = 'live';
+      await renderOwner();
+      expect(mocks.controlBarProps).toMatchObject({ showStop: true, stopKind: 'discussion' });
+      // The live answer keeps a mouse path to pause / resume beside the pill
+      expect(mocks.controlBarProps).toMatchObject({
+        livePaused: false,
+        canToggleLivePause: false,
+      });
+      expect(typeof mocks.controlBarProps?.onToggleLivePause).toBe('function');
+    });
+
+    it('routes play through the primary action, which plays the lecture outside a session', async () => {
+      await renderOwner();
+      await act(async () => {
+        (mocks.controlBarProps?.onPlayPause as () => void)();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(mocks.startLecture).toHaveBeenCalledWith('scene-1');
+    });
+
+    it('reopens the roundtable composer when the stream continues a soft-closing session', async () => {
+      mocks.openTextInput.mockReset();
+      await renderOwner();
+      // The control bar no longer carries the soft-close "continue" (the
+      // stream's soft-close row owns it): none of the old toolbar's props
+      for (const key of ['onContinueDiscussion', 'isSoftClosing', 'softCloseDeadline']) {
+        expect(mocks.controlBarProps).not.toHaveProperty(key);
+      }
+      act(() => (mocks.chatAreaProps?.onSoftCloseContinued as () => void)());
+      expect(mocks.openTextInput).toHaveBeenCalledOnce();
+    });
+
+    it('shows the caption under slides only', async () => {
+      await renderOwner();
+      expect(mocks.canvasProps?.caption).toBeTruthy();
+
+      stageState.scenes = [interactiveScene];
+      stageState.currentSceneId = interactiveScene.id;
+      await rerenderOwner();
+      expect(mocks.canvasProps?.caption).toBeNull();
     });
   });
 });

@@ -13,6 +13,7 @@ import ruRU from '@/lib/i18n/locales/ru-RU.json';
 import viVN from '@/lib/i18n/locales/vi-VN.json';
 import zhCN from '@/lib/i18n/locales/zh-CN.json';
 import zhTW from '@/lib/i18n/locales/zh-TW.json';
+import { CAPTION_STATUS_LABEL_KEYS } from '@/components/classroom/caption-strip';
 
 /**
  * Guard for the classroom chrome copy. The workbench-pane branch of
@@ -25,6 +26,12 @@ const CHROME_FILES = [
   'components/stage/header-controls.tsx',
   'components/stage/scene-sidebar.tsx',
   'components/edit/EditShell/CommandBar.tsx',
+  'components/classroom/control-bar.tsx',
+  'components/classroom/caption-strip.tsx',
+  'components/edit/PlaybackChromeRoot.tsx',
+  'components/chat/chat-area.tsx',
+  'components/chat/conversation-stream.tsx',
+  'components/chat/chat-session.tsx',
 ] as const;
 
 const LOCALES: Record<string, unknown> = {
@@ -85,5 +92,28 @@ describe('classroom chrome i18n keys', () => {
       .filter((path) => /['"`]stage\.proMode['"`]/.test(readFileSync(path, 'utf8')));
     expect(offenders).toEqual([]);
     expect(source('components/stage/header-controls.tsx')).toContain("t('edit.proMode')");
+  });
+
+  it('resolves every caption status label in every locale', () => {
+    const keys = Object.values(CAPTION_STATUS_LABEL_KEYS).filter((key): key is string => !!key);
+    for (const [locale, resource] of Object.entries(LOCALES)) {
+      const missing = keys.filter((key) => typeof resolve(resource, key) !== 'string');
+      expect(missing, locale).toEqual([]);
+    }
+  });
+
+  it('ships the design copy for the control bar and caption (zh-CN default)', () => {
+    expect(resolve(zhCN, 'stage.pageCounter')).toBe('第 {{current}} / {{total}} 页');
+    expect(resolve(zhCN, 'stage.whiteboardToggle')).toBe('白板');
+    expect(resolve(zhCN, 'stage.caption.lecturing')).toBe('讲解中');
+    expect(resolve(zhCN, 'stage.caption.paused')).toBe('已暂停，等你发言');
+    expect(resolve(zhCN, 'roundtable.stopQA')).toBe('结束问答');
+    // e2e resolves these controls by their English names
+    expect(resolve(enUS, 'stage.previousScene')).toBe('Previous scene');
+    expect(resolve(enUS, 'stage.nextScene')).toBe('Next scene');
+    expect(resolve(enUS, 'stage.play')).toBe('Play');
+    expect(resolve(enUS, 'stage.playbackSpeed')).toBe('Playback speed');
+    expect(resolve(enUS, 'stage.mute')).toBe('Mute');
+    expect(resolve(enUS, 'roundtable.autoPlay')).toBe('Auto-play');
   });
 });

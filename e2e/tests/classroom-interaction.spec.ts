@@ -97,6 +97,7 @@ test.describe('Classroom Interaction', () => {
     await classroom.goto(stageId);
     await classroom.waitForLoaded();
 
+    // The slim participants + composer strip (P4b) caps a draft at 56px
     await page.keyboard.press('T');
     const textarea = page.getByPlaceholder('Type your message...', { exact: true });
     const inputStage = page.getByTestId('roundtable-non-presentation-input-stage');
@@ -153,7 +154,7 @@ test.describe('Classroom Interaction', () => {
     const longDraft = Array.from({ length: 24 }, (_, index) => `Line ${index + 1}`).join('\n');
 
     await textarea.fill(longDraft);
-    await expect.poll(async () => (await readMetrics()).inlineHeight).toBe('100px');
+    await expect.poll(async () => (await readMetrics()).inlineHeight).toBe('56px');
     const longDraftMetrics = await readMetrics();
 
     await test.info().attach('roundtable textarea pre-post metrics', {
@@ -175,17 +176,17 @@ test.describe('Classroom Interaction', () => {
       longDraftMetrics.inlineFieldSizing,
       `Roundtable textarea metrics: ${metricSummary}`,
     ).toBe('');
-    expect(longDraftMetrics.inlineHeight).toBe('100px');
-    expect(longDraftMetrics.computedMaxHeight).toBe('100px');
+    expect(longDraftMetrics.inlineHeight).toBe('56px');
+    expect(longDraftMetrics.computedMaxHeight).toBe('56px');
     expect(longDraftMetrics.computedOverflowY).toBe('auto');
-    expect(longDraftMetrics.boundingRectHeight).toBeLessThanOrEqual(100);
+    expect(longDraftMetrics.boundingRectHeight).toBeLessThanOrEqual(56);
     expect(longDraftMetrics.scrollHeight).toBeGreaterThan(longDraftMetrics.clientHeight);
 
     await textarea.fill('Short line');
     await expect
       .poll(async () => (await readMetrics()).clientHeight)
       .toBeLessThan(longDraftMetrics.clientHeight);
-    await expect.poll(async () => (await readMetrics()).inlineHeight).not.toBe('100px');
+    await expect.poll(async () => (await readMetrics()).inlineHeight).not.toBe('56px');
 
     await textarea.fill(longDraft);
     await page.keyboard.press('Escape');
@@ -194,7 +195,7 @@ test.describe('Classroom Interaction', () => {
     await page.keyboard.press('T');
     await expect(textarea).toBeVisible();
     await expect(textarea).toHaveValue(longDraft);
-    await expect.poll(async () => (await readMetrics()).inlineHeight).toBe('100px');
+    await expect.poll(async () => (await readMetrics()).inlineHeight).toBe('56px');
   });
 
   test('keeps body spacing stable for header menus and settings modal', async ({ page }) => {
