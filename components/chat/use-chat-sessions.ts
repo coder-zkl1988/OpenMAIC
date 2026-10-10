@@ -16,7 +16,7 @@ import {
   type StatelessEvent,
   type ElementReference,
 } from '@/lib/types/chat';
-import type { DiscussionRequest } from '@/components/roundtable';
+import type { DiscussionRequest } from '@/lib/types/roundtable';
 import type { Action } from '@/lib/types/action';
 import type { Stage } from '@/lib/types/stage';
 import type { UIMessage } from 'ai';
@@ -572,7 +572,6 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     return normalizeStoredSessionsForRestore(stored);
   });
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set());
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingSessionIdRef = useRef<string | null>(null);
@@ -610,7 +609,6 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     const stored = useStageStore.getState().chats;
     setSessions(normalizeStoredSessionsForRestore(stored));
     setActiveSessionId(null);
-    setExpandedSessionIds(new Set());
     previousLiveSessionRef.current = undefined;
     piSessionBoundariesRef.current.clear();
   }, [stageId]);
@@ -896,18 +894,6 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   // Tracks last action index per lecture session (avoids stale closure reads)
   const lectureLastActionIndexRef = useRef<Map<string, number>>(new Map());
 
-  const toggleSessionExpand = useCallback((sessionId: string) => {
-    setExpandedSessionIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
-      return next;
-    });
-  }, []);
-
   /**
    * Create a StreamBuffer for a session and wire its callbacks to React state.
    * Returns the buffer instance (also stored in buffersRef).
@@ -1040,7 +1026,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
                 type: data.actionName,
                 ...data.params,
               } as Action;
-              const execution = actionEngine.execute(action, { signal });
+              const execution = actionEngine.execute(action, { signal, agentId: data.agentId });
               if (shouldAwaitPresentationAction(data.actionName)) {
                 await execution;
               } else {
@@ -1395,7 +1381,6 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       setSessions((prev) => [...prev, newSession]);
       setActiveSessionId(sessionId);
-      setExpandedSessionIds((prev) => new Set([...prev, sessionId]));
 
       log.info(`[ChatArea] Created session: ${sessionId} (${type})`);
       return sessionId;
@@ -1977,7 +1962,6 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       setSessions((prev) => [...prev, newSession]);
       setActiveSessionId(sessionId);
-      setExpandedSessionIds((prev) => new Set([...prev, sessionId]));
 
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -2072,7 +2056,6 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           }
         }
         setActiveSessionId(existing.id);
-        setExpandedSessionIds((prev) => new Set([...prev, existing.id]));
         return existing.id;
       }
 
@@ -2120,7 +2103,6 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       setSessions((prev) => [...prev, newSession]);
       setActiveSessionId(sessionId);
-      setExpandedSessionIds((prev) => new Set([...prev, sessionId]));
 
       log.info(`[ChatArea] Created lecture session: ${sessionId} for scene ${sceneId}`);
       return sessionId;
@@ -2225,7 +2207,6 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     sessions,
     activeSessionId,
     activeSessionType,
-    expandedSessionIds,
     isStreaming,
     createSession,
     endSession,
@@ -2238,7 +2219,6 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     startDiscussion,
     startLecture,
     addLectureMessage,
-    toggleSessionExpand,
     handleInterrupt,
     getLectureMessageId,
     pauseBuffer,
