@@ -7,7 +7,8 @@
     "errorPrefix": "Erreur : ",
     "loadingClassroom": "Chargement de la classe…",
     "retry": "Réessayer",
-    "close": "Fermer"
+    "close": "Fermer",
+    "switchLanguage": "Changer de langue"
   },
   "home": {
     "slogan": "L’apprentissage génératif en classe interactive multi-agents",
@@ -1105,6 +1106,7 @@
     "folderRenameFailed": "Échec du renommage du dossier",
     "folderWidth": "Largeur {{width}}/{{max}}",
     "moveFailed": "Échec du déplacement du cours",
+    "moreActions": "Autres actions",
     "moveToFolder": "Déplacer vers un dossier",
     "moveToFolderLabel": "Déplacer vers un dossier",
     "newFolderDesc": "Organisez les cours par sujet pour un accès plus facile.",
@@ -1128,6 +1130,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Échec de la génération de la classe, veuillez réessayer",
     "requirementPlaceholder": "Dites-moi ce que vous voulez apprendre, par exemple :\n« Apprends-moi Python en partant de zéro en 30 minutes »\n« Explique la transformation de Fourier au tableau »\n« Comment jouer au jeu de société Avalon »",
+    "requirementLabel": "Ce que vous voulez apprendre",
     "requirementRequired": "Veuillez saisir vos attentes pour le cours",
     "fileTooLarge": "Fichier trop volumineux. Veuillez choisir un fichier de moins de 50 Mo",
     "courseMaterialCountLimit": "Vous pouvez envoyer jusqu’à 5 supports de cours",
@@ -1262,6 +1265,7 @@
     "language": "Langue",
     "languageDesc": "Choisir la langue de l’interface",
     "theme": "Thème",
+    "themeWithCurrent": "Thème : {{theme}}",
     "themeDesc": "Choisir le thème (clair, sombre ou système)",
     "themeOptions": {
       "light": "Clair",
@@ -2319,7 +2323,8 @@
     "avatarHint": "Votre avatar apparaîtra dans les discussions et les échanges de la classe",
     "fileTooLarge": "Image trop volumineuse, veuillez en choisir une de moins de 5 Mo",
     "invalidFileType": "Veuillez sélectionner un fichier image",
-    "editTooltip": "Cliquez pour modifier votre profil"
+    "editTooltip": "Cliquez pour modifier votre profil",
+    "edit": "Modifier le profil"
   },
   "media": {
     "imageCapability": "Génération d’images",

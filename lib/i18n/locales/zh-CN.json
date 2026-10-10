@@ -7,7 +7,8 @@
     "errorPrefix": "错误：",
     "loadingClassroom": "正在加载课堂...",
     "retry": "重试",
-    "close": "关闭"
+    "close": "关闭",
+    "switchLanguage": "切换语言"
   },
   "home": {
     "slogan": "Generative Learning in Multi-Agent Interactive Classroom",
@@ -1097,6 +1098,7 @@
     "deleteFolderTitle": "删除文件夹「{{name}}」",
     "deleteFolderEmptyDesc": "这是一个空文件夹，删除后不可恢复。",
     "deleteFolderUngroupDesc": "课程保留在「我的课程」，只是不再归类。",
+    "moreActions": "更多操作",
     "moveToFolder": "移动到文件夹",
     "moveToFolderLabel": "移动到…",
     "ungrouped": "未分组",
@@ -1128,6 +1130,7 @@
     "formatListSeparator": "、",
     "generateFailed": "生成课堂失败，请重试",
     "requirementPlaceholder": "输入你想学的任何内容，例如：\n「从零学 Python，30 分钟写出第一个程序」\n「用白板给我讲解傅里叶变换」\n「阿瓦隆桌游怎么玩」",
+    "requirementLabel": "学习需求",
     "requirementRequired": "请输入课程需求",
     "fileTooLarge": "文件过大，请选择小于 50MB 的文件",
     "courseMaterialCountLimit": "最多可上传 5 个课程材料文件",
@@ -1262,6 +1265,7 @@
     "language": "语言",
     "languageDesc": "选择界面语言",
     "theme": "主题",
+    "themeWithCurrent": "主题：{{theme}}",
     "themeDesc": "选择主题模式（浅色/深色/跟随系统）",
     "themeOptions": {
       "light": "浅色",
@@ -2319,7 +2323,8 @@
     "avatarHint": "你的头像将显示在课堂讨论和对话中",
     "fileTooLarge": "图片过大，请选择小于 5MB 的图片",
     "invalidFileType": "请选择图片文件",
-    "editTooltip": "点击编辑个人资料"
+    "editTooltip": "点击编辑个人资料",
+    "edit": "编辑个人资料"
   },
   "media": {
     "imageCapability": "图像生成",

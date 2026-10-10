@@ -7,7 +7,8 @@
     "errorPrefix": "خطأ: ",
     "loadingClassroom": "جارٍ تحميل الفصل...",
     "retry": "إعادة المحاولة",
-    "close": "إغلاق"
+    "close": "إغلاق",
+    "switchLanguage": "تغيير اللغة"
   },
   "home": {
     "slogan": "التعلّم التوليدي في فصل تفاعلي متعدد الوكلاء",
@@ -1097,6 +1098,7 @@
     "deleteFolderTitle": "حذف المجلد «{{name}}»",
     "deleteFolderEmptyDesc": "هذا المجلد فارغ. لا يمكن التراجع عن الحذف.",
     "deleteFolderUngroupDesc": "تبقى الدورات في «دوراتي»، تصبح غير مصنّفة.",
+    "moreActions": "إجراءات إضافية",
     "moveToFolder": "نقل إلى مجلد",
     "moveToFolderLabel": "نقل إلى مجلد",
     "ungrouped": "غير مصنّف",
@@ -1128,6 +1130,7 @@
     "formatListSeparator": "، ",
     "generateFailed": "فشل توليد الفصل، يرجى المحاولة مرة أخرى",
     "requirementPlaceholder": "أخبرني بأي شيء تريد تعلمه، مثلاً:\n\"علمني بايثون من الصفر في 30 دقيقة\"\n\"اشرح تحويل فورييه على السبورة\"\n\"كيف تلعب لعبة أفالون\"",
+    "requirementLabel": "ما تريد تعلمه",
     "requirementRequired": "يرجى إدخال متطلبات المقرر",
     "fileTooLarge": "الملف كبير جدًا. يرجى اختيار ملف أصغر من 50 ميغابايت",
     "courseMaterialCountLimit": "يمكنك رفع ما يصل إلى 5 ملفات لمواد المقرر",
@@ -1262,6 +1265,7 @@
     "language": "اللغة",
     "languageDesc": "اختر لغة الواجهة",
     "theme": "المظهر",
+    "themeWithCurrent": "المظهر: {{theme}}",
     "themeDesc": "اختر وضع المظهر (فاتح/داكن/النظام)",
     "themeOptions": {
       "light": "فاتح",
@@ -2319,7 +2323,8 @@
     "avatarHint": "ستظهر صورتك الرمزية في نقاشات الفصل والمحادثات",
     "fileTooLarge": "الصورة كبيرة جدًا — يرجى اختيار صورة أقل من 5 ميغابايت",
     "invalidFileType": "يرجى اختيار ملف صورة",
-    "editTooltip": "انقر لتعديل الملف الشخصي"
+    "editTooltip": "انقر لتعديل الملف الشخصي",
+    "edit": "تعديل الملف الشخصي"
   },
   "media": {
     "imageCapability": "توليد الصور",

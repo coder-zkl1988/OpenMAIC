@@ -2,33 +2,30 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, Folder, Pencil, Trash2 } from 'lucide-react';
+import { AlertTriangle, Folder, FolderMinus, Pencil, Trash2 } from 'lucide-react';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { useNearViewport } from '@/lib/hooks/use-near-viewport';
 import { cn } from '@/lib/utils';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { SlideThumbnail } from '@/components/slide-renderer/SlideThumbnail';
 import type { Slide } from '@openmaic/dsl';
 import type { FolderRecord } from '@/lib/types/folder';
 import type { DeleteFolderMode, StageListItem } from '@/lib/utils/stage-storage';
+import { CardActionsMenu, CardMenuItem, CardMenuSeparator, CardMenuSub } from './card-actions-menu';
 
 /** Maximum number of course covers stacked on a folder tile. */
 const MAX_COVERS = 3;
 
 /**
- * Folder card. Same visual footprint as a ClassroomCard (16:9 tile + title
- * row). The tile shows up to {@link MAX_COVERS} member course covers stacked
- * with a slight offset; an empty folder falls back to a centered folder icon.
+ * Folder card. Same visual footprint as a ClassroomCard (16:9 tile + title /
+ * meta row). The tile shows up to {@link MAX_COVERS} member course covers
+ * stacked with a slight offset; an empty folder falls back to a centered
+ * folder icon. The meta line reads "文件夹 · N 门课程".
  *
- * Hover shows rename / delete buttons matching the course-card ✏️/🗑️. The tile
- * is also a drop target: dragging a course card onto it files the course into
- * this folder (the hover 📂 menu remains as the accessible fallback).
+ * Its ⋯ menu offers 重命名 and 删除: an empty folder is deleted after the
+ * inline confirm; a non-empty one asks which mode (keep the courses
+ * ungrouped, or delete them too). The tile is also a drop target: dragging a
+ * course card onto it files the course into this folder (the course card's
+ * ⋯ → 移动到文件夹 is the accessible fallback).
  */
 export function FolderCard({
   folder,
@@ -66,6 +63,10 @@ export function FolderCard({
   const dragDepth = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
+  // Set while 重命名 closes the ⋯ menu: the menu then hands focus to the new
+  // input instead of back to its trigger (the open menu traps focus, so the
+  // input cannot take it any earlier).
+  const renameFromMenu = useRef(false);
   const [thumbWidth, setThumbWidth] = useState(0);
   const nearViewport = useNearViewport(thumbRef);
   // A stable key, so a re-render with the same candidates does not re-request.
@@ -91,11 +92,11 @@ export function FolderCard({
     return () => window.removeEventListener('course-drag-end', handler);
   }, []);
 
-  const startEditing = () => {
+  const startEditing = ({ focus = true }: { focus?: boolean } = {}) => {
     setDraft(folder.name);
     setError(null);
     setEditing(true);
-    requestAnimationFrame(() => inputRef.current?.focus());
+    if (focus) requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const shake = () => {
@@ -143,6 +144,7 @@ export function FolderCard({
   return (
     <div
       className="group cursor-pointer"
+      data-testid="folder-card"
       onClick={editing ? undefined : onOpen}
       onDragEnter={(e) => {
         if (editing) return;
@@ -204,93 +206,10 @@ export function FolderCard({
           </div>
         )}
 
-        {/* Course count badge — always visible (bottom-right). */}
-        <span className="absolute bottom-2 right-2 z-10 inline-flex items-center rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
-          {courseCount} {t('classroom.folderCourseCountUnit')}
-        </span>
-
         {dropActive && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-violet-500/20 backdrop-blur-[2px]">
             <Folder className="size-8 text-white drop-shadow" />
           </div>
-        )}
-
-        {/* Hover actions — hidden while a delete confirmation is shown. */}
-        {!confirmingDelete && (
-          <AnimatePresence>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-            >
-              {/* Delete — empty folder: inline confirm; non-empty: dropdown menu. */}
-              {courseCount === 0 ? (
-                <button
-                  type="button"
-                  aria-label={t('classroom.delete')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setConfirmingDelete(true);
-                  }}
-                  className="absolute top-2 right-2 size-7 inline-flex items-center justify-center rounded-full bg-black/30 hover:bg-destructive/80 text-white hover:text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              ) : (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={t('classroom.delete')}
-                      onClick={(e) => e.stopPropagation()}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      className="absolute top-2 right-2 size-7 inline-flex items-center justify-center rounded-full bg-black/30 hover:bg-destructive/80 text-white hover:text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    onClick={(e) => e.stopPropagation()}
-                    className="min-w-[200px]"
-                  >
-                    <DropdownMenuItem
-                      onClick={() => onDelete('ungroup')}
-                      className="gap-2 text-[13px]"
-                    >
-                      <Folder className="size-3.5 shrink-0 mt-0.5" />
-                      <span className="flex flex-col">
-                        <span>{t('classroom.deleteFolderOnly')}</span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {t('classroom.deleteFolderUngroupDesc')}
-                        </span>
-                      </span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setConfirmingDelete(true)}
-                      className="gap-2 text-[13px] text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="size-3.5" />
-                      {t('classroom.deleteFolderAndCourses', { count: courseCount })}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              <button
-                type="button"
-                aria-label={t('classroom.rename')}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  startEditing();
-                }}
-                className="absolute top-2 right-11 size-7 inline-flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50 text-white hover:text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
-              >
-                <Pencil className="size-3.5" />
-              </button>
-            </motion.div>
-          </AnimatePresence>
         )}
 
         {/* Inline delete confirmation overlay (empty folder + destructive path). */}
@@ -319,12 +238,14 @@ export function FolderCard({
               </span>
               <div className="flex gap-2">
                 <button
+                  type="button"
                   className="px-3.5 py-1 rounded-lg text-[12px] font-medium bg-white/15 text-white/80 hover:bg-white/25 backdrop-blur-sm transition-colors"
                   onClick={() => setConfirmingDelete(false)}
                 >
                   {t('common.cancel')}
                 </button>
                 <button
+                  type="button"
                   className="px-3.5 py-1 rounded-lg text-[12px] font-medium bg-red-500/90 text-white hover:bg-red-500 transition-colors"
                   onClick={() => {
                     // Close the overlay before the async delete: on success the
@@ -343,35 +264,110 @@ export function FolderCard({
         </AnimatePresence>
       </div>
 
-      <div className="mt-2.5 px-1 flex items-center gap-2">
-        <span className="shrink-0 inline-flex items-center rounded-full bg-violet-100 dark:bg-violet-900/30 px-2 py-0.5 text-[11px] font-medium text-violet-600 dark:text-violet-400">
-          {t('classroom.folderBadge')}
-        </span>
-        {editing ? (
-          <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
-            <input
-              ref={inputRef}
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                setError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commit();
-                if (e.key === 'Escape') setEditing(false);
-              }}
-              onBlur={commit}
-              disabled={submitting}
-              maxLength={80}
-              className="w-full bg-transparent border-b border-violet-400/60 text-[15px] font-medium text-foreground/90 outline-none disabled:opacity-50"
-            />
-            {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
-          </div>
-        ) : (
-          <p className="font-medium text-[15px] truncate text-foreground/90 min-w-0">
-            {folder.name}
+      {/* Info — name + "文件夹 · N 门课程", then the ⋯ menu. */}
+      <div className="mt-2.5 pl-1 flex items-start gap-1">
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <div onClick={(e) => e.stopPropagation()}>
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commit();
+                  if (e.key === 'Escape') setEditing(false);
+                }}
+                onBlur={commit}
+                disabled={submitting}
+                maxLength={80}
+                aria-label={t('classroom.rename')}
+                className="block h-[22px] w-full bg-transparent border-b border-accent-line text-[15px] leading-[22px] font-medium text-fg outline-none disabled:opacity-50"
+              />
+              {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+            </div>
+          ) : (
+            <p
+              className="text-[15px] leading-[22px] font-medium text-fg line-clamp-2 break-words"
+              title={folder.name}
+            >
+              {folder.name}
+            </p>
+          )}
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs leading-[18px] text-fg-tertiary">
+            <Folder className="size-3 shrink-0" />
+            <span className="truncate">
+              {t('classroom.folderBadge')} · {courseCount} {t('classroom.folderCourseCountUnit')}
+            </span>
           </p>
-        )}
+        </div>
+
+        <CardActionsMenu
+          disabled={confirmingDelete}
+          onCloseAutoFocus={(e) => {
+            if (!renameFromMenu.current) return;
+            renameFromMenu.current = false;
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
+        >
+          <CardMenuItem
+            icon={Pencil}
+            testId="card-action-rename"
+            onSelect={() => {
+              renameFromMenu.current = true;
+              startEditing({ focus: false });
+            }}
+          >
+            {t('classroom.rename')}
+          </CardMenuItem>
+          <CardMenuSeparator />
+          {courseCount === 0 ? (
+            // Empty folder: the inline confirm.
+            <CardMenuItem
+              icon={Trash2}
+              destructive
+              testId="card-action-delete"
+              onSelect={() => setConfirmingDelete(true)}
+            >
+              {t('classroom.delete')}
+            </CardMenuItem>
+          ) : (
+            // Non-empty: choose whether the courses stay (ungrouped) or go too.
+            <CardMenuSub
+              icon={Trash2}
+              destructive
+              label={t('classroom.delete')}
+              testId="card-action-delete"
+              contentClassName="w-64"
+            >
+              <CardMenuItem
+                icon={FolderMinus}
+                testId="folder-delete-ungroup"
+                onSelect={() => onDelete('ungroup')}
+                className="h-auto items-start py-2 [&>svg]:mt-0.5"
+              >
+                <span className="flex min-w-0 flex-col">
+                  <span>{t('classroom.deleteFolderOnly')}</span>
+                  <span className="text-[11px] leading-4 text-fg-tertiary">
+                    {t('classroom.deleteFolderUngroupDesc')}
+                  </span>
+                </span>
+              </CardMenuItem>
+              <CardMenuSeparator />
+              <CardMenuItem
+                icon={Trash2}
+                destructive
+                testId="folder-delete-remove"
+                onSelect={() => setConfirmingDelete(true)}
+              >
+                {t('classroom.deleteFolderAndCourses', { count: courseCount })}
+              </CardMenuItem>
+            </CardMenuSub>
+          )}
+        </CardActionsMenu>
       </div>
     </div>
   );

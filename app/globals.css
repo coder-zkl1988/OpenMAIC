@@ -17,7 +17,67 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Brand primary scale (Ant Design purple, see the design Tokens board).
+   Static values with no dark remap, like any Tailwind palette: they generate
+   bg-primary-1 … text-primary-10 next to the existing bg-primary (which stays
+   the theme-aware --primary, = primary-6 in light). In dark mode, prefer the
+   accent-* role tokens below over raw scale steps for text and fills. */
+@theme {
+  --color-primary-1: #f9f0ff;
+  --color-primary-2: #efdbff;
+  --color-primary-3: #d3adf7;
+  --color-primary-4: #b37feb;
+  --color-primary-5: #9254de;
+  --color-primary-6: #722ed1;
+  --color-primary-7: #531dab;
+  --color-primary-8: #391085;
+  --color-primary-9: #22075e;
+  --color-primary-10: #120338;
+}
+
+/* Design role → utility map (redesigned surfaces use these instead of raw
+   gray/slate/zinc/violet classes or muted-foreground opacity steps). The
+   design board's text-primary / text-secondary are named fg / fg-secondary
+   here, because text-primary and text-secondary already resolve to the purple
+   --primary and the grey shadcn --secondary background.
+     text-primary (board)   → text-fg              titles, body
+     text-secondary (board) → text-fg-secondary    secondary text, button labels
+     text-tertiary (board)  → text-fg-tertiary     captions, timestamps, empty states
+     icon                   → text-icon            clickable icons
+     icon-muted             → text-icon-muted      decorative icons, never text
+     border                 → border-line          strokes, dividers
+     border-strong          → border-line-strong   switch track, idle inputs
+     bg-subtle              → bg-subtle            soft fills, disabled
+     bg-page                → bg-page              home + classroom page background
+     primary-1 / -3 / -6 / -7 → bg-accent-soft / border-accent-line /
+                              text-accent-text / hover:text-accent-hover
+     semantic pairs         → text-{interactive,warning,danger,success} on
+                              bg-{interactive,warning,danger,success}-soft
+   --muted-foreground, --background and --border are intentionally unchanged
+   globally; retune them only inside a scoped [data-ui=v2] subtree. */
 @theme inline {
+  --color-fg: var(--fg);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-fg-tertiary: var(--fg-tertiary);
+  --color-icon: var(--icon);
+  --color-icon-muted: var(--icon-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-subtle: var(--subtle);
+  --color-page: var(--page);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-accent-text: var(--accent-text);
+  --color-accent-hover: var(--accent-hover);
+  --color-interactive: var(--interactive);
+  --color-interactive-soft: var(--interactive-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
@@ -100,6 +160,28 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Design role tokens (light values from the design Tokens board). */
+  --fg: #0a0a0a;
+  --fg-secondary: #404040;
+  --fg-tertiary: #666666;
+  --icon: #525252;
+  --icon-muted: #737373;
+  --line: #e5e5e5;
+  --line-strong: #d4d4d4;
+  --subtle: #f5f5f5;
+  --page: #f8fafc;
+  --accent-soft: #f9f0ff;
+  --accent-line: #d3adf7;
+  --accent-text: #722ed1;
+  --accent-hover: #531dab;
+  --interactive: #0e7490;
+  --interactive-soft: #ecfeff;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --success: #047857;
+  --success-soft: #ecfdf5;
 }
 
 .dark {
@@ -110,7 +192,9 @@
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
   --primary: #8b47ea;
-  --primary-foreground: oklch(0.205 0 0);
+  /* White, not near-black: near-black on #8b47ea is 3.57:1 and fails AA;
+     white is 4.81:1. */
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -134,6 +218,31 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  /* Design role tokens, dark. The boards are light-only, so these follow the
+     accent-role remap: neutral text steps lighten, the accent moves to
+     primary-4 (text) / primary-5 (hover), and soft fills become translucent
+     tints instead of the light-only primary-1 / -50 swatches. */
+  --fg: #fafafa;
+  --fg-secondary: #d4d4d4;
+  --fg-tertiary: #a3a3a3;
+  --icon: #d4d4d4;
+  --icon-muted: #a3a3a3;
+  --line: oklch(1 0 0 / 10%);
+  --line-strong: oklch(1 0 0 / 15%);
+  --subtle: oklch(0.269 0 0);
+  --page: #0a0a0a;
+  --accent-soft: rgba(146, 84, 222, 0.16);
+  --accent-line: #531dab;
+  --accent-text: #b37feb;
+  --accent-hover: #9254de;
+  --interactive: #67e8f9;
+  --interactive-soft: rgba(6, 182, 212, 0.14);
+  --warning: #fcd34d;
+  --warning-soft: rgba(245, 158, 11, 0.16);
+  --danger: #f87171;
+  --danger-soft: rgba(239, 68, 68, 0.16);
+  --success: #6ee7b7;
+  --success-soft: rgba(16, 185, 129, 0.16);
 }
 
 @layer base {
@@ -196,8 +305,9 @@ html[data-openmaic-desktop] .desktop-titlebar {
   height: var(--desktop-titlebar-height);
   padding: 0 140px 0 16px;
   overflow: hidden;
-  background: #f8fafc;
-  color: #64748b;
+  /* Role tokens switch with html.dark, so no separate dark rule is needed. */
+  background: var(--page);
+  color: var(--icon-muted);
   font-size: 13px;
   font-weight: 600;
   user-select: none;
@@ -208,11 +318,6 @@ html[data-openmaic-desktop] .desktop-titlebar {
 html[data-openmaic-desktop='darwin'] .desktop-titlebar {
   padding-left: 84px;
   padding-right: 16px;
-}
-
-html.dark[data-openmaic-desktop] .desktop-titlebar {
-  background: #020617;
-  color: #94a3b8;
 }
 
 @utility h-app {
@@ -576,19 +681,6 @@ body[data-maic-editor='true'] .editable-element-text li,
   }
   100% {
     transform: translateX(100%);
-  }
-}
-
-/* Breathing animation for interactive mode button */
-@keyframes interactive-mode-breathe {
-  0%,
-  100% {
-    opacity: 0.3;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(1.08);
   }
 }
 

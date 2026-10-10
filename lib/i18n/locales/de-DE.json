@@ -7,7 +7,8 @@
     "errorPrefix": "Fehler: ",
     "loadingClassroom": "Klassenzimmer wird geladen ...",
     "retry": "Erneut versuchen",
-    "close": "Schließen"
+    "close": "Schließen",
+    "switchLanguage": "Sprache wechseln"
   },
   "home": {
     "slogan": "Generatives Lernen im interaktiven Lernraum mit mehreren KI-Agenten",
@@ -1097,6 +1098,7 @@
     "deleteFolderTitle": "Ordner „{{name}}“ löschen",
     "deleteFolderEmptyDesc": "Dieser Ordner ist leer. Das Löschen kann nicht rückgängig gemacht werden.",
     "deleteFolderUngroupDesc": "Die Kurse bleiben unter „Meine Kurse“, werden aber aus dem Ordner entfernt.",
+    "moreActions": "Weitere Aktionen",
     "moveToFolder": "In Ordner verschieben",
     "moveToFolderLabel": "Verschieben nach …",
     "ungrouped": "Ohne Ordner",
@@ -1128,6 +1130,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Kurs konnte nicht erstellt werden. Bitte versuche es erneut.",
     "requirementPlaceholder": "Beschreibe, was du lernen möchtest, z. B.\n\"Bring mir Python in 30 Minuten von Grund auf bei\"\n\"Erkläre die Fourier-Transformation am Whiteboard\"\n\"Wie spielt man das Brettspiel Avalon?\"",
+    "requirementLabel": "Lernwunsch",
     "requirementRequired": "Bitte gib die Kursanforderungen ein",
     "fileTooLarge": "Die Datei ist zu groß. Wähle bitte eine Datei unter 50 MB aus.",
     "courseMaterialCountLimit": "Du kannst bis zu 5 Dateien als Kursmaterial hochladen",
@@ -1262,6 +1265,7 @@
     "language": "Sprache",
     "languageDesc": "Sprache der Benutzeroberfläche auswählen",
     "theme": "Design",
+    "themeWithCurrent": "Design: {{theme}}",
     "themeDesc": "Darstellungsmodus auswählen (Hell/Dunkel/System)",
     "themeOptions": {
       "light": "Hell",
@@ -2319,7 +2323,8 @@
     "avatarHint": "Dein Avatar erscheint in Diskussionsrunden und Chats im Kurs",
     "fileTooLarge": "Das Bild ist zu groß – wähle bitte eines unter 5 MB",
     "invalidFileType": "Bitte wähle eine Bilddatei aus",
-    "editTooltip": "Zum Bearbeiten des Profils klicken"
+    "editTooltip": "Zum Bearbeiten des Profils klicken",
+    "edit": "Profil bearbeiten"
   },
   "media": {
     "imageCapability": "Bildgenerierung",

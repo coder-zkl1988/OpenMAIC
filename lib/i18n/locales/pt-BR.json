@@ -7,7 +7,8 @@
     "errorPrefix": "Erro: ",
     "loadingClassroom": "Carregando sala de aula...",
     "retry": "Tentar novamente",
-    "close": "Fechar"
+    "close": "Fechar",
+    "switchLanguage": "Alterar idioma"
   },
   "home": {
     "slogan": "Aprendizagem Generativa em Sala de Aula Interativa Multi-Agente",
@@ -1097,6 +1098,7 @@
     "deleteFolderTitle": "Excluir pasta \"{{name}}\"",
     "deleteFolderEmptyDesc": "Esta pasta está vazia. A exclusão não pode ser desfeita.",
     "deleteFolderUngroupDesc": "Os cursos permanecem em \"Meus cursos\", apenas sem pasta.",
+    "moreActions": "Mais ações",
     "moveToFolder": "Mover para pasta",
     "moveToFolderLabel": "Mover para a pasta",
     "ungrouped": "Sem pasta",
@@ -1128,6 +1130,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Falha ao gerar a sala, tente novamente",
     "requirementPlaceholder": "Conte-me o que você quer aprender, por exemplo:\n\"Me ensine Python do zero em 30 minutos\"\n\"Explique a Transformada de Fourier no quadro\"\n\"Como jogar o jogo de tabuleiro Avalon\"",
+    "requirementLabel": "O que você quer aprender",
     "requirementRequired": "Por favor, descreva os objetivos do curso",
     "fileTooLarge": "Arquivo muito grande. Selecione um arquivo com menos de 50 MB",
     "courseMaterialCountLimit": "Você pode enviar até 5 arquivos de material do curso",
@@ -1262,6 +1265,7 @@
     "language": "Idioma",
     "languageDesc": "Selecione o idioma da interface",
     "theme": "Tema",
+    "themeWithCurrent": "Tema: {{theme}}",
     "themeDesc": "Selecione o modo de tema (Claro/Escuro/Sistema)",
     "themeOptions": {
       "light": "Claro",
@@ -2319,7 +2323,8 @@
     "avatarHint": "Seu avatar aparecerá nas discussões e conversas em sala",
     "fileTooLarge": "Imagem muito grande — escolha uma com menos de 5 MB",
     "invalidFileType": "Selecione um arquivo de imagem",
-    "editTooltip": "Clique para editar o perfil"
+    "editTooltip": "Clique para editar o perfil",
+    "edit": "Editar perfil"
   },
   "media": {
     "imageCapability": "Geração de Imagens",

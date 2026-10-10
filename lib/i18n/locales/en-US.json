@@ -7,7 +7,8 @@
     "errorPrefix": "Error: ",
     "loadingClassroom": "Loading classroom...",
     "retry": "Retry",
-    "close": "Close"
+    "close": "Close",
+    "switchLanguage": "Switch language"
   },
   "home": {
     "slogan": "Generative Learning in Multi-Agent Interactive Classroom",
@@ -1097,6 +1098,7 @@
     "deleteFolderTitle": "Delete folder \"{{name}}\"",
     "deleteFolderEmptyDesc": "This folder is empty. Deletion cannot be undone.",
     "deleteFolderUngroupDesc": "Courses stay in \"My courses\", just unfiled.",
+    "moreActions": "More actions",
     "moveToFolder": "Move to folder",
     "moveToFolderLabel": "Move to…",
     "ungrouped": "Ungrouped",
@@ -1128,6 +1130,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Failed to generate classroom, please try again",
     "requirementPlaceholder": "Tell me anything you want to learn, e.g.\n\"Teach me Python from scratch in 30 minutes\"\n\"Explain Fourier Transform on the whiteboard\"\n\"How to play the board game Avalon\"",
+    "requirementLabel": "Learning request",
     "requirementRequired": "Please enter course requirements",
     "fileTooLarge": "File too large. Please select a file smaller than 50MB",
     "courseMaterialCountLimit": "You can upload up to 5 course material files",
@@ -1262,6 +1265,7 @@
     "language": "Language",
     "languageDesc": "Select interface language",
     "theme": "Theme",
+    "themeWithCurrent": "Theme: {{theme}}",
     "themeDesc": "Select theme mode (Light/Dark/System)",
     "themeOptions": {
       "light": "Light",
@@ -2319,7 +2323,8 @@
     "avatarHint": "Your avatar will appear in classroom discussions and chats",
     "fileTooLarge": "Image too large — please choose one under 5 MB",
     "invalidFileType": "Please select an image file",
-    "editTooltip": "Click to edit profile"
+    "editTooltip": "Click to edit profile",
+    "edit": "Edit profile"
   },
   "media": {
     "imageCapability": "Image Generation",

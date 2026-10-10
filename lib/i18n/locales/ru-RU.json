@@ -7,7 +7,8 @@
     "errorPrefix": "Ошибка: ",
     "loadingClassroom": "Загрузка класса...",
     "retry": "Повторить",
-    "close": "Закрыть"
+    "close": "Закрыть",
+    "switchLanguage": "Сменить язык"
   },
   "home": {
     "slogan": "Generative Learning in Multi-Agent Interactive Classroom",
@@ -1097,6 +1098,7 @@
     "deleteFolderTitle": "Удалить папку «{{name}}»",
     "deleteFolderEmptyDesc": "Эта папка пуста. Удаление необратимо.",
     "deleteFolderUngroupDesc": "Курсы остаются в «Мои курсы», просто без папки.",
+    "moreActions": "Ещё действия",
     "moveToFolder": "Переместить в папку",
     "moveToFolderLabel": "Переместить в папку",
     "ungrouped": "Без папки",
@@ -1128,6 +1130,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Ошибка генерации, попробуйте снова",
     "requirementPlaceholder": "Расскажите, что вы хотите изучить, например:\n\"Научи меня Python с нуля за 30 минут\"\n\"Объясни преобразование Фурье на доске\"\n\"Как играть в настольную игру Авалон\"",
+    "requirementLabel": "Что вы хотите изучить",
     "requirementRequired": "Пожалуйста, укажите требования к курсу",
     "fileTooLarge": "Файл слишком большой. Выберите файл до 50 МБ",
     "courseMaterialCountLimit": "Можно загрузить до 5 файлов материалов курса",
@@ -1262,6 +1265,7 @@
     "language": "Язык",
     "languageDesc": "Выберите язык интерфейса",
     "theme": "Тема",
+    "themeWithCurrent": "Тема: {{theme}}",
     "themeDesc": "Выберите тему оформления (Светлая/Тёмная/Системная)",
     "themeOptions": {
       "light": "Светлая",
@@ -2319,7 +2323,8 @@
     "avatarHint": "Ваш аватар будет отображаться в обсуждениях и чатах",
     "fileTooLarge": "Изображение слишком большое — выберите файл до 5 МБ",
     "invalidFileType": "Пожалуйста, выберите файл изображения",
-    "editTooltip": "Нажмите для редактирования профиля"
+    "editTooltip": "Нажмите для редактирования профиля",
+    "edit": "Редактировать профиль"
   },
   "media": {
     "imageCapability": "Генерация изображений",

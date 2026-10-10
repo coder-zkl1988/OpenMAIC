@@ -6,7 +6,7 @@
 // groups，不传 thinking 回调，即为「仅搜索」的纯模型选择。
 
 import { useMemo, useState } from 'react';
-import { Bot, Box, Brain, Check, CornerDownRight, Search } from 'lucide-react';
+import { Bot, Box, Brain, Check, ChevronDown, CornerDownRight, Search } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
@@ -321,6 +321,7 @@ export function ModelPicker({
   thinkingConfig,
   onThinkingChange,
   size = 'sm',
+  variant = 'default',
   className,
   ariaLabel,
   note,
@@ -339,6 +340,12 @@ export function ModelPicker({
   thinkingConfig?: ThinkingConfig;
   onThinkingChange?: (config: ThinkingConfig | undefined) => void;
   size?: 'sm' | 'md';
+  /**
+   * `pill` is the home composer's 32px pill: white fill, line border,
+   * secondary-text label (placeholder included) and a trailing decorative
+   * chevron. Opt-in, so the default trigger stays as it is.
+   */
+  variant?: 'default' | 'pill';
   className?: string;
   /** 触发器的可及名。首页工具栏传 `Provider / Model`，e2e 与读屏都依赖它。 */
   ariaLabel?: string;
@@ -386,8 +393,10 @@ export function ModelPicker({
       )
     : '';
 
-  const triggerBase =
-    size === 'md'
+  const isPill = variant === 'pill';
+  const triggerBase = isPill
+    ? 'h-8 w-auto max-w-[260px] gap-1.5 rounded-full border border-line bg-background pl-3 pr-2.5 text-xs text-fg-secondary hover:bg-subtle data-[state=open]:bg-subtle'
+    : size === 'md'
       ? 'h-8 w-full gap-1.5 rounded-full border-border/60 bg-background px-3'
       : 'h-7 w-full rounded-md border border-border/60 bg-background px-2.5';
 
@@ -430,10 +439,16 @@ export function ModelPicker({
               )}
             </span>
           ) : (
-            <span className="min-w-0 flex-1 truncate text-left text-muted-foreground">
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate text-left',
+                isPill ? 'text-fg-secondary' : 'text-muted-foreground',
+              )}
+            >
               {placeholder ?? ''}
             </span>
           )}
+          {isPill && <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-icon-muted" />}
         </button>
       </PopoverTrigger>
 

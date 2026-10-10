@@ -7,7 +7,8 @@
     "errorPrefix": "错误：",
     "loadingClassroom": "正在加载课堂...",
     "retry": "重试",
-    "close": "關閉"
+    "close": "關閉",
+    "switchLanguage": "切換語言"
   },
   "home": {
     "slogan": "多智能體互動課室中的生成式學習",
@@ -1082,6 +1083,7 @@
     "deleteFolderTitle": "刪除資料夾「{{name}}」",
     "deleteFolderEmptyDesc": "這個資料夾是空的。刪除後無法復原。",
     "deleteFolderUngroupDesc": "課程保留在「我的課程」，只是不再歸類。",
+    "moreActions": "更多操作",
     "moveToFolder": "移動到資料夾",
     "moveToFolderLabel": "移動到資料夾",
     "ungrouped": "未分類",
@@ -1113,6 +1115,7 @@
     "formatListSeparator": "、",
     "generateFailed": "生成課堂失敗，請重試",
     "requirementPlaceholder": "輸入你想學的任何內容，例如：\n「從零學 Python，30 分鐘寫出第一個程式」\n「用白板為我講解傅立葉轉換」\n「阿瓦隆桌遊怎麼玩」",
+    "requirementLabel": "學習需求",
     "requirementRequired": "請輸入課程需求",
     "fileTooLarge": "檔案過大，請選擇小於 50MB 的檔案",
     "courseMaterialCountLimit": "最多可上傳 5 個課程材料檔案",
@@ -1247,6 +1250,7 @@
     "language": "語言",
     "languageDesc": "選擇介面語言",
     "theme": "主題",
+    "themeWithCurrent": "主題：{{theme}}",
     "themeDesc": "選擇主題模式（淺色/深色/跟隨系統）",
     "themeOptions": {
       "light": "淺色",
@@ -2304,7 +2308,8 @@
     "avatarHint": "你的頭像將顯示在課堂討論和對話中",
     "fileTooLarge": "圖片過大，請選擇小於 5MB 的圖片",
     "invalidFileType": "請選擇圖片檔案",
-    "editTooltip": "點擊編輯個人資料"
+    "editTooltip": "點擊編輯個人資料",
+    "edit": "編輯個人資料"
   },
   "media": {
     "imageCapability": "圖像生成",

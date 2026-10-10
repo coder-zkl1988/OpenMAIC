@@ -9,12 +9,10 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
-  Copy,
   Folder,
   FolderPlus,
   ImagePlus,
   Pencil,
-  Trash2,
   Search,
   Settings,
   Sun,
@@ -23,7 +21,6 @@ import {
   ChevronUp,
   Upload,
   Sparkles,
-  Atom,
   X,
   Presentation,
   Loader2,
@@ -31,7 +28,6 @@ import {
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { createLogger } from '@/lib/logger';
-import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupInput, InputGroupButton } from '@/components/ui/input-group';
 import { Textarea as UITextarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -64,10 +60,8 @@ import {
   pendingCourseName,
   pendingCourseRuns,
   runsByCourse,
-  type CourseRunStatus,
 } from '@/lib/generation-run-client/course-card';
 import type { RunSnapshot } from '@/lib/generation-run-client/types';
-import { CourseRunStatusLabel } from '@/components/generation/course-run-status-label';
 import { useModelCapabilities } from '@/lib/model-settings/use-model-settings';
 import { useUserProfileStore, AVATAR_OPTIONS } from '@/lib/store/user-profile';
 import {
@@ -88,16 +82,13 @@ import type { FolderRecord } from '@/lib/types/folder';
 import { displayNameWidth, FOLDER_NAME_MAX_WIDTH } from '@/lib/utils/folder-name-validation';
 import { FolderCard } from '@/components/discovery/folder-card';
 import { NewFolderDialog } from '@/components/discovery/folder-dialogs';
-import { MoveToFolderMenu } from '@/components/discovery/move-to-folder-menu';
+import { ClassroomCard } from '@/components/discovery/classroom-card';
 import { LibrarySkeleton } from '@/components/discovery/library-skeleton';
-import { SlideThumbnail } from '@/components/slide-renderer/SlideThumbnail';
 import type { Slide } from '@openmaic/dsl';
 import { useMediaGenerationStore } from '@/lib/store/media-generation';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCourseThumbnails } from '@/lib/hooks/use-course-thumbnails';
-import { ThumbnailSkeleton } from '@/components/discovery/thumbnail-skeleton';
-import { useNearViewport } from '@/lib/hooks/use-near-viewport';
 import { SpeechButton } from '@/components/audio/speech-button';
 import { useImportClassroom } from '@/lib/import/use-import-classroom';
 import {
@@ -117,6 +108,9 @@ import {
 const log = createLogger('Home');
 
 const RECENT_OPEN_STORAGE_KEY = 'recentClassroomsOpen';
+/** The library header's labeled text actions (导入课堂, the flag-gated PPTX import). */
+const LIBRARY_TEXT_ACTION =
+  'inline-flex items-center gap-1 h-7 rounded-full px-2.5 text-xs text-icon whitespace-nowrap hover:text-fg hover:bg-subtle disabled:opacity-50 disabled:pointer-events-none transition-colors cursor-pointer';
 const INTERACTIVE_MODE_STORAGE_KEY = 'interactiveModeEnabled';
 
 // PPTX import is still scaffolding: `useImportPptx` has no `onImported` consumer
@@ -352,8 +346,7 @@ function HomePage() {
     };
   }, []);
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDelete = (id: string) => {
     setPendingDeleteId(id);
   };
 
@@ -653,39 +646,48 @@ function HomePage() {
           className="hidden"
         />
       )}
-      {/* ═══ Top-right pill (unchanged) ═══ */}
+      {/* ═══ Top-right pill: language · theme · settings, 32px buttons ═══ */}
       <div
         ref={toolbarRef}
-        className="fixed top-[calc(1rem+var(--desktop-titlebar-height))] right-4 z-50 flex items-center gap-1 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-gray-100/50 dark:border-gray-700/50 shadow-sm"
+        className="fixed top-[calc(1rem+var(--desktop-titlebar-height))] right-4 z-50 flex items-center gap-1 bg-white/75 dark:bg-gray-800/60 backdrop-blur-md px-1.5 py-1 rounded-full border border-line shadow-xs"
       >
         {/* Language Selector */}
-        <LanguageSwitcher onOpen={() => setThemeOpen(false)} />
+        <LanguageSwitcher
+          size="md"
+          ariaLabel={t('common.switchLanguage')}
+          onOpen={() => setThemeOpen(false)}
+        />
 
-        <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
+        <div className="w-[1px] h-4 bg-line" />
 
         {/* Theme Selector */}
         <div className="relative">
           <button
+            type="button"
+            aria-label={t('settings.themeWithCurrent', {
+              theme: t(`settings.themeOptions.${theme}`),
+            })}
+            aria-expanded={themeOpen}
             onClick={() => {
               setThemeOpen(!themeOpen);
             }}
-            className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm transition-all"
+            className="size-8 flex items-center justify-center rounded-full text-icon hover:bg-white dark:hover:bg-gray-700 hover:text-fg hover:shadow-sm transition-all"
           >
             {theme === 'light' && <Sun className="w-4 h-4" />}
             {theme === 'dark' && <Moon className="w-4 h-4" />}
             {theme === 'system' && <Monitor className="w-4 h-4" />}
           </button>
           {themeOpen && (
-            <div className="absolute top-full mt-2 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden z-50 min-w-[140px]">
+            <div className="absolute top-full mt-2 right-0 bg-white dark:bg-gray-800 border border-line rounded-lg shadow-lg overflow-hidden z-50 min-w-[140px]">
               <button
                 onClick={() => {
                   setTheme('light');
                   setThemeOpen(false);
                 }}
                 className={cn(
-                  'w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2',
+                  'w-full px-4 py-2 text-left text-sm hover:bg-subtle transition-colors flex items-center gap-2',
                   theme === 'light' &&
-                    'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+                    'bg-primary-1 text-primary-6 dark:bg-accent-soft dark:text-accent-text',
                 )}
               >
                 <Sun className="w-4 h-4" />
@@ -697,9 +699,9 @@ function HomePage() {
                   setThemeOpen(false);
                 }}
                 className={cn(
-                  'w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2',
+                  'w-full px-4 py-2 text-left text-sm hover:bg-subtle transition-colors flex items-center gap-2',
                   theme === 'dark' &&
-                    'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+                    'bg-primary-1 text-primary-6 dark:bg-accent-soft dark:text-accent-text',
                 )}
               >
                 <Moon className="w-4 h-4" />
@@ -711,9 +713,9 @@ function HomePage() {
                   setThemeOpen(false);
                 }}
                 className={cn(
-                  'w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2',
+                  'w-full px-4 py-2 text-left text-sm hover:bg-subtle transition-colors flex items-center gap-2',
                   theme === 'system' &&
-                    'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
+                    'bg-primary-1 text-primary-6 dark:bg-accent-soft dark:text-accent-text',
                 )}
               >
                 <Monitor className="w-4 h-4" />
@@ -723,13 +725,15 @@ function HomePage() {
           )}
         </div>
 
-        <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
+        <div className="w-[1px] h-4 bg-line" />
 
         {/* Settings Button */}
         <div className="relative">
           <button
+            type="button"
+            aria-label={t('settings.title')}
             onClick={() => setSettingsOpen(true)}
-            className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm transition-all group"
+            className="size-8 flex items-center justify-center rounded-full text-icon hover:bg-white dark:hover:bg-gray-700 hover:text-fg hover:shadow-sm transition-all group"
           >
             <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
           </button>
@@ -786,7 +790,7 @@ function HomePage() {
         {/* ── Slogan ── */}
         <p
           className={cn(
-            'text-sm text-muted-foreground/60 mb-8',
+            'text-sm text-fg-tertiary mb-8',
             heroEnter('fade-in duration-300 delay-250'),
           )}
         >
@@ -797,29 +801,31 @@ function HomePage() {
         <div className={cn('w-full', heroEnter('fade-in zoom-in-97 duration-300 delay-350'))}>
           <div
             data-pro-morph="composer"
-            className="w-full rounded-2xl border border-border/60 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-xl shadow-black/[0.03] dark:shadow-black/20 transition-shadow focus-within:shadow-2xl focus-within:shadow-violet-500/[0.06]"
+            className="w-full rounded-2xl border border-line bg-white/92 dark:bg-slate-900/80 backdrop-blur-xl shadow-[0_20px_25px_-5px_rgba(0,0,0,0.04),0_8px_10px_-6px_rgba(0,0,0,0.04)] dark:shadow-black/20 transition-shadow focus-within:shadow-2xl focus-within:shadow-violet-500/[0.06]"
           >
-            {/* ── Greeting + Profile + Agents ── */}
-            <div className="relative z-20 flex items-start justify-between">
+            {/* ── Greeting + Profile + Agents ── wraps on narrow widths; the
+                agent bar starts at 384px and may shrink */}
+            <div className="relative z-20 flex flex-wrap items-start justify-between gap-1">
               <GreetingBar />
-              <div className="pr-3 pt-3.5 shrink-0">
+              <div className="box-content basis-96 shrink min-w-0 pl-4 pr-3 pt-3.5">
                 <AgentBar />
               </div>
             </div>
 
-            {/* Textarea */}
+            {/* Textarea — must stay the first <textarea> in the DOM (e2e HomePage.textarea) */}
             <textarea
               ref={textareaRef}
+              aria-label={t('upload.requirementLabel')}
               placeholder={t('upload.requirementPlaceholder')}
-              className="w-full resize-none border-0 bg-transparent px-4 pt-1 pb-2 text-[13px] leading-relaxed placeholder:text-muted-foreground/40 focus:outline-none min-h-[140px] max-h-[300px]"
+              className="w-full resize-none border-0 bg-transparent px-4 pt-1 pb-2 text-sm leading-[1.6] text-fg placeholder:text-icon-muted focus:outline-none min-h-[140px] max-h-[300px]"
               value={form.requirement}
               onChange={(e) => updateForm('requirement', e.target.value)}
               onKeyDown={handleKeyDown}
               rows={4}
             />
 
-            {/* Toolbar row */}
-            <div className="px-3 pb-3 flex items-end gap-2">
+            {/* Toolbar row: [model][📎][深度交互] wrap cluster, then [mic][进入课堂] */}
+            <div className="px-3 pb-3 flex items-center gap-2">
               <div className="flex-1 min-w-0">
                 <GenerationToolbar
                   courseMaterials={courseMaterials.materials}
@@ -834,26 +840,28 @@ function HomePage() {
                     setSettingsSection(section);
                     setSettingsOpen(true);
                   }}
+                  trailing={
+                    // Interactive mode toggle (TooltipTrigger asChild relies on its forwardRef)
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <InteractiveModeButton
+                          pressed={form.interactiveMode}
+                          label={t('toolbar.interactiveModeLabel')}
+                          onPressedChange={(pressed) => updateForm('interactiveMode', pressed)}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        {t('toolbar.interactiveModeHint')}
+                      </TooltipContent>
+                    </Tooltip>
+                  }
                 />
               </div>
-
-              {/* Interactive mode toggle */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <InteractiveModeButton
-                    pressed={form.interactiveMode}
-                    label={t('toolbar.interactiveModeLabel')}
-                    onPressedChange={(pressed) => updateForm('interactiveMode', pressed)}
-                  />
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  {t('toolbar.interactiveModeHint')}
-                </TooltipContent>
-              </Tooltip>
 
               {/* Voice input */}
               <SpeechButton
                 size="md"
+                shape="circle"
                 onTranscription={(text) => {
                   setForm((prev) => {
                     const next = prev.requirement + (prev.requirement ? ' ' : '') + text;
@@ -864,22 +872,23 @@ function HomePage() {
 
               {/* Send button */}
               <button
+                type="button"
                 onClick={handleGenerate}
                 disabled={!canGenerate || preparingGenerate}
                 className={cn(
-                  'shrink-0 h-8 rounded-lg flex items-center justify-center gap-1.5 transition-all px-3',
+                  'shrink-0 h-8 rounded-full flex items-center justify-center gap-1.5 transition-all px-4 text-[13px] font-semibold',
                   canGenerate && !preparingGenerate
-                    ? 'bg-primary text-primary-foreground hover:opacity-90 shadow-sm cursor-pointer'
-                    : 'bg-muted text-muted-foreground/40 cursor-not-allowed',
+                    ? 'bg-primary text-primary-foreground hover:opacity-90 shadow-[0_4px_12px_-2px_rgba(114,46,209,0.35)] cursor-pointer'
+                    : 'bg-primary-1 text-primary-4 dark:bg-accent-soft dark:text-primary-4/70 cursor-not-allowed',
                 )}
               >
-                <span className="text-xs font-medium">
+                <span>
                   {preparingGenerate ? t('stage.generating') : t('toolbar.enterClassroom')}
                 </span>
                 {preparingGenerate ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <ArrowUp className="size-3.5" />
+                  <ArrowUp className="size-3.5" strokeWidth={2.25} />
                 )}
               </button>
             </div>
@@ -960,28 +969,30 @@ function HomePage() {
         {/* Trigger — divider-line with centered text. Fixed height keeps the
               bar geometrically stable when the New-folder action or the folder
               path appears/disappears (entering vs leaving a folder). */}
-        <div className="group w-full flex items-center gap-4 h-9">
-          <div className="flex-1 h-px bg-border/40 group-hover:bg-border/70 transition-colors" />
-          <div className="shrink-0 flex items-center gap-3 text-[13px] text-muted-foreground/60 select-none">
+        <div className="w-full flex items-center gap-4 h-9">
+          <div className="flex-1 h-px bg-line" />
+          <div className="shrink-0 flex items-center gap-3 text-[13px] text-fg-tertiary select-none">
             <button
+              type="button"
+              aria-expanded={recentOpen}
               onClick={() => {
                 if (currentFolderId) setCurrentFolderId(undefined);
                 else persistRecentOpen(!recentOpen);
               }}
-              className="flex items-center gap-2 hover:text-foreground/70 transition-colors cursor-pointer"
+              className="flex items-center gap-2 hover:text-fg transition-colors cursor-pointer"
             >
               <Clock className="size-3.5" />
               {t('classroom.recentClassrooms')}
               {currentFolder && (
                 <>
-                  <ChevronRight className="size-3 opacity-40" />
-                  <span className="text-foreground/80 truncate max-w-[160px]">
+                  <ChevronRight className="size-3 text-icon-muted" />
+                  <span className="text-fg-secondary truncate max-w-[160px]">
                     {currentFolder.name}
                   </span>
                 </>
               )}
               {hydrated ? (
-                <span className="text-[11px] tabular-nums opacity-60">
+                <span className="text-[11px] tabular-nums">
                   {currentFolder ? currentFolderClassrooms.length : classrooms.length}
                 </span>
               ) : (
@@ -1015,7 +1026,7 @@ function HomePage() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.12, ease: 'easeOut' }}
-                  className="flex items-center justify-center size-6 rounded-full text-muted-foreground/50 hover:text-foreground/70 hover:bg-muted/50 transition-colors cursor-pointer"
+                  className="flex items-center justify-center size-7 rounded-full text-icon hover:text-fg hover:bg-subtle transition-colors cursor-pointer"
                 >
                   <Search className="size-3.5" />
                 </motion.button>
@@ -1030,11 +1041,11 @@ function HomePage() {
                 >
                   <InputGroup
                     className={cn(
-                      'h-7 text-[12px] rounded-full bg-muted/40 border-transparent shadow-none',
+                      'h-7 text-[12px] rounded-full bg-subtle border-transparent shadow-none',
                       'transition-colors',
-                      'hover:bg-muted/60',
-                      'has-[[data-slot=input-group-control]:focus-visible]:bg-muted/60',
-                      'has-[[data-slot=input-group-control]:focus-visible]:border-transparent',
+                      'hover:border-line',
+                      'has-[[data-slot=input-group-control]:focus-visible]:bg-subtle',
+                      'has-[[data-slot=input-group-control]:focus-visible]:border-line',
                       'has-[[data-slot=input-group-control]:focus-visible]:ring-0',
                     )}
                   >
@@ -1060,7 +1071,7 @@ function HomePage() {
                       }}
                       placeholder={t('classroom.searchPlaceholder')}
                       aria-label={t('classroom.searchAriaLabel')}
-                      className="h-7 pl-3 placeholder:text-muted-foreground/50"
+                      className="h-7 pl-3 text-fg placeholder:text-icon-muted"
                     />
                     {searchQuery && (
                       <InputGroupButton
@@ -1080,29 +1091,28 @@ function HomePage() {
               )}
             </AnimatePresence>
 
+            {/* Import — always labeled (导入课堂), a quiet text button. */}
             <button
+              type="button"
               onClick={triggerImport}
               disabled={importing}
-              className="group/import grid grid-cols-[auto_0fr] hover:grid-cols-[auto_1fr] items-center gap-1 rounded-full px-1.5 py-0.5 text-[12px] text-muted-foreground/35 hover:text-muted-foreground/70 hover:bg-muted/50 transition-all duration-200 cursor-pointer"
+              className={LIBRARY_TEXT_ACTION}
             >
               <Upload className="size-3" />
-              <span className="overflow-hidden opacity-0 group-hover/import:opacity-100 transition-opacity duration-200 whitespace-nowrap">
-                {t('import.classroom')}
-              </span>
+              {t('import.classroom')}
             </button>
             {PPTX_IMPORT_ENABLED && (
               <button
+                type="button"
                 onClick={triggerPptxFileSelect}
                 disabled={pptxImporting}
-                className="group/import-pptx grid grid-cols-[auto_0fr] hover:grid-cols-[auto_1fr] items-center gap-1 rounded-full px-1.5 py-0.5 text-[12px] text-muted-foreground/35 hover:text-muted-foreground/70 hover:bg-muted/50 transition-all duration-200 cursor-pointer"
+                className={LIBRARY_TEXT_ACTION}
               >
                 <Presentation className="size-3" />
-                <span className="overflow-hidden opacity-0 group-hover/import-pptx:opacity-100 transition-opacity duration-200 whitespace-nowrap">
-                  {t('import.pptx')}
-                </span>
+                {t('import.pptx')}
               </button>
             )}
-            {/* New folder — round icon button, matches the import/upload affordances. */}
+            {/* New folder — round icon button on the subtle fill. */}
             {!currentFolderId && !isSearching && (
               <button
                 type="button"
@@ -1112,13 +1122,13 @@ function HomePage() {
                 }}
                 aria-label={t('classroom.newFolderTitle')}
                 title={t('classroom.newFolderTitle')}
-                className="inline-flex items-center justify-center size-7 rounded-full bg-muted/40 text-muted-foreground ring-1 ring-border/50 hover:bg-muted hover:text-foreground hover:ring-border transition-[background-color,color,box-shadow] cursor-pointer"
+                className="inline-flex items-center justify-center size-7 rounded-full bg-subtle text-icon ring-1 ring-line hover:text-fg hover:ring-line-strong transition-[color,box-shadow] cursor-pointer"
               >
                 <FolderPlus className="size-3.5" />
               </button>
             )}
           </div>
-          <div className="flex-1 h-px bg-border/40 group-hover:bg-border/70 transition-colors" />
+          <div className="flex-1 h-px bg-line" />
         </div>
 
         {/* Expandable content. Present from the first render, so it does not
@@ -1136,18 +1146,16 @@ function HomePage() {
               {!hydrated ? (
                 <LibrarySkeleton />
               ) : folders.length === 0 && classrooms.length === 0 && pendingRuns.length === 0 ? (
-                <div className="pt-8 pb-2 text-center text-[13px] text-muted-foreground/60">
+                <div className="pt-8 pb-2 text-center text-[13px] text-fg-tertiary">
                   {t('classroom.emptyLibraryHint')}
                 </div>
               ) : !isSearching && currentFolderId && currentFolderClassrooms.length === 0 ? (
                 // Empty folder: hint directly below the centered path bar.
                 <div className="pt-8 text-center">
-                  <p className="text-[14px] text-muted-foreground">
-                    {t('classroom.emptyFolderHint')}
-                  </p>
+                  <p className="text-[14px] text-fg-tertiary">{t('classroom.emptyFolderHint')}</p>
                 </div>
               ) : isSearching && filteredClassrooms.length === 0 ? (
-                <div className="pt-8 pb-2 text-center text-[13px] text-muted-foreground/60">
+                <div className="pt-8 pb-2 text-center text-[13px] text-fg-tertiary">
                   {t('classroom.searchEmpty')}
                 </div>
               ) : (
@@ -1270,22 +1278,21 @@ function HomePage() {
                               const run = runByStageId.get(classroom.id);
                               router.push(run ? courseRunHref(run) : `/classroom/${classroom.id}`);
                             }}
+                            moveTarget={{
+                              folders,
+                              currentFolderId: classroom.folderId,
+                              onMove: (folderId) => handleMoveCourse(classroom.id, folderId),
+                              onCreateAndMove: handleCreateAndMove(classroom.id),
+                            }}
                             overlay={
-                              <>
-                                <MoveToFolderMenu
-                                  folders={folders}
-                                  currentFolderId={classroom.folderId}
-                                  onMove={(folderId) => handleMoveCourse(classroom.id, folderId)}
-                                  onCreateAndMove={handleCreateAndMove(classroom.id)}
-                                />
-                                {/* Search view: show the owning folder as a badge. */}
-                                {isSearching && classroom.folderId && (
-                                  <span className="absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-violet-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm pointer-events-none">
-                                    <Folder className="size-2.5" />
-                                    {folderNameById.get(classroom.folderId) ?? ''}
-                                  </span>
-                                )}
-                              </>
+                              // Search view: show the owning folder as a badge
+                              // (top-left; the mode badge holds the bottom-left).
+                              isSearching && classroom.folderId ? (
+                                <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-violet-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm pointer-events-none">
+                                  <Folder className="size-2.5" />
+                                  {folderNameById.get(classroom.folderId) ?? ''}
+                                </span>
+                              ) : undefined
                             }
                           />
                         </motion.div>
@@ -1312,7 +1319,7 @@ function HomePage() {
       />
 
       {/* Footer — flows with content, at the very end */}
-      <div className="mt-auto pt-12 pb-4 text-center text-xs text-muted-foreground/40">
+      <div className="mt-auto pt-12 pb-4 text-center text-xs text-fg-tertiary">
         OpenMAIC Open Source Project
       </div>
     </div>
@@ -1411,37 +1418,39 @@ function GreetingBar() {
         onChange={handleAvatarUpload}
       />
 
-      {/* ── Collapsed pill (always in flow) ── */}
-      {!open && (
-        <div
-          className="flex items-center gap-2.5 cursor-pointer transition-all duration-200 group rounded-full px-2.5 py-1.5 border border-border/50 text-muted-foreground/70 hover:text-foreground hover:bg-muted/60 active:scale-[0.97]"
-          onClick={() => setOpen(true)}
-        >
-          <div className="shrink-0 relative">
-            <div className="size-8 rounded-full overflow-hidden ring-[1.5px] ring-border/30 group-hover:ring-violet-400/60 dark:group-hover:ring-violet-400/40 transition-all duration-300">
-              <img src={avatar} alt="" className="size-full object-cover" />
-            </div>
-            <div className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full bg-white dark:bg-slate-800 border border-border/40 flex items-center justify-center opacity-60 group-hover:opacity-100 transition-opacity">
-              <Pencil className="size-[7px] text-muted-foreground/70" />
-            </div>
-          </div>
-          <div className="flex-1 min-w-0">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="leading-none select-none flex items-center gap-1">
-                  <span className="text-[13px] font-semibold text-foreground/85 group-hover:text-foreground transition-colors">
-                    {t('home.greetingWithName', { name: displayName })}
-                  </span>
-                  <ChevronDown className="size-3 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors shrink-0" />
+      {/* ── Collapsed pill (always in flow) ── kept, hidden and inert, while the
+          panel is open so the header row's wrap (and the composer's height)
+          does not change under the floating panel */}
+      <div className={cn(open && 'invisible')} inert={open}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={t('profile.edit')}
+              className="flex items-center gap-2.5 cursor-pointer transition-all duration-200 group rounded-full py-[5px] pl-[5px] pr-3 border border-line bg-background hover:bg-subtle active:scale-[0.97]"
+              onClick={() => setOpen(true)}
+            >
+              <span className="shrink-0 relative">
+                <span className="block size-8 rounded-full overflow-hidden ring-[1.5px] ring-line group-hover:ring-accent-line transition-all duration-300">
+                  <img src={avatar} alt="" className="size-full object-cover" />
                 </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={4}>
-                {t('profile.editTooltip')}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-      )}
+                <span className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full bg-background border border-line flex items-center justify-center">
+                  <Pencil className="size-[7px] text-icon" strokeWidth={2.5} />
+                </span>
+              </span>
+              <span className="leading-none select-none flex items-center gap-1">
+                <span className="text-[13px] font-semibold text-fg">
+                  {t('home.greetingWithName', { name: displayName })}
+                </span>
+                <ChevronDown className="size-3 text-icon-muted group-hover:text-icon transition-colors shrink-0" />
+              </span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={4}>
+            {t('profile.editTooltip')}
+          </TooltipContent>
+        </Tooltip>
+      </div>
 
       {/* ── Expanded panel (absolute, floating) ── */}
       <AnimatePresence>
@@ -1604,7 +1613,7 @@ function GreetingBar() {
   );
 }
 
-// ─── Classroom Card — clean, minimal style ──────────────────────
+// ─── Classroom cards ─────────────────────────────────────────────
 /** A card for a run whose course does not exist yet. */
 function pendingRunListItem(run: RunSnapshot): StageListItem {
   return {
@@ -1616,284 +1625,6 @@ function pendingRunListItem(run: RunSnapshot): StageListItem {
     interactiveMode: run.input.interactive,
     taskEngineMode: run.input.taskEngine,
   };
-}
-
-function ClassroomCard({
-  classroom,
-  slide,
-  requestThumbnail,
-  formatDate,
-  runStatus = null,
-  pendingCourse = false,
-  overlay,
-  onDelete,
-  onRename,
-  confirmingDelete,
-  onConfirmDelete,
-  onCancelDelete,
-  onClick,
-}: {
-  classroom: StageListItem;
-  /** The first slide; null when the course has none, undefined until loaded. */
-  slide?: Slide | null;
-  /** Loads the thumbnail while the card is near the viewport (absent: nothing to load). */
-  requestThumbnail?: (stageId: string, version: number) => () => void;
-  formatDate: (ts: number) => string;
-  /** The state of the run generating this course, while it runs. */
-  runStatus?: CourseRunStatus | null;
-  /** The card is a run whose course does not exist yet: it can only be opened or deleted. */
-  pendingCourse?: boolean;
-  /** Extra absolutely-positioned layers over the thumbnail (move menu, badges). */
-  overlay?: React.ReactNode;
-  onDelete: (id: string, e: React.MouseEvent) => void;
-  onRename: (id: string, newName: string) => void;
-  confirmingDelete: boolean;
-  onConfirmDelete: () => void;
-  onCancelDelete: () => void;
-  onClick: () => void;
-}) {
-  const { t } = useI18n();
-  const thumbRef = useRef<HTMLDivElement>(null);
-  const [thumbWidth, setThumbWidth] = useState(0);
-  const [editing, setEditing] = useState(false);
-  const [nameDraft, setNameDraft] = useState('');
-  const nameInputRef = useRef<HTMLInputElement>(null);
-  const nearViewport = useNearViewport(thumbRef);
-
-  useEffect(() => {
-    if (!nearViewport || !requestThumbnail) return;
-    return requestThumbnail(classroom.id, classroom.updatedAt);
-  }, [nearViewport, requestThumbnail, classroom.id, classroom.updatedAt]);
-
-  useEffect(() => {
-    const el = thumbRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      setThumbWidth(Math.round(entry.contentRect.width));
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (editing) nameInputRef.current?.focus();
-  }, [editing]);
-
-  const isTaskEngineMode = classroom.taskEngineMode === true;
-  const showModeBadge = classroom.interactiveMode || isTaskEngineMode;
-  const ModeBadgeIcon = isTaskEngineMode ? Sparkles : Atom;
-  const modeBadgeLabel = isTaskEngineMode ? 'Vocational Mode' : t('toolbar.interactiveModeLabel');
-
-  const startRename = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setNameDraft(classroom.name);
-    setEditing(true);
-  };
-
-  const commitRename = () => {
-    if (!editing) return;
-    const trimmed = nameDraft.trim();
-    if (trimmed && trimmed !== classroom.name) {
-      onRename(classroom.id, trimmed);
-    }
-    setEditing(false);
-  };
-
-  return (
-    <div
-      className="group cursor-pointer"
-      onClick={confirmingDelete ? undefined : onClick}
-      draggable={!confirmingDelete && !editing && !pendingCourse}
-      onDragStart={(e) => {
-        e.dataTransfer.setData('text/stage-id', classroom.id);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
-      onDragEnd={() => {
-        // Notify folder cards to clear any lingering drop highlight (Escape-
-        // cancelled drags may not fire dragleave on every target).
-        window.dispatchEvent(new CustomEvent('course-drag-end'));
-      }}
-    >
-      {/* Thumbnail — large radius, no border, subtle bg */}
-      <div
-        ref={thumbRef}
-        className="relative w-full aspect-[16/9] rounded-2xl bg-slate-100 dark:bg-slate-800/80 overflow-hidden transition-transform duration-200 group-hover:scale-[1.02]"
-      >
-        {slide && thumbWidth > 0 ? (
-          <SlideThumbnail
-            slide={slide}
-            size={thumbWidth}
-            viewportSize={slide.viewportSize ?? 1000}
-            viewportRatio={slide.viewportRatio ?? 0.5625}
-          />
-        ) : slide || (slide === undefined && requestThumbnail) ? (
-          // Still loading, or loaded and waiting for the card's width.
-          <ThumbnailSkeleton />
-        ) : !slide ? (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-100 to-blue-100 dark:from-violet-900/30 dark:to-blue-900/30 flex items-center justify-center">
-              <span className="text-xl opacity-50">📄</span>
-            </div>
-          </div>
-        ) : null}
-
-        {showModeBadge && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                aria-label={modeBadgeLabel}
-                onClick={(e) => e.stopPropagation()}
-                className={cn(
-                  'absolute bottom-2 left-2 inline-flex items-center justify-center size-5 rounded-full bg-white/70 dark:bg-slate-900/60 backdrop-blur-sm shadow-sm z-10',
-                  isTaskEngineMode
-                    ? 'text-amber-600 dark:text-amber-300 ring-1 ring-amber-500/35'
-                    : 'text-cyan-600 dark:text-cyan-300 ring-1 ring-cyan-500/30',
-                )}
-              >
-                <ModeBadgeIcon className="size-3" />
-              </span>
-            </TooltipTrigger>
-            {/* Negative sideOffset compensates for the global Tooltip Arrow's
-                rotate-45 bounding box, which Radix reserves as spacing. */}
-            <TooltipContent
-              side="top"
-              align="start"
-              sideOffset={-4}
-              collisionPadding={0}
-              className="text-xs"
-            >
-              {modeBadgeLabel}
-            </TooltipContent>
-          </Tooltip>
-        )}
-
-        {/* Delete — top-right, only on hover */}
-        <AnimatePresence>
-          {!confirmingDelete && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-            >
-              <Button
-                size="icon"
-                variant="ghost"
-                className="absolute top-2 right-2 size-7 opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 hover:bg-destructive/80 text-white hover:text-white backdrop-blur-sm rounded-full"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(classroom.id, e);
-                }}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-              {!pendingCourse && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="absolute top-2 right-11 size-7 opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 hover:bg-black/50 text-white hover:text-white backdrop-blur-sm rounded-full"
-                  onClick={startRename}
-                >
-                  <Pencil className="size-3.5" />
-                </Button>
-              )}
-              {overlay}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Inline delete confirmation overlay */}
-        <AnimatePresence>
-          {confirmingDelete && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/50 backdrop-blur-[6px]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <span className="text-[13px] font-medium text-white/90">
-                {t('classroom.deleteConfirmTitle')}?
-              </span>
-              <div className="flex gap-2">
-                <button
-                  className="px-3.5 py-1 rounded-lg text-[12px] font-medium bg-white/15 text-white/80 hover:bg-white/25 backdrop-blur-sm transition-colors"
-                  onClick={onCancelDelete}
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  className="px-3.5 py-1 rounded-lg text-[12px] font-medium bg-red-500/90 text-white hover:bg-red-500 transition-colors"
-                  onClick={onConfirmDelete}
-                >
-                  {t('classroom.delete')}
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Info — outside the thumbnail */}
-      <div className="mt-2.5 px-1 flex items-center gap-2">
-        {runStatus ? (
-          <CourseRunStatusLabel status={runStatus} />
-        ) : (
-          <span className="shrink-0 inline-flex items-center rounded-full bg-violet-100 dark:bg-violet-900/30 px-2 py-0.5 text-[11px] font-medium text-violet-600 dark:text-violet-400">
-            {classroom.sceneCount} {t('classroom.slides')} · {formatDate(classroom.updatedAt)}
-          </span>
-        )}
-        {editing ? (
-          <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
-            <input
-              ref={nameInputRef}
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitRename();
-                if (e.key === 'Escape') setEditing(false);
-              }}
-              onBlur={commitRename}
-              maxLength={100}
-              placeholder={t('classroom.renamePlaceholder')}
-              className="w-full bg-transparent border-b border-violet-400/60 text-[15px] font-medium text-foreground/90 outline-none placeholder:text-muted-foreground/40"
-            />
-          </div>
-        ) : (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <p
-                className="font-medium text-[15px] truncate text-foreground/90 min-w-0 cursor-text"
-                onDoubleClick={pendingCourse ? undefined : startRename}
-              >
-                {classroom.name}
-              </p>
-            </TooltipTrigger>
-            <TooltipContent
-              side="bottom"
-              sideOffset={4}
-              className="!max-w-[min(90vw,32rem)] break-words whitespace-normal"
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="break-all">{classroom.name}</span>
-                <button
-                  className="shrink-0 p-0.5 rounded hover:bg-foreground/10 transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigator.clipboard.writeText(classroom.name);
-                    toast.success(t('classroom.nameCopied'));
-                  }}
-                >
-                  <Copy className="size-3 opacity-60" />
-                </button>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-    </div>
-  );
 }
 
 export default function Page() {

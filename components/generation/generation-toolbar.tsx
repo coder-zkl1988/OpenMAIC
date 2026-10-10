@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useRef, useMemo, useEffect, type ReactNode } from 'react';
 import {
   AlertCircle,
   Bot,
@@ -104,6 +104,11 @@ export interface GenerationToolbarProps {
    * when no usable LLM provider exists (#580: the homepage must never dead-end).
    */
   onSettingsOpen?: (section: SettingsSection) => void;
+  /**
+   * Extra controls rendered at the end of the same wrapping cluster (the home
+   * passes its 深度交互 toggle here, so the order is model → 📎 → toggle).
+   */
+  trailing?: ReactNode;
 }
 
 // ─── Component ───────────────────────────────────────────────
@@ -115,6 +120,7 @@ export function GenerationToolbar({
   onPdfError,
   materialsLocked = false,
   onSettingsOpen,
+  trailing,
 }: GenerationToolbarProps) {
   const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -251,14 +257,15 @@ export function GenerationToolbar({
     [courseMaterials],
   );
 
-  // ─── Pill button helper ─────────────────────────────
+  // ─── Pill button helper (every toolbar control is 32px tall) ───
   const pillCls =
-    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all cursor-pointer select-none whitespace-nowrap border';
-  const pillMuted = `${pillCls} border-border/50 text-muted-foreground/70 hover:text-foreground hover:bg-muted/60`;
-  const pillActive = `${pillCls} border-violet-200/60 dark:border-violet-700/50 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300`;
+    'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-all cursor-pointer select-none whitespace-nowrap border';
+  const pillMuted =
+    'inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-background text-icon transition-all cursor-pointer select-none hover:bg-subtle hover:text-fg';
+  const pillActive = `${pillCls} border-primary-3 bg-primary-1 text-primary-7 dark:border-accent-line dark:bg-accent-soft dark:text-accent-text`;
 
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div className="flex flex-wrap items-center gap-1.5">
       {/* ── Course model: pill (picker popover), or Set-up CTA (#580) ── */}
       {llmEditable ? (
         // Editable: the picker, with nothing selected while `llm` resolves to
@@ -278,7 +285,7 @@ export function GenerationToolbar({
           }
           placeholder={t('toolbar.pickModel')}
           ariaLabel={llm ? `${currentProviderName} / ${modelId}` : t('toolbar.pickModel')}
-          className="h-8 w-auto max-w-[260px] gap-1.5 rounded-full px-2.5 text-xs"
+          variant="pill"
           t={t}
         />
       ) : (
@@ -289,11 +296,11 @@ export function GenerationToolbar({
           <Tooltip>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={() => onSettingsOpen(setupSection)}
                 className={cn(
                   pillCls,
-                  'text-amber-600 dark:text-amber-400 animate-pulse',
-                  'bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50',
+                  'border-warning/25 bg-warning-soft text-warning animate-pulse hover:border-warning/50',
                 )}
               >
                 <Bot className="size-3.5" />
@@ -309,7 +316,7 @@ export function GenerationToolbar({
       <Popover>
         <PopoverTrigger asChild>
           {courseMaterials.length > 0 ? (
-            <button className={pillActive} data-testid="course-material-pill">
+            <button type="button" className={pillActive} data-testid="course-material-pill">
               {courseMaterials.some((item) => item.status === 'failed') ? (
                 <AlertCircle className="size-3.5 text-destructive" />
               ) : courseMaterials.some(
@@ -326,7 +333,12 @@ export function GenerationToolbar({
               </span>
             </button>
           ) : (
-            <button className={pillMuted} data-testid="course-material-button">
+            <button
+              type="button"
+              className={pillMuted}
+              data-testid="course-material-button"
+              aria-label={t('toolbar.courseMaterialUpload')}
+            >
               <Paperclip className="size-3.5" />
             </button>
           )}
@@ -460,6 +472,8 @@ export function GenerationToolbar({
           </div>
         </PopoverContent>
       </Popover>
+
+      {trailing}
     </div>
   );
 }

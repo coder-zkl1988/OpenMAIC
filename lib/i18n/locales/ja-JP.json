@@ -7,7 +7,8 @@
     "errorPrefix": "エラー：",
     "loadingClassroom": "教室を読み込み中...",
     "retry": "再試行",
-    "close": "閉じる"
+    "close": "閉じる",
+    "switchLanguage": "言語を切り替え"
   },
   "home": {
     "slogan": "マルチエージェント対話型教室で生成的に学ぶ",
@@ -1097,6 +1098,7 @@
     "deleteFolderTitle": "フォルダ「{{name}}」を削除",
     "deleteFolderEmptyDesc": "このフォルダは空です。削除後は復元できません。",
     "deleteFolderUngroupDesc": "コースは「マイコース」に残り、未分類になります。",
+    "moreActions": "その他の操作",
     "moveToFolder": "フォルダに移動",
     "moveToFolderLabel": "フォルダに移動",
     "ungrouped": "未分類",
@@ -1128,6 +1130,7 @@
     "formatListSeparator": "、",
     "generateFailed": "教室の生成に失敗しました。もう一度お試しください",
     "requirementPlaceholder": "学びたいことを自由に入力してください。例えば：\n「Pythonをゼロから30分で教えて」\n「フーリエ変換をホワイトボードで解説して」\n「ボードゲーム『アバロン』の遊び方」",
+    "requirementLabel": "学びたい内容",
     "requirementRequired": "コースの要件を入力してください",
     "fileTooLarge": "ファイルが大きすぎます。50MB以下のファイルを選択してください",
     "courseMaterialCountLimit": "教材ファイルは最大5件までアップロードできます",
@@ -1262,6 +1265,7 @@
     "language": "言語",
     "languageDesc": "インターフェースの言語を選択",
     "theme": "テーマ",
+    "themeWithCurrent": "テーマ：{{theme}}",
     "themeDesc": "テーマモードを選択（ライト／ダーク／システム）",
     "themeOptions": {
       "light": "ライト",
@@ -2319,7 +2323,8 @@
     "avatarHint": "アバターは教室のディスカッションやチャットに表示されます",
     "fileTooLarge": "画像が大きすぎます。5MB以下のファイルを選択してください",
     "invalidFileType": "画像ファイルを選択してください",
-    "editTooltip": "クリックしてプロフィールを編集"
+    "editTooltip": "クリックしてプロフィールを編集",
+    "edit": "プロフィールを編集"
   },
   "media": {
     "imageCapability": "画像生成",

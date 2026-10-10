@@ -7,7 +7,8 @@
     "errorPrefix": "Lỗi: ",
     "loadingClassroom": "Đang tải lớp học...",
     "retry": "Thử lại",
-    "close": "Đóng"
+    "close": "Đóng",
+    "switchLanguage": "Đổi ngôn ngữ"
   },
   "home": {
     "slogan": "Học tập sinh tạo trong lớp học tương tác đa tác nhân",
@@ -1097,6 +1098,7 @@
     "deleteFolderTitle": "Xóa thư mục \"{{name}}\"",
     "deleteFolderEmptyDesc": "Thư mục này đang trống. Đã xóa thì không khôi phục được.",
     "deleteFolderUngroupDesc": "Các bài học vẫn còn trong thư viện, chỉ là không thuộc thư mục nào.",
+    "moreActions": "Thêm hành động",
     "moveToFolder": "Chuyển vào thư mục",
     "moveToFolderLabel": "Chuyển tới…",
     "ungrouped": "Chưa phân nhóm",
@@ -1128,6 +1130,7 @@
     "formatListSeparator": ", ",
     "generateFailed": "Không tạo được lớp học, vui lòng thử lại",
     "requirementPlaceholder": "Hãy nói bạn muốn học gì, ví dụ\n\"Dạy tôi Python từ đầu trong 30 phút\"\n\"Giảng phép biến đổi Fourier trên bảng\"\n\"Cách chơi board game Avalon\"",
+    "requirementLabel": "Nhu cầu học tập",
     "requirementRequired": "Vui lòng nhập yêu cầu về bài học",
     "fileTooLarge": "Tệp quá lớn. Vui lòng chọn tệp nhỏ hơn 50MB",
     "courseMaterialCountLimit": "Bạn chỉ tải lên được tối đa 5 tệp tài liệu",
@@ -1262,6 +1265,7 @@
     "language": "Ngôn ngữ",
     "languageDesc": "Chọn ngôn ngữ giao diện",
     "theme": "Giao diện",
+    "themeWithCurrent": "Giao diện: {{theme}}",
     "themeDesc": "Chọn chế độ hiển thị (Sáng / Tối / Theo hệ thống)",
     "themeOptions": {
       "light": "Sáng",
@@ -2319,7 +2323,8 @@
     "avatarHint": "Ảnh đại diện của bạn sẽ hiện trong phần thảo luận và trò chuyện của lớp",
     "fileTooLarge": "Ảnh quá lớn — vui lòng chọn ảnh dưới 5 MB",
     "invalidFileType": "Vui lòng chọn một tệp ảnh",
-    "editTooltip": "Bấm để sửa trang cá nhân"
+    "editTooltip": "Bấm để sửa trang cá nhân",
+    "edit": "Chỉnh sửa hồ sơ"
   },
   "media": {
     "imageCapability": "Tạo ảnh",
