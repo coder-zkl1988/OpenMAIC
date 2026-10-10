@@ -41,10 +41,13 @@
      @desktop/classroom:      ≥ 1200px  desktop chrome
      @max-desktop/classroom:  < 1200px  tablet landscape and stacked (touch)
      @max-tablet/classroom:   <  900px  stacked
-   The JS twin is lib/hooks/use-classroom-layout.ts; keep both in sync. A
+     @max-phone/classroom:    <  600px  phone
+   The JS twin is lib/hooks/use-classroom-layout.ts; keep both in sync (it also
+   stacks a portrait root below 1200px, which a width query cannot see). A
    desktop threshold above ~1265px would flip the 1280px e2e viewport (minus
    the scrollbar gutter) into the tablet layout. */
 @theme {
+  --container-phone: 37.5rem;
   --container-tablet: 56.25rem;
   --container-desktop: 75rem;
 }

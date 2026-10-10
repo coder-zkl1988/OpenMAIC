@@ -122,7 +122,27 @@ interface ParticipantsProps {
   readonly discussionAgentId?: string | null;
   /** The learner's question waits for the current line (举手中) */
   readonly userHandRaised?: boolean;
+  /**
+   * `panel` (desktop / tablet landscape): the '5 人在线' line over the grid.
+   * `stacked` (TabletPortrait.dc.html): no count (the 互动 tab carries it), a
+   * row of 60px tiles with 44px avatars. `phone` (ClassroomPhone.dc.html): a
+   * five-column grid of 36px avatars with names; the status is the ring and
+   * the badge (and a screen-reader label).
+   */
+  readonly layout?: 'panel' | 'stacked' | 'phone';
 }
+
+/** The avatar and its badges per layout */
+const AVATAR_SIZE = {
+  panel: 'size-11 @max-desktop/classroom:size-10',
+  stacked: 'size-11',
+  phone: 'size-9',
+} as const;
+const BADGE_SIZE = {
+  panel: 'size-[18px]',
+  stacked: 'size-[18px]',
+  phone: 'size-[15px]',
+} as const;
 
 /**
  * The interaction panel's participants block (Classroom.dc.html): '5 人在线'
@@ -130,6 +150,7 @@ interface ParticipantsProps {
  * desktop width, TabletLandscape.dc.html) with name and status — 讲解中 for
  * the speaker, 想发言 for the agent offering a discussion, 举手中 for the
  * learner's raised hand, else the role. Hovering an agent shows its persona.
+ * The stacked and phone layouts drop the count line (see `layout`).
  */
 export function Participants({
   participants,
@@ -139,8 +160,11 @@ export function Participants({
   thinkingState,
   discussionAgentId,
   userHandRaised,
+  layout = 'panel',
 }: ParticipantsProps) {
   const { t } = useI18n();
+  const phone = layout === 'phone';
+  const avatarSize = AVATAR_SIZE[layout];
   const onlineCount = participants.filter((p) => p.isOnline).length;
   const speakingId = resolveSpeakingParticipantId({
     playbackView,
@@ -151,6 +175,9 @@ export function Participants({
   const { visible, overflow } = layoutParticipantGrid(participants);
   // Intentionally non-reactive: agent metadata is immutable during a classroom session
   const getAgentConfig = (id: string) => useAgentRegistry.getState().getAgent(id);
+
+  // A stacked row lays out fixed 60px tiles; the grids share the width
+  const tileClass = layout === 'stacked' ? 'w-[60px] shrink-0' : 'min-w-0';
 
   const describe = (participant: Participant) => {
     const status = resolveParticipantStatus(participant, {
@@ -187,10 +214,11 @@ export function Participants({
     const isLoading =
       thinkingState?.stage === 'agent_loading' && thinkingState.agentId === participant.id;
     return (
-      <span className="relative size-11 shrink-0 @max-desktop/classroom:size-10">
+      <span className={cn('relative shrink-0', avatarSize)}>
         <span
           className={cn(
-            'block size-11 @max-desktop/classroom:size-10 overflow-hidden rounded-full border-2 border-background bg-subtle',
+            'block overflow-hidden rounded-full border-2 border-background bg-subtle',
+            avatarSize,
             status === 'speaking'
               ? 'ring-2 ring-primary'
               : status === 'wantsToSpeak' || status === 'handRaised'
@@ -201,7 +229,7 @@ export function Participants({
           <AvatarDisplay
             src={participant.avatar || DEFAULT_USER_AVATAR}
             alt=""
-            className="text-xl"
+            className={phone ? 'text-base' : 'text-xl'}
           />
         </span>
         {isLoading && (
@@ -214,7 +242,10 @@ export function Participants({
         {status === 'speaking' && (
           <span
             aria-hidden="true"
-            className="absolute -right-[3px] -bottom-[3px] flex size-[18px] items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground"
+            className={cn(
+              'absolute -right-[3px] -bottom-[3px] flex items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground',
+              BADGE_SIZE[layout],
+            )}
           >
             <SpeakingBars />
           </span>
@@ -222,9 +253,12 @@ export function Participants({
         {(status === 'wantsToSpeak' || status === 'handRaised') && (
           <span
             aria-hidden="true"
-            className="absolute -right-[3px] -top-[3px] flex size-[18px] items-center justify-center rounded-full border-2 border-background bg-amber-500 text-white"
+            className={cn(
+              'absolute -right-[3px] -top-[3px] flex items-center justify-center rounded-full border-2 border-background bg-amber-500 text-white',
+              BADGE_SIZE[layout],
+            )}
           >
-            <Hand className="size-[9px] stroke-[3]" />
+            <Hand className={cn('stroke-[3]', phone ? 'size-[7px]' : 'size-[9px]')} />
           </span>
         )}
       </span>
@@ -247,18 +281,29 @@ export function Participants({
         data-testid="participant-tile"
         data-participant-id={participant.id}
         data-status={status}
-        className="flex min-w-0 flex-col items-center gap-1"
+        className={cn('flex min-w-0 flex-col items-center', phone ? 'gap-[3px]' : 'gap-1')}
       >
         {avatar(participant, status)}
-        <span className="max-w-full truncate text-xs font-semibold text-fg">
+        <span
+          className={cn(
+            'max-w-full truncate font-semibold text-fg',
+            phone ? 'text-[11px]' : 'text-xs',
+          )}
+        >
           {participant.name}
         </span>
-        {statusText(status, label)}
+        {/* The phone grid has no room for the line: the ring and badge show it */}
+        {phone ? <span className="sr-only">{label}</span> : statusText(status, label)}
       </div>
     );
-    if (participant.role === 'user') return <li key={participant.id}>{body}</li>;
+    if (participant.role === 'user')
+      return (
+        <li key={participant.id} className={tileClass}>
+          {body}
+        </li>
+      );
     return (
-      <li key={participant.id} className="min-w-0">
+      <li key={participant.id} className={tileClass}>
         <HoverCard openDelay={300} closeDelay={100}>
           <HoverCardTrigger asChild>
             <div className="cursor-default">{body}</div>
@@ -296,7 +341,7 @@ export function Participants({
   };
 
   const overflowTile = overflow.length > 0 && (
-    <li key="overflow" className="min-w-0">
+    <li key="overflow" className={tileClass}>
       <Popover>
         <PopoverTrigger asChild>
           <button
@@ -307,7 +352,8 @@ export function Participants({
           >
             <span
               className={cn(
-                'flex size-11 @max-desktop/classroom:size-10 items-center justify-center rounded-full bg-subtle text-[13px] font-semibold text-fg-secondary ring-1 ring-line',
+                'flex items-center justify-center rounded-full bg-subtle text-[13px] font-semibold text-fg-secondary ring-1 ring-line',
+                avatarSize,
                 // Someone hidden in the list is speaking or wants to: hint at it
                 overflow.some((p) => describe(p).status !== 'role') && 'ring-2 ring-amber-500',
               )}
@@ -350,16 +396,32 @@ export function Participants({
     <section
       aria-label={t('stage.participants.label')}
       data-testid="participants"
-      className="shrink-0 border-b border-line px-4 py-3.5"
+      data-layout={layout}
+      className={cn(
+        'shrink-0 border-b border-line',
+        layout === 'panel' && 'px-4 py-3.5',
+        layout === 'stacked' && 'px-5 pt-2.5 pb-3',
+        phone && 'px-3 pt-1.5 pb-2.5',
+      )}
     >
-      <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-fg-secondary">
-        <span
-          aria-hidden="true"
-          className="size-2 rounded-full bg-success ring-[3px] ring-success-soft"
-        />
-        {t('stage.participants.online', { count: onlineCount })}
-      </div>
-      <ul className="grid grid-cols-5 gap-1">
+      {/* Stacked layouts show the count on the 互动 tab instead */}
+      {layout === 'panel' && (
+        <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-fg-secondary">
+          <span
+            aria-hidden="true"
+            className="size-2 rounded-full bg-success ring-[3px] ring-success-soft"
+          />
+          {t('stage.participants.online', { count: onlineCount })}
+        </div>
+      )}
+      <ul
+        className={cn(
+          layout === 'stacked'
+            ? // Five 60px tiles at most (380px): the stacked layout is ≥ 600px wide
+              'flex gap-5'
+            : cn('grid grid-cols-5', phone ? 'gap-0.5' : 'gap-1'),
+        )}
+      >
         {agentTiles.map(tile)}
         {overflowTile}
         {userTile && tile(userTile)}

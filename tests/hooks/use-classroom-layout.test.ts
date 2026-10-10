@@ -4,7 +4,8 @@
  * The classroom's responsive thresholds (owner decision): desktop from 1200px
  * of classroom-root width (the 1280px e2e viewport minus the scrollbar gutter
  * and Electron's default 1440 stay desktop), tablet landscape 900–1199
- * (Electron's minimum 1024 lands here), stacked below 900 or in portrait.
+ * (Electron's minimum 1024 lands here), stacked below 900 or in portrait,
+ * and the phone variant of the stack below 600.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,7 +14,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CLASSROOM_DESKTOP_MIN_WIDTH,
+  CLASSROOM_PHONE_MAX_WIDTH,
   CLASSROOM_TABLET_MIN_WIDTH,
+  isStackedClassroomLayout,
   isTouchClassroomLayout,
   resolveClassroomLayout,
   useClassroomLayout,
@@ -44,10 +47,18 @@ describe('resolveClassroomLayout', () => {
 
   it('stacks below 900px and in portrait below desktop width', () => {
     expect(resolveClassroomLayout(899, 600)).toBe('stacked');
-    // TabletPortrait.dc.html and ClassroomPhone.dc.html
+    // TabletPortrait.dc.html
     expect(resolveClassroomLayout(820, 1180)).toBe('stacked');
-    expect(resolveClassroomLayout(390, 844)).toBe('stacked');
     expect(resolveClassroomLayout(1000, 1100)).toBe('stacked');
+    expect(resolveClassroomLayout(600, 900)).toBe('stacked');
+    // A landscape phone is wide enough for the tablet-portrait stack
+    expect(resolveClassroomLayout(844, 390)).toBe('stacked');
+  });
+
+  it('is the phone stack below 600px (ClassroomPhone.dc.html)', () => {
+    expect(resolveClassroomLayout(390, 844)).toBe('phone');
+    expect(resolveClassroomLayout(599, 900)).toBe('phone');
+    expect(resolveClassroomLayout(320)).toBe('phone');
   });
 
   it('falls back to desktop before layout (zero or unknown width)', () => {
@@ -59,12 +70,21 @@ describe('resolveClassroomLayout', () => {
     expect(isTouchClassroomLayout('desktop')).toBe(false);
     expect(isTouchClassroomLayout('tablet')).toBe(true);
     expect(isTouchClassroomLayout('stacked')).toBe(true);
+    expect(isTouchClassroomLayout('phone')).toBe(true);
+  });
+
+  it('stacks the interaction section only for tablet portrait and phone', () => {
+    expect(isStackedClassroomLayout('desktop')).toBe(false);
+    expect(isStackedClassroomLayout('tablet')).toBe(false);
+    expect(isStackedClassroomLayout('stacked')).toBe(true);
+    expect(isStackedClassroomLayout('phone')).toBe(true);
   });
 
   it('matches the CSS container sizes in app/globals.css', () => {
     const css = readFileSync(join(process.cwd(), 'app/globals.css'), 'utf8');
     expect(css).toContain(`--container-desktop: ${CLASSROOM_DESKTOP_MIN_WIDTH / 16}rem;`);
     expect(css).toContain(`--container-tablet: ${CLASSROOM_TABLET_MIN_WIDTH / 16}rem;`);
+    expect(css).toContain(`--container-phone: ${CLASSROOM_PHONE_MAX_WIDTH / 16}rem;`);
   });
 
   it('puts the classroom container on the ClassroomSurface root', () => {
@@ -140,6 +160,8 @@ describe('useClassroomLayoutObserver', () => {
     expect(seen.at(-1)).toBe('desktop');
     resize(820, 1180);
     expect(seen.at(-1)).toBe('stacked');
+    resize(390, 844);
+    expect(seen.at(-1)).toBe('phone');
 
     act(() => root.unmount());
     root = createRoot(container);

@@ -144,14 +144,15 @@ export function CaptionStrip({
       className={cn(
         // Two 24px lines + the name row + padding: a fixed height, so the
         // contain-fitted slide above never resizes while the text changes.
-        // Tablet (TabletLandscape.dc.html) tightens the inset and the avatar.
-        'flex h-[92px] w-full shrink-0 items-start gap-3 overflow-hidden rounded-[14px] border border-line bg-background px-4 py-3 @max-desktop/classroom:px-3.5',
+        // Tablet (TabletLandscape.dc.html) tightens the inset and the avatar,
+        // the phone (ClassroomPhone.dc.html) a little more.
+        'flex h-[92px] w-full shrink-0 items-start gap-3 overflow-hidden rounded-[14px] border border-line bg-background px-4 py-3 @max-desktop/classroom:px-3.5 @max-phone/classroom:gap-2.5 @max-phone/classroom:px-3 @max-phone/classroom:py-2.5',
         className,
       )}
     >
       <span
         className={cn(
-          'relative size-9 shrink-0 overflow-hidden rounded-full @max-desktop/classroom:size-8',
+          'relative size-9 shrink-0 overflow-hidden rounded-full @max-desktop/classroom:size-8 @max-phone/classroom:size-7',
           // The primary ring marks a voice in progress; at rest (paused, or
           // counting down to the lecture) the avatar gets a plain hairline
           caption.status === 'paused' || resumeSeconds !== undefined
@@ -192,7 +193,10 @@ export function CaptionStrip({
         {showDots ? (
           <LoadingDots />
         ) : isAnsweringYou ? (
-          <p data-testid="caption-text" className="text-[15px] leading-[1.6] text-fg-tertiary">
+          <p
+            data-testid="caption-text"
+            className="text-[15px] leading-[1.6] text-fg-tertiary @max-phone/classroom:text-sm"
+          >
             {t('stage.caption.answeringYou')}
           </p>
         ) : (
@@ -201,7 +205,7 @@ export function CaptionStrip({
             data-testid="caption-text"
             data-overflow={followTail ? 'tail' : 'clamp'}
             className={cn(
-              'whitespace-pre-wrap break-words text-[15px] leading-[1.6]',
+              'whitespace-pre-wrap break-words text-[15px] leading-[1.6] @max-phone/classroom:text-sm',
               isWaitingForLearner ? 'text-fg-tertiary' : 'text-fg',
               // 2 × 1.6em: the latest two lines stay in view as text streams in
               followTail ? 'max-h-[3.2em] overflow-hidden' : 'line-clamp-2',

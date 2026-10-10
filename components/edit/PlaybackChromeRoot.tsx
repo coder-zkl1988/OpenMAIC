@@ -19,7 +19,12 @@ import { PENDING_SCENE_ID } from '@/lib/store/stage';
 import { useCanvasStore } from '@/lib/store/canvas';
 import { useSettingsStore } from '@/lib/store/settings';
 import { useI18n } from '@/lib/hooks/use-i18n';
-import { isTouchClassroomLayout, useClassroomLayout } from '@/lib/hooks/use-classroom-layout';
+import {
+  isStackedClassroomLayout,
+  isTouchClassroomLayout,
+  useClassroomLayout,
+} from '@/lib/hooks/use-classroom-layout';
+import { useVisualViewportInset } from '@/lib/hooks/use-visual-viewport-inset';
 import { SceneSidebar } from '@/components/stage/scene-sidebar';
 import { Header } from '@/components/header';
 import { CanvasArea } from '@/components/canvas/canvas-area';
@@ -264,12 +269,17 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const setChatAreaWidth = useSettingsStore((s) => s.setChatAreaWidth);
     const chatAreaCollapsed = useSettingsStore((s) => s.chatAreaCollapsed);
     const setChatAreaCollapsed = useSettingsStore((s) => s.setChatAreaCollapsed);
-    // Below the classroom's desktop width (tablet landscape, and stacked until
-    // its own layout lands): the numbered scene rail, the compact header with
-    // the ⋯ menu, a fixed 320px panel and 44px touch targets. The rail ignores
-    // the persisted desktop `sidebarCollapsed`; its 展开场景栏 swaps in the
-    // full sidebar for this session only.
-    const touchLayout = isTouchClassroomLayout(useClassroomLayout());
+    // Below the classroom's desktop width: the compact header with the ⋯ menu
+    // and 44px touch targets. Tablet landscape keeps the numbered scene rail
+    // and a fixed 320px panel; the rail ignores the persisted desktop
+    // `sidebarCollapsed`, and its 展开场景栏 swaps in the full sidebar for this
+    // session only. The stacked layouts (tablet portrait, phone) put the
+    // interaction section under the stage, with the scenes in its 场景 tab;
+    // they ignore the persisted panel collapse too.
+    const classroomLayout = useClassroomLayout();
+    const touchLayout = isTouchClassroomLayout(classroomLayout);
+    const stackedLayout = isStackedClassroomLayout(classroomLayout);
+    const phoneLayout = classroomLayout === 'phone';
     const [railSidebarOpen, setRailSidebarOpen] = useState(false);
     const setTTSMuted = useSettingsStore((s) => s.setTTSMuted);
     const setTTSVolume = useSettingsStore((s) => s.setTTSVolume);
@@ -1963,11 +1973,16 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       setWhiteboardOpenManually(!whiteboardOpen);
     };
 
-    /** Bring the 互动 tab into view: a collapsed panel hides the only composer */
+    /**
+     * Bring the 互动 tab into view: a collapsed panel hides the only composer.
+     * The stacked section never collapses, so the desktop setting stays put.
+     */
     const revealInteraction = useCallback(() => {
-      if (useSettingsStore.getState().chatAreaCollapsed) setChatAreaCollapsed(false);
+      if (!stackedLayout && useSettingsStore.getState().chatAreaCollapsed) {
+        setChatAreaCollapsed(false);
+      }
       chatAreaRef.current?.switchToTab('interaction');
-    }, [setChatAreaCollapsed]);
+    }, [setChatAreaCollapsed, stackedLayout]);
 
     // The director handed the floor to the learner, or a raised hand was
     // called: show where to answer
@@ -2116,15 +2131,19 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             // Fullscreen keeps both panels collapsed (the dock replaces them)
             if (isPresenting) return;
             event.preventDefault();
-            // Touch layouts toggle between the rail and the full sidebar
-            if (touchLayout) setRailSidebarOpen((open) => !open);
+            // Stacked: the scenes live in the section's 场景 tab. Tablet
+            // landscape toggles between the rail and the full sidebar.
+            if (stackedLayout) chatAreaRef.current?.switchToTab('scenes');
+            else if (touchLayout) setRailSidebarOpen((open) => !open);
             else setSidebarCollapsed(!sidebarCollapsed);
             break;
           case 'c':
           case 'C':
             if (isPresenting) return;
             event.preventDefault();
-            setChatAreaCollapsed(!chatAreaCollapsed);
+            // The stacked section cannot collapse: C brings 互动 to the front
+            if (stackedLayout) chatAreaRef.current?.switchToTab('interaction');
+            else setChatAreaCollapsed(!chatAreaCollapsed);
             break;
           default:
             break;
@@ -2148,6 +2167,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       setTTSMuted,
       setTTSVolume,
       sidebarCollapsed,
+      stackedLayout,
       togglePresentation,
       touchLayout,
       ttsMuted,
@@ -2351,12 +2371,22 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const showHandStreamStatus =
       handState !== null || queuedQuestion?.status === 'queued' || streamCueSpeaker !== null;
 
+    // The stacked chrome is off while presenting: fullscreen shows the stage
+    // and the dock, whatever the classroom's width
+    const stackedChrome = stackedLayout && !isPresenting;
+    const keyboardInset = useVisualViewportInset(stackedChrome && mode === 'playback');
+    const onlineCount = participants.filter((p) => p.isOnline).length;
+
     const controlBar = (
       <ControlBar
         variant={isPresenting ? 'floating' : 'bar'}
         density={touchLayout ? 'touch' : 'default'}
         // Touch moves "n / m" into the header; keep it here when there is none
         showPageCounter={!touchLayout || isPresenting || hideHeader}
+        // Phone: speed / volume / auto-play fold into a ⋯ sheet, which has to
+        // portal into the fullscreen element while presenting
+        condensed={phoneLayout}
+        portalContainer={isPresenting ? stageRef.current : undefined}
         currentSceneIndex={currentSceneIndex}
         scenesCount={totalScenesCount}
         engineState={canvasEngineState}
@@ -2394,25 +2424,40 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         ref={stageRef}
         className={cn(
           'flex-1 flex overflow-hidden bg-page',
+          // Stacked: header, stage and control bar over the interaction section
+          stackedChrome && 'flex-col',
           isPresenting && !controlsVisible && 'cursor-none',
         )}
+        // Lift the section's composer above the on-screen keyboard
+        style={keyboardInset > 0 ? { paddingBottom: keyboardInset } : undefined}
       >
-        <SceneSidebar
-          {...(touchLayout
-            ? {
-                variant: railSidebarOpen ? 'sidebar' : 'rail',
-                density: 'touch',
-                collapsed: isPresenting,
-                onCollapseChange: (collapsed: boolean) => setRailSidebarOpen(!collapsed),
-              }
-            : { collapsed: sidebarCollapsed, onCollapseChange: setSidebarCollapsed })}
-          onSceneSelect={gatedSceneSwitch}
-          onRetryOutline={onRetryOutline}
-          isCourseComplete={isCourseComplete}
-        />
+        {/* Stacked layouts show the scenes in the section's 场景 tab instead.
+          The slot stays in place so the column and the panel never remount */}
+        {!stackedLayout && (
+          <SceneSidebar
+            {...(touchLayout
+              ? {
+                  variant: railSidebarOpen ? 'sidebar' : 'rail',
+                  density: 'touch',
+                  collapsed: isPresenting,
+                  onCollapseChange: (collapsed: boolean) => setRailSidebarOpen(!collapsed),
+                }
+              : { collapsed: sidebarCollapsed, onCollapseChange: setSidebarCollapsed })}
+            onSceneSelect={gatedSceneSwitch}
+            onRetryOutline={onRetryOutline}
+            isCourseComplete={isCourseComplete}
+          />
+        )}
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative">
+        {/* Main Content Area. Stacked, it is as tall as its content (the stage
+          sizes itself from the width) and gives way — the stage clips — only
+          when the section below would otherwise lose its composer */}
+        <div
+          className={cn(
+            'flex flex-col overflow-hidden min-w-0 relative',
+            stackedChrome ? 'min-h-0' : 'flex-1',
+          )}
+        >
           {/* Header — playback only. The Pro Switch fires `onEnterProMode`
             (passed by the parent Stage) which awaits our `teardown()`
             before the parent flips mode to 'edit'. */}
@@ -2430,7 +2475,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               hideBackControl={hideHeaderBackControl}
               hideGlobalControls={hideHeaderGlobalControls}
               hideCourseActions={hideHeaderCourseActions}
-              layout={touchLayout ? 'compact' : 'default'}
+              layout={phoneLayout ? 'phone' : touchLayout ? 'compact' : 'default'}
               sceneIndex={currentSceneIndex}
               sceneCount={totalScenesCount}
             />
@@ -2439,8 +2484,19 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           {/* Canvas Area — playback-only renderer. The parent Stage swaps
             this whole PlaybackChromeRoot out when entering edit mode, so
             no inline branching is needed here. */}
-          <div className="overflow-hidden relative flex-1 min-h-0 isolate" suppressHydrationWarning>
+          {/* Stacked, the canvas sizes itself from the width (see CanvasArea's
+            `stacked`) and may clip when the section below needs the room. One
+            element either way: entering fullscreen must not remount the scene */}
+          <div
+            className={
+              stackedChrome
+                ? 'overflow-hidden relative min-h-0 isolate'
+                : 'overflow-hidden relative flex-1 min-h-0 isolate'
+            }
+            suppressHydrationWarning
+          >
             <CanvasArea
+              stacked={stackedChrome ? (phoneLayout ? 'phone' : 'stacked') : undefined}
               currentScene={currentScene}
               mode={mode}
               engineState={canvasEngineState}
@@ -2517,7 +2573,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               <ChevronRight className="size-3 shrink-0" />
             </button>
           )}
-          {!isPresenting && chatAreaCollapsed && (
+          {!isPresenting && !stackedLayout && chatAreaCollapsed && (
             <button
               type="button"
               onClick={() => setChatAreaCollapsed(false)}
@@ -2589,14 +2645,33 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         {/* Chat Area — playback / autonomous always renders it here; Pro
           (edit) mode unmounts this whole PlaybackChromeRoot, so the
           edit branch has no chat. */}
-        <div ref={panelRef} className="flex shrink-0">
+        <div
+          ref={panelRef}
+          className={cn('flex', stackedChrome ? 'w-full flex-1 flex-col' : 'shrink-0')}
+        >
           <ChatArea
             ref={chatAreaRef}
             width={touchLayout ? TOUCH_PANEL_WIDTH : chatAreaWidth}
             onWidthChange={setChatAreaWidth}
             density={touchLayout ? 'touch' : 'default'}
-            collapsed={chatAreaCollapsed}
-            onCollapseChange={setChatAreaCollapsed}
+            layout={stackedLayout ? (phoneLayout ? 'phone' : 'stacked') : 'panel'}
+            // The stacked section ignores the persisted collapse; fullscreen hides it
+            collapsed={stackedLayout ? isPresenting : chatAreaCollapsed}
+            onCollapseChange={stackedLayout ? undefined : setChatAreaCollapsed}
+            onlineCount={stackedLayout ? onlineCount : undefined}
+            // 场景: the sidebar's titled thumbnails as a two-column grid
+            scenes={
+              stackedLayout ? (
+                <SceneSidebar
+                  variant="grid"
+                  collapsed={false}
+                  onCollapseChange={() => undefined}
+                  onSceneSelect={gatedSceneSwitch}
+                  onRetryOutline={onRetryOutline}
+                  isCourseComplete={isCourseComplete}
+                />
+              ) : undefined
+            }
             activeBubbleId={activeBubbleId}
             onActiveBubble={(id) => setActiveBubbleId(id)}
             currentSceneId={currentSceneId}
@@ -2686,6 +2761,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                     (handState === 'called' ? deferredDiscussion?.agentId : undefined)
                   }
                   userHandRaised={queuedQuestion?.status === 'queued' || handState !== null}
+                  layout={phoneLayout ? 'phone' : stackedLayout ? 'stacked' : 'panel'}
                 />
               ) : undefined
             }
@@ -2819,7 +2895,19 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               onUserMessage={showPresentationUserMessage}
               onSent={closePresentationComposer}
               density={touchLayout ? 'touch' : 'default'}
-              className={isPresenting ? 'border-t-0 bg-transparent p-0' : undefined}
+              layout={
+                isPresenting ? 'panel' : phoneLayout ? 'phone' : stackedLayout ? 'stacked' : 'panel'
+              }
+              className={
+                isPresenting
+                  ? 'border-t-0 bg-transparent p-0'
+                  : // TabletPortrait 10/16/16, ClassroomPhone 8/12/12
+                    phoneLayout
+                    ? 'px-3 pt-2 pb-3'
+                    : stackedLayout
+                      ? 'px-4 pt-2.5 pb-4'
+                      : undefined
+              }
             />,
             composerHost,
           )}

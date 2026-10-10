@@ -279,7 +279,8 @@
     },
     "tabs": {
       "lecture": "Anotações",
-      "chat": "Interação"
+      "chat": "Interação",
+      "scenes": "Cenas"
     },
     "lectureNotes": {
       "empty": "As anotações aparecerão aqui após a reprodução da aula",
@@ -774,6 +775,7 @@
     "pauseAnswer": "Pausar resposta",
     "resumeAnswer": "Retomar resposta",
     "playbackSpeed": "Velocidade de reprodução",
+    "playbackMenu": "Mais: velocidade de reprodução, volume, reprodução automática",
     "mute": "Silenciar",
     "unmute": "Ativar som",
     "volume": "Volume",

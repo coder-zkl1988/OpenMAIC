@@ -23,7 +23,12 @@ import { useInWorkbenchPanel } from '@/lib/workbench/panel-context';
 import type { PPTElement } from '@openmaic/dsl';
 import type { WhiteboardElementReference } from '@/lib/types/chat';
 import { SlideElementPickOverlay } from '@/components/canvas/slide-element-pick-overlay';
-import { StageColumn } from '@/components/classroom/stage-column';
+import {
+  CAPTION_HEIGHT,
+  CHIP_BOARD_EXTRA_HEIGHT,
+  STAGE_GAP,
+  StageColumn,
+} from '@/components/classroom/stage-column';
 import { useCanvasStore } from '@/lib/store/canvas';
 
 interface CanvasAreaProps {
@@ -52,7 +57,24 @@ interface CanvasAreaProps {
   readonly onCancelElementPick?: () => void;
   /** The caption strip under the slide (the shell decides when it shows) */
   readonly caption?: ReactNode;
+  /**
+   * The stacked layouts (TabletPortrait / ClassroomPhone.dc.html): the stage
+   * sizes itself from the classroom's width (a full-width 16:9 slide plus the
+   * caption) instead of filling its host, so the interaction section below
+   * gets the rest. `phone` also swaps the board PiP for the 返回课件 chip.
+   */
+  readonly stacked?: 'stacked' | 'phone';
 }
+
+/** The stacked stage's insets: TabletPortrait 16 / 12, ClassroomPhone 12 / 8 */
+const STACKED_INSETS = {
+  stacked: { x: 16, bottom: 12 },
+  phone: { x: 12, bottom: 8 },
+} as const;
+/** Inset of the slim frame (interactive scenes, the workbench pane) */
+const FRAME_INSET = 8;
+/** The stage never takes more than this share of a short (landscape) screen */
+const STACKED_MAX_HEIGHT = '60dvh';
 
 export function CanvasArea({
   currentScene,
@@ -75,6 +97,7 @@ export function CanvasArea({
   onPickWhiteboardElement,
   onCancelElementPick,
   caption,
+  stacked,
 }: CanvasAreaProps) {
   const { t } = useI18n();
   const inWorkbenchPanel = useInWorkbenchPanel();
@@ -312,14 +335,38 @@ export function CanvasArea({
     );
   };
 
+  // Stacked: the slide's 16:9 at the classroom's full width (100cqw of the
+  // `classroom` container) less the insets, plus the caption row and the
+  // inset below; on a phone the board's extra chrome while it is open
+  const pipMode = stacked === 'phone' ? 'chip' : 'dock';
+  const stackedHeight = (() => {
+    if (!stacked) return undefined;
+    const inset = stageColumn
+      ? { x: STACKED_INSETS[stacked].x, y: STACKED_INSETS[stacked].bottom }
+      : { x: FRAME_INSET, y: FRAME_INSET * 2 };
+    const extra =
+      inset.y +
+      (caption ? CAPTION_HEIGHT + STAGE_GAP : 0) +
+      (pipMode === 'chip' && whiteboardOpen ? CHIP_BOARD_EXTRA_HEIGHT : 0);
+    return `min(calc((100cqw - ${inset.x * 2}px) * 9 / 16 + ${extra}px), ${STACKED_MAX_HEIGHT})`;
+  })();
+
   return (
     <div
       className={cn(
-        'w-full h-full flex flex-col items-center bg-page group/canvas',
-        // TabletLandscape.dc.html seats the slide right under the header
-        stageColumn ? 'px-4 pt-1 pb-4 @max-desktop/classroom:pt-0' : 'p-2',
+        'w-full flex flex-col items-center bg-page group/canvas',
+        !stacked && 'h-full',
+        stageColumn
+          ? stacked === 'phone'
+            ? 'px-3 pt-0 pb-2'
+            : stacked
+              ? 'px-4 pt-0 pb-3'
+              : // TabletLandscape.dc.html seats the slide right under the header
+                'px-4 pt-1 pb-4 @max-desktop/classroom:pt-0'
+          : 'p-2',
         isInteractive && 'bg-blue-50/30 dark:bg-blue-900/10',
       )}
+      style={stackedHeight ? { height: stackedHeight } : undefined}
     >
       <StageColumn
         className={cn(stageColumn && 'max-w-[1280px]')}
@@ -338,6 +385,7 @@ export function CanvasArea({
         board={board}
         caption={caption}
         floatingPip={!caption && !!isPresenting}
+        pipMode={pipMode}
       />
     </div>
   );

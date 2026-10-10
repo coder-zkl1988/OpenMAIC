@@ -105,11 +105,22 @@ export interface ComposerProps {
    * round buttons, 15px text
    */
   readonly density?: 'default' | 'touch';
+  /**
+   * The stacked layouts start the textarea lower: 64px on `stacked`
+   * (TabletPortrait.dc.html), 48px on `phone` (ClassroomPhone.dc.html)
+   */
+  readonly layout?: 'panel' | 'stacked' | 'phone';
   readonly className?: string;
 }
 
-// The textarea grows from three lines (72px) and scrolls past ~seven
-const TEXTAREA_MIN_HEIGHT_PX = 72;
+// The textarea grows from three lines (72px; fewer on the stacked layouts) and
+// scrolls past ~seven
+const TEXTAREA_MIN_HEIGHT_PX = { panel: 72, stacked: 64, phone: 48 } as const;
+const TEXTAREA_MIN_HEIGHT_CLASS = {
+  panel: 'min-h-[72px]',
+  stacked: 'min-h-16',
+  phone: 'min-h-12',
+} as const;
 export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 160;
 
 // The recording row's bars; the reduced-motion fallback is a static scale
@@ -168,6 +179,7 @@ export function Composer({
   onUserMessage,
   onSent,
   density = 'default',
+  layout = 'panel',
   className,
 }: ComposerProps) {
   const { t } = useI18n();
@@ -339,10 +351,10 @@ export function Composer({
     if (!textarea) return;
     textarea.style.height = 'auto';
     textarea.style.height = `${Math.min(
-      Math.max(textarea.scrollHeight, TEXTAREA_MIN_HEIGHT_PX),
+      Math.max(textarea.scrollHeight, TEXTAREA_MIN_HEIGHT_PX[layout]),
       COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
     )}px`;
-  }, [controller.draft, isRecordingSurface]);
+  }, [controller.draft, isRecordingSurface, layout]);
 
   useImperativeHandle(
     composerRef,
@@ -472,7 +484,9 @@ export function Composer({
             would keep focus while turning into a different control) */}
           {isRecordingSurface ? (
             <Fragment key="voice">
-              <div className="flex min-h-[72px] items-center gap-2.5 pr-1">
+              <div
+                className={cn('flex items-center gap-2.5 pr-1', TEXTAREA_MIN_HEIGHT_CLASS[layout])}
+              >
                 {voice.isProcessing ? (
                   <Loader2
                     aria-hidden="true"
@@ -549,7 +563,8 @@ export function Composer({
                   controller.textareaProps.onKeyDown(event);
                 }}
                 className={cn(
-                  'block min-h-[72px] w-full resize-none overflow-y-auto border-0 bg-transparent pt-0.5 pr-1 leading-[1.6] text-fg shadow-none outline-none placeholder:text-fg-tertiary focus:ring-0',
+                  'block w-full resize-none overflow-y-auto border-0 bg-transparent pt-0.5 pr-1 leading-[1.6] text-fg shadow-none outline-none placeholder:text-fg-tertiary focus:ring-0',
+                  TEXTAREA_MIN_HEIGHT_CLASS[layout],
                   touch ? 'text-[15px]' : 'text-sm',
                 )}
                 style={{ maxHeight: COMPOSER_TEXTAREA_MAX_HEIGHT_PX }}

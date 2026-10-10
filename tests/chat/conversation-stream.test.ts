@@ -183,6 +183,23 @@ describe('ConversationStream', () => {
     expect(alone).not.toContain('chat.noConversations');
   });
 
+  it('tightens its spacing on the stacked layouts (TabletPortrait / ClassroomPhone)', () => {
+    const html = (density?: 'panel' | 'stacked' | 'phone') =>
+      renderToStaticMarkup(
+        createElement(ConversationStream, {
+          sessions: [session('qa', { createdAt: 1, sceneId: 'scene-a' })],
+          scenes,
+          isStreaming: false,
+          onEndSession: vi.fn(),
+          onContinueSession: vi.fn(),
+          density,
+        }),
+      );
+    expect(html()).toContain('justify-end gap-3 p-4');
+    expect(html('stacked')).toContain('justify-end gap-2.5 px-4 py-3');
+    expect(html('phone')).toContain('justify-end gap-2 px-3 py-2.5');
+  });
+
   it('renders no per-session collapse toggle', () => {
     const html = render([session('qa', { createdAt: 1, sceneId: 'scene-a', status: 'active' })]);
     expect(html).not.toContain('aria-expanded');

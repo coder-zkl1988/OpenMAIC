@@ -279,7 +279,8 @@
     },
     "tabs": {
       "lecture": "Ghi chú",
-      "chat": "Tương tác"
+      "chat": "Tương tác",
+      "scenes": "Cảnh"
     },
     "lectureNotes": {
       "empty": "Ghi chú sẽ hiện ở đây sau khi phát bài giảng",
@@ -361,6 +362,7 @@
     "pauseAnswer": "Tạm dừng câu trả lời",
     "resumeAnswer": "Tiếp tục câu trả lời",
     "playbackSpeed": "Tốc độ phát",
+    "playbackMenu": "Thêm: tốc độ phát, âm lượng, tự động phát",
     "mute": "Tắt tiếng",
     "unmute": "Bật tiếng",
     "volume": "Âm lượng",

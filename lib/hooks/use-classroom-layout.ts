@@ -14,33 +14,46 @@ import { createContext, useContext, useLayoutEffect, useState, type RefObject } 
  * - `tablet` (900–1199px, TabletLandscape.dc.html): 64px numbered scene rail,
  *   52px header with "n / m" and a ⋯ menu, 320px panel, 44px touch targets.
  *   Electron's minimum window width (1024) lands here.
- * - `stacked` (< 900px, or portrait below desktop width): the interaction
- *   section below the slide. Until that layout exists it renders the tablet
- *   chrome, so narrow hosts still get the rail, the ⋯ menu and touch targets.
+ * - `stacked` (< 900px, or portrait below desktop width,
+ *   TabletPortrait.dc.html): the slide, caption and control bar on top and the
+ *   interaction section below with 互动 / 笔记 / 场景 tabs (no scene rail, no
+ *   side panel).
+ * - `phone` (stacked below 600px, ClassroomPhone.dc.html): the same stack with
+ *   36px tabs, a five-column avatar grid, the speed / volume / auto-play
+ *   controls folded into a ⋯ sheet, and a full-width whiteboard with a
+ *   返回课件 chip instead of the 192×108 slide PiP.
  *
  * The CSS side of the same thresholds is the `@container/classroom` root plus
- * the `--container-tablet` / `--container-desktop` sizes in app/globals.css;
- * this hook is for the branches CSS cannot express (which component renders).
+ * the `--container-*` sizes in app/globals.css; this hook is for the branches
+ * CSS cannot express (which component renders, and the portrait rule).
  */
-export type ClassroomLayout = 'desktop' | 'tablet' | 'stacked';
+export type ClassroomLayout = 'desktop' | 'tablet' | 'stacked' | 'phone';
 
 /** 75rem: keep in sync with `--container-desktop` in app/globals.css */
 export const CLASSROOM_DESKTOP_MIN_WIDTH = 1200;
 /** 56.25rem: keep in sync with `--container-tablet` in app/globals.css */
 export const CLASSROOM_TABLET_MIN_WIDTH = 900;
+/** 37.5rem: keep in sync with `--container-phone` in app/globals.css */
+export const CLASSROOM_PHONE_MAX_WIDTH = 600;
 
 export function resolveClassroomLayout(width: number, height?: number): ClassroomLayout {
   // Not laid out yet (or no layout engine, e.g. jsdom): keep the desktop chrome
   if (!(width > 0)) return 'desktop';
   if (width >= CLASSROOM_DESKTOP_MIN_WIDTH) return 'desktop';
+  if (width < CLASSROOM_PHONE_MAX_WIDTH) return 'phone';
   if (width < CLASSROOM_TABLET_MIN_WIDTH) return 'stacked';
   if (height !== undefined && height > width) return 'stacked';
   return 'tablet';
 }
 
-/** Tablet and stacked both use the 44px touch targets */
+/** Every layout below desktop uses the 44px touch targets */
 export function isTouchClassroomLayout(layout: ClassroomLayout): boolean {
   return layout !== 'desktop';
+}
+
+/** Tablet portrait and phone put the interaction section under the stage */
+export function isStackedClassroomLayout(layout: ClassroomLayout): boolean {
+  return layout === 'stacked' || layout === 'phone';
 }
 
 /** Provided by ClassroomSurface; without a provider the classroom is desktop. */

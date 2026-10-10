@@ -7,6 +7,7 @@
  */
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/hooks/use-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
@@ -34,13 +35,23 @@ vi.mock('@/components/edit/ContainBox', () => ({
 // The real column is covered by stage-column.test.ts; here the scene is docked
 // exactly while the board is open
 vi.mock('@/components/classroom/stage-column', () => ({
+  CAPTION_HEIGHT: 92,
+  STAGE_GAP: 12,
+  CHIP_BOARD_EXTRA_HEIGHT: 56,
   StageColumn: ({
     boardOpen,
     renderScene,
+    pipMode,
   }: {
     boardOpen: boolean;
     renderScene: (state: { docked: boolean }) => ReactNode;
-  }) => createElement('div', null, renderScene({ docked: boardOpen })),
+    pipMode?: string;
+  }) =>
+    createElement(
+      'div',
+      { 'data-testid': 'stage-column', 'data-pip-mode': pipMode },
+      renderScene({ docked: boardOpen }),
+    ),
 }));
 
 import { CanvasArea } from '@/components/canvas/canvas-area';
@@ -104,5 +115,94 @@ describe('CanvasArea: opening the board with a video playing', () => {
     render(false);
     expect(useCanvasStore.getState().playingVideoElementId).toBe('v1');
     expect(pause).not.toHaveBeenCalled();
+  });
+});
+
+describe('CanvasArea in the stacked layouts', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function render(props: Record<string, unknown>) {
+    act(() =>
+      root.render(
+        createElement(CanvasArea, {
+          currentScene: slide,
+          mode: 'playback',
+          engineState: 'playing',
+          whiteboardOpen: false,
+          onPlayPause: vi.fn(),
+          onWhiteboardClose: vi.fn(),
+          caption: createElement('div', { 'data-testid': 'caption' }),
+          ...props,
+        }),
+      ),
+    );
+  }
+  const frame = () =>
+    container.querySelector<HTMLElement>('[data-testid="stage-column"]')!.parentElement!;
+
+  it('fills its host outside the stacked layouts', () => {
+    render({});
+    expect(frame().className).toContain('h-full');
+    expect(frame().style.height).toBe('');
+    expect(
+      container.querySelector('[data-testid="stage-column"]')!.getAttribute('data-pip-mode'),
+    ).toBe('dock');
+  });
+
+  // jsdom's CSSOM drops min() / cqw / dvh, so the stacked sizes are read from
+  // the server markup
+  const markup = (props: Record<string, unknown>) =>
+    renderToStaticMarkup(
+      createElement(CanvasArea, {
+        currentScene: slide,
+        mode: 'playback',
+        engineState: 'playing',
+        whiteboardOpen: false,
+        onPlayPause: vi.fn(),
+        onWhiteboardClose: vi.fn(),
+        caption: createElement('div', { 'data-testid': 'caption' }),
+        ...props,
+      }),
+    );
+  const frameTag = (html: string) => html.match(/^<div[^>]*>/)![0];
+
+  it('tablet portrait: a full-width 16:9 slide plus the caption, 16px insets', () => {
+    const tag = frameTag(markup({ stacked: 'stacked' }));
+    expect(tag).not.toContain('h-full');
+    expect(tag).toContain('px-4');
+    // 12px under the caption row + the 92px caption + its 12px gap, capped
+    expect(tag).toContain('height:min(calc((100cqw - 32px) * 9 / 16 + 116px), 60dvh)');
+  });
+
+  it('phone: 12px insets, the PiP becomes the chip, and the open board adds its chrome', () => {
+    const html = markup({ stacked: 'phone' });
+    expect(frameTag(html)).toContain('px-3');
+    expect(frameTag(html)).toContain('calc((100cqw - 24px) * 9 / 16 + 112px)');
+    expect(html).toContain('data-pip-mode="chip"');
+
+    expect(frameTag(markup({ stacked: 'phone', whiteboardOpen: true }))).toContain(
+      'calc((100cqw - 24px) * 9 / 16 + 168px)',
+    );
+  });
+
+  it('without a caption the stage is just the slide and its inset', () => {
+    expect(frameTag(markup({ stacked: 'stacked', caption: null }))).toContain(
+      'calc((100cqw - 32px) * 9 / 16 + 12px)',
+    );
   });
 });

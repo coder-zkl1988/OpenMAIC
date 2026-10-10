@@ -279,7 +279,8 @@
     },
     "tabs": {
       "lecture": "笔记",
-      "chat": "互动"
+      "chat": "互动",
+      "scenes": "场景"
     },
     "lectureNotes": {
       "empty": "播放课程后，笔记将在此显示",
@@ -361,6 +362,7 @@
     "pauseAnswer": "暂停回答",
     "resumeAnswer": "继续回答",
     "playbackSpeed": "播放速度",
+    "playbackMenu": "更多：播放速度、音量、自动播放",
     "mute": "静音",
     "unmute": "取消静音",
     "volume": "音量",

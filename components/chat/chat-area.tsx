@@ -81,18 +81,36 @@ interface ChatAreaProps {
    * of 44px targets and no drag-resize (the host fixes the width at 320)
    */
   density?: 'default' | 'touch';
+  /**
+   * `panel`: the side panel (desktop, tablet landscape). `stacked`
+   * (TabletPortrait.dc.html) and `phone` (ClassroomPhone.dc.html): a
+   * full-width section under the stage that fills the rest of the column, no
+   * drag-resize and no collapse button, with a 3-column segmented control
+   * 互动 / 笔记 / 场景 (40px, 36px on phone). `collapsed` hides it (fullscreen).
+   */
+  layout?: 'panel' | 'stacked' | 'phone';
+  /** The 场景 tab's content (stacked layouts only; the scene grid) */
+  scenes?: ReactNode;
+  /** Who is online, shown on the stacked layouts' 互动 tab */
+  onlineCount?: number;
 }
 
 /**
  * The panel's tabs. 'chat' / 'lecture' are the pre-redesign ids, kept as
- * aliases so existing `switchToTab('chat')` callers keep working.
+ * aliases so existing `switchToTab('chat')` callers keep working. 'scenes'
+ * exists only in the stacked layouts; elsewhere it shows 互动.
  */
-export type ChatAreaTab = 'interaction' | 'notes' | 'chat' | 'lecture';
-type PanelTab = 'interaction' | 'notes';
+export type ChatAreaTab = 'interaction' | 'notes' | 'scenes' | 'chat' | 'lecture';
+type PanelTab = 'interaction' | 'notes' | 'scenes';
 
 function resolvePanelTab(tab: ChatAreaTab): PanelTab {
-  return tab === 'chat' || tab === 'interaction' ? 'interaction' : 'notes';
+  if (tab === 'chat' || tab === 'interaction') return 'interaction';
+  return tab === 'scenes' ? 'scenes' : 'notes';
 }
+
+/** The stacked layouts' segmented control (TabletPortrait / ClassroomPhone.dc.html) */
+const SEGMENT_TRIGGER =
+  'relative h-full rounded-[10px] px-2 font-medium text-icon hover:text-fg data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:text-fg data-[state=active]:shadow-[0_1px_2px_rgba(0,0,0,0.08)] dark:data-[state=active]:bg-background';
 
 export interface ChatAreaRef {
   createSession: (type: SessionType, title: string) => Promise<string>;
@@ -150,11 +168,16 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       streamTrailing,
       onFooterHidden,
       density = 'default',
+      layout = 'panel',
+      scenes: scenesTab,
+      onlineCount,
     },
     ref,
   ) => {
     const { t } = useI18n();
     const touch = density === 'touch';
+    const stacked = layout !== 'panel';
+    const phone = layout === 'phone';
     const scenes = useStageStore((s) => s.scenes);
     const {
       sessions,
@@ -190,7 +213,10 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
     });
 
     // 互动 is the default tab: participants, the conversation and the composer live there
-    const [activeTab, setActiveTab] = useState<PanelTab>('interaction');
+    const [selectedTab, setActiveTab] = useState<PanelTab>('interaction');
+    // 场景 left behind by a switch to the side panel (no such tab there) reads as 互动
+    const activeTab: PanelTab =
+      selectedTab === 'scenes' && !scenesTab ? 'interaction' : selectedTab;
     const isDraggingRef = useRef(false);
     const [isDragging, setIsDragging] = useState(false);
 
@@ -329,21 +355,226 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
 
     const displayWidth = collapsed ? 0 : width;
 
+    // Amber pulse dot while a session is live or a discussion offer waits, and
+    // another tab is in front
+    const interactionDot = (hasActiveChatSession || hasPendingOffer) &&
+      activeTab !== 'interaction' && (
+        <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+        </span>
+      );
+
+    // Tab header row: 互动 / 笔记 + collapse. Radix marks the selected trigger
+    // with data-state="active" (the base TabsTrigger's `data-active:` variants
+    // never match), so the weight, colour and primary underline key off that
+    const panelTabRow = (
+      <div
+        className={cn(
+          'flex shrink-0 items-center gap-1',
+          touch ? 'h-[52px] pt-1 pr-1 pl-2' : 'mt-2 h-10 px-3',
+        )}
+      >
+        <TabsList variant="line" className={cn('w-0 flex-1', touch ? 'h-11' : 'h-full')}>
+          <TabsTrigger
+            value="interaction"
+            className={cn(
+              "relative flex-1 gap-1.5 rounded-lg text-icon data-[state=active]:font-semibold data-[state=active]:text-fg after:rounded-full after:bg-primary data-[state=active]:after:opacity-100 [&_svg:not([class*='size-'])]:size-3.5",
+              touch ? 'text-sm' : 'text-[13px]',
+            )}
+          >
+            <Users />
+            {t('chat.tabs.chat')}
+            {interactionDot}
+          </TabsTrigger>
+          <TabsTrigger
+            value="notes"
+            className={cn(
+              "flex-1 gap-1.5 rounded-lg text-icon data-[state=active]:font-semibold data-[state=active]:text-fg after:rounded-full after:bg-primary data-[state=active]:after:opacity-100 [&_svg:not([class*='size-'])]:size-3.5",
+              touch ? 'text-sm' : 'text-[13px]',
+            )}
+          >
+            <BookOpen />
+            {t('chat.tabs.lecture')}
+          </TabsTrigger>
+        </TabsList>
+
+        {onCollapseChange && (
+          <button
+            type="button"
+            onClick={() => onCollapseChange(true)}
+            aria-label={t('chat.collapsePanel')}
+            title={t('chat.collapsePanel')}
+            className={cn(
+              'flex shrink-0 items-center justify-center rounded-[10px] text-icon transition-all duration-200 hover:text-fg active:scale-90 cursor-pointer',
+              touch
+                ? 'size-11 hover:bg-subtle'
+                : 'size-7 bg-subtle ring-1 ring-black/[0.04] dark:ring-white/[0.06]',
+            )}
+          >
+            <PanelRightClose className={touch ? 'size-[18px]' : 'size-4'} />
+          </button>
+        )}
+      </div>
+    );
+
+    // Stacked: one segmented control of three equal tabs, the online count on 互动
+    const stackedTabRow = (
+      <TabsList
+        className={cn(
+          'grid h-auto w-auto shrink-0 grid-cols-3 gap-0.5 bg-subtle p-[3px]',
+          phone ? 'mx-3 mt-2 mb-1 rounded-[10px]' : 'mx-4 mt-3 mb-1 rounded-xl',
+        )}
+      >
+        <TabsTrigger
+          value="interaction"
+          className={cn(
+            SEGMENT_TRIGGER,
+            phone ? 'h-9 gap-1 rounded-lg text-[13px]' : 'h-10 gap-1.5 text-sm',
+          )}
+        >
+          {t('chat.tabs.chat')}
+          {onlineCount !== undefined && (
+            <span
+              className={cn(
+                'inline-flex items-center font-medium text-fg-tertiary',
+                phone ? 'gap-[3px] text-[11px]' : 'gap-1 text-xs',
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'shrink-0 rounded-full bg-success',
+                  phone ? 'size-[5px]' : 'size-1.5',
+                )}
+              />
+              {phone ? (
+                <>
+                  <span aria-hidden="true">{onlineCount}</span>
+                  <span className="sr-only">
+                    {t('stage.participants.online', { count: onlineCount })}
+                  </span>
+                </>
+              ) : (
+                t('stage.participants.online', { count: onlineCount })
+              )}
+            </span>
+          )}
+          {interactionDot}
+        </TabsTrigger>
+        <TabsTrigger
+          value="notes"
+          className={cn(SEGMENT_TRIGGER, phone ? 'h-9 rounded-lg text-[13px]' : 'h-10 text-sm')}
+        >
+          {t('chat.tabs.lecture')}
+        </TabsTrigger>
+        <TabsTrigger
+          value="scenes"
+          className={cn(SEGMENT_TRIGGER, phone ? 'h-9 rounded-lg text-[13px]' : 'h-10 text-sm')}
+        >
+          {t('chat.tabs.scenes')}
+        </TabsTrigger>
+      </TabsList>
+    );
+
+    const tabs = (
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as PanelTab)}
+        // Stacked: no overflow clipping up the chain, so the section's minimum
+        // height is the tab row plus the composer — the parent column shrinks
+        // the stage first and the composer stays in view (the on-screen
+        // keyboard's inset included)
+        className={cn('flex flex-col gap-0', stacked ? 'flex-1' : 'h-full')}
+      >
+        {stacked ? stackedTabRow : panelTabRow}
+
+        {/* 互动: participants and the flat conversation stream. Hidden, not
+            unmounted, on 笔记 / 场景 (as when collapsed): a pending 发起讨论
+            card keeps counting down to its auto-skip */}
+        <TabsContent
+          value="interaction"
+          forceMount
+          className={cn(
+            'flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden',
+            !stacked && 'border-t border-line',
+          )}
+        >
+          {header}
+          <ConversationStream
+            sessions={chatSessions}
+            scenes={scenes}
+            isStreaming={isStreaming}
+            activeBubbleId={activeBubbleId}
+            onEndSession={handleEndSession}
+            onContinueSession={handleContinueSession}
+            trailing={streamTrailing}
+            density={layout}
+          />
+        </TabsContent>
+
+        {/* 笔记: lecture notes with jump-to-line */}
+        <TabsContent
+          value="notes"
+          className={cn(
+            'flex flex-1 flex-col overflow-hidden border-t border-line',
+            stacked && 'mt-1 min-h-0',
+          )}
+        >
+          <LectureNotesView
+            notes={lectureNotes}
+            currentSceneId={currentSceneId}
+            currentActionIndex={currentActionIndex}
+            canJumpToAction={canJumpToAction}
+            onJumpToAction={onJumpToAction}
+          />
+        </TabsContent>
+
+        {/* 场景 (stacked only): the scene grid */}
+        {stacked && scenesTab && (
+          <TabsContent value="scenes" className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
+            {scenesTab}
+          </TabsContent>
+        )}
+
+        {/* The 互动 composer: hidden, never unmounted, on 笔记 / 场景 */}
+        {footer && (
+          <div className={cn('shrink-0', activeTab !== 'interaction' && 'hidden')}>{footer}</div>
+        )}
+      </Tabs>
+    );
+
+    // One element type and nesting for both layouts: rotating a tablet across
+    // the stacked threshold keeps the stream, the notes and the offer mounted
     return (
       <aside
         aria-label={t('chat.panelLabel')}
-        style={{
-          width: displayWidth,
-          transition: isDragging ? 'none' : 'width 0.3s ease',
-        }}
+        data-testid={stacked ? 'interaction-section' : undefined}
+        data-layout={stacked ? layout : undefined}
+        style={
+          stacked
+            ? undefined
+            : {
+                width: displayWidth,
+                transition: isDragging ? 'none' : 'width 0.3s ease',
+              }
+        }
         className={cn(
-          'relative z-20 flex shrink-0 flex-col overflow-visible bg-background shadow-[-2px_0_24px_rgba(0,0,0,0.02)]',
-          !collapsed && 'border-l border-line',
+          stacked
+            ? // Under the stage: the rest of the column, full width
+              cn(
+                'relative flex w-full flex-1 flex-col border-t border-line bg-background',
+                collapsed && 'hidden',
+              )
+            : cn(
+                'relative z-20 flex shrink-0 flex-col overflow-visible bg-background shadow-[-2px_0_24px_rgba(0,0,0,0.02)]',
+                !collapsed && 'border-l border-line',
+              ),
           className,
         )}
       >
         {/* Drag handle (desktop only) */}
-        {!collapsed && !touch && (
+        {!collapsed && !touch && !stacked && (
           <div
             onMouseDown={handleDragStart}
             className="absolute left-0 top-0 bottom-0 z-50 w-1.5 cursor-col-resize group transition-colors hover:bg-accent-line/40 active:bg-accent-line/60"
@@ -352,112 +583,14 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
           </div>
         )}
 
-        <div className={cn('flex h-full w-full flex-col overflow-hidden', collapsed && 'hidden')}>
-          <Tabs
-            value={activeTab}
-            onValueChange={(v) => setActiveTab(v as PanelTab)}
-            className="flex h-full flex-col gap-0"
-          >
-            {/* Tab header row: 互动 / 笔记 + collapse. Radix marks the selected
-                trigger with data-state="active" (the base TabsTrigger's
-                `data-active:` variants never match), so the weight, colour and
-                primary underline key off that */}
-            <div
-              className={cn(
-                'flex shrink-0 items-center gap-1',
-                touch ? 'h-[52px] pt-1 pr-1 pl-2' : 'mt-2 h-10 px-3',
-              )}
-            >
-              <TabsList variant="line" className={cn('w-0 flex-1', touch ? 'h-11' : 'h-full')}>
-                <TabsTrigger
-                  value="interaction"
-                  className={cn(
-                    "relative flex-1 gap-1.5 rounded-lg text-icon data-[state=active]:font-semibold data-[state=active]:text-fg after:rounded-full after:bg-primary data-[state=active]:after:opacity-100 [&_svg:not([class*='size-'])]:size-3.5",
-                    touch ? 'text-sm' : 'text-[13px]',
-                  )}
-                >
-                  <Users />
-                  {t('chat.tabs.chat')}
-                  {/* Amber pulse dot while a session is live or a discussion
-                      offer waits, and 笔记 is in front */}
-                  {(hasActiveChatSession || hasPendingOffer) && activeTab === 'notes' && (
-                    <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-                    </span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="notes"
-                  className={cn(
-                    "flex-1 gap-1.5 rounded-lg text-icon data-[state=active]:font-semibold data-[state=active]:text-fg after:rounded-full after:bg-primary data-[state=active]:after:opacity-100 [&_svg:not([class*='size-'])]:size-3.5",
-                    touch ? 'text-sm' : 'text-[13px]',
-                  )}
-                >
-                  <BookOpen />
-                  {t('chat.tabs.lecture')}
-                </TabsTrigger>
-              </TabsList>
-
-              {onCollapseChange && (
-                <button
-                  type="button"
-                  onClick={() => onCollapseChange(true)}
-                  aria-label={t('chat.collapsePanel')}
-                  title={t('chat.collapsePanel')}
-                  className={cn(
-                    'flex shrink-0 items-center justify-center rounded-[10px] text-icon transition-all duration-200 hover:text-fg active:scale-90 cursor-pointer',
-                    touch
-                      ? 'size-11 hover:bg-subtle'
-                      : 'size-7 bg-subtle ring-1 ring-black/[0.04] dark:ring-white/[0.06]',
-                  )}
-                >
-                  <PanelRightClose className={touch ? 'size-[18px]' : 'size-4'} />
-                </button>
-              )}
-            </div>
-
-            {/* 互动: participants and the flat conversation stream. Hidden, not
-                unmounted, on 笔记 (as when collapsed): a pending 发起讨论
-                card keeps counting down to its auto-skip */}
-            <TabsContent
-              value="interaction"
-              forceMount
-              className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-line data-[state=inactive]:hidden"
-            >
-              {header}
-              <ConversationStream
-                sessions={chatSessions}
-                scenes={scenes}
-                isStreaming={isStreaming}
-                activeBubbleId={activeBubbleId}
-                onEndSession={handleEndSession}
-                onContinueSession={handleContinueSession}
-                trailing={streamTrailing}
-              />
-            </TabsContent>
-
-            {/* 笔记: lecture notes with jump-to-line */}
-            <TabsContent
-              value="notes"
-              className="flex flex-1 flex-col overflow-hidden border-t border-line"
-            >
-              <LectureNotesView
-                notes={lectureNotes}
-                currentSceneId={currentSceneId}
-                currentActionIndex={currentActionIndex}
-                canJumpToAction={canJumpToAction}
-                onJumpToAction={onJumpToAction}
-              />
-            </TabsContent>
-
-            {/* The 互动 composer: hidden, never unmounted, on 笔记 */}
-            {footer && (
-              <div className={cn('shrink-0', activeTab !== 'interaction' && 'hidden')}>
-                {footer}
-              </div>
-            )}
-          </Tabs>
+        <div
+          className={cn(
+            'flex w-full flex-col',
+            stacked ? 'flex-1' : 'h-full overflow-hidden',
+            collapsed && 'hidden',
+          )}
+        >
+          {tabs}
         </div>
       </aside>
     );

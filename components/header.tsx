@@ -6,6 +6,7 @@ import { useI18n } from '@/lib/hooks/use-i18n';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { StageMode } from '@/lib/types/stage';
 import { classroomExitLabelKey, exitClassroom } from '@/lib/workbench/classroom-exit';
+import { cn } from '@/lib/utils';
 import { HeaderControls } from './stage/header-controls';
 
 interface HeaderProps {
@@ -32,9 +33,11 @@ interface HeaderProps {
   /**
    * `compact` (tablet and narrower, TabletLandscape.dc.html): a 52px header
    * with a 44px back button, the title, "n / m" and the ⋯ menu that holds
-   * every header control. `default` is the 56px desktop header.
+   * every header control. `phone` (ClassroomPhone.dc.html) is the compact
+   * header with tighter insets, a 15px title and a vertical ⋮ trigger.
+   * `default` is the 56px desktop header.
    */
-  readonly layout?: 'default' | 'compact';
+  readonly layout?: 'default' | 'compact' | 'phone';
   /** 0-based current scene, for the compact header's "n / m" */
   readonly sceneIndex?: number;
   /** Scene count, for the compact header's "n / m" */
@@ -59,10 +62,17 @@ export function Header({
   const router = useRouter();
   const searchParams = useSearchParams();
   const exitLabel = t(classroomExitLabelKey(searchParams));
-  if (layout === 'compact') {
+  if (layout === 'compact' || layout === 'phone') {
+    const phone = layout === 'phone';
     const showCounter = sceneIndex !== undefined && sceneCount !== undefined && sceneCount > 0;
     return (
-      <header className="h-[52px] shrink-0 px-2 flex items-center gap-1 z-10 bg-transparent">
+      <header
+        className={
+          phone
+            ? 'h-[52px] shrink-0 px-1 flex items-center gap-0.5 z-10 bg-transparent'
+            : 'h-[52px] shrink-0 px-2 flex items-center gap-1 z-10 bg-transparent'
+        }
+      >
         {hideBackControl
           ? null
           : (backControl ?? (
@@ -78,7 +88,10 @@ export function Header({
         {/* The edit cross-fade guard is explained on the desktop title below */}
         {mode !== 'edit' ? (
           <h1
-            className="min-w-0 flex-1 truncate text-base leading-6 font-semibold text-fg"
+            className={cn(
+              'min-w-0 flex-1 truncate font-semibold text-fg',
+              phone ? 'text-[15px] leading-[22px]' : 'text-base leading-6',
+            )}
             suppressHydrationWarning
           >
             {currentSceneTitle || t('common.loading')}
@@ -90,7 +103,10 @@ export function Header({
         {showCounter && (
           <span
             data-testid="page-counter"
-            className="shrink-0 select-none px-2 text-xs font-medium tabular-nums text-fg-tertiary"
+            className={cn(
+              'shrink-0 select-none text-xs font-medium tabular-nums text-fg-tertiary',
+              phone ? 'px-1' : 'px-2',
+            )}
           >
             <span aria-hidden="true">
               {sceneIndex + 1} / {sceneCount}
@@ -102,6 +118,7 @@ export function Header({
         )}
         <HeaderControls
           variant="overflow"
+          overflowIcon={phone ? 'vertical' : 'horizontal'}
           mode={mode}
           proModeActive={proModeActive}
           canEdit={canEdit}

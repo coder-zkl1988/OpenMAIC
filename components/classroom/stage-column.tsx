@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
-import { Maximize2 } from 'lucide-react';
+import { Maximize2, Presentation } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { CLASSROOM_ASPECT_RATIO, containBox } from '@/lib/edit/contain-box';
@@ -36,6 +36,14 @@ export const FLOATING_STRIP = FLOATING_INSET + PIP_WIDTH + STAGE_GAP;
 /** Board card chrome around the 16:9 sheet: 44px header, 12px padding, 1px border. */
 const CARD_CHROME_X = 12 * 2 + 2;
 const CARD_CHROME_Y = 44 + 12 * 2 + 2;
+/**
+ * How much taller than the slide's slot the board card is when it spans the
+ * full width (its chrome is taller than it is wide at 16:9). A phone stage
+ * grows by this while the board is open so the chip mode's board is full width.
+ */
+export const CHIP_BOARD_EXTRA_HEIGHT = Math.ceil(
+  CARD_CHROME_Y - CARD_CHROME_X / CLASSROOM_ASPECT_RATIO,
+);
 
 /** The slide's morph into the PiP and back: 0.55s, the artboard's easing. */
 const MORPH_EASE = [0.32, 0.72, 0, 1] as const;
@@ -51,6 +59,11 @@ export interface StageGeometryInput {
   readonly hasCaption: boolean;
   /** No caption row (fullscreen): the PiP floats top left, in its own strip. */
   readonly floatingPip: boolean;
+  /**
+   * `chip` (phone, below 600px): no PiP; the board takes the slide's whole
+   * slot and a 返回课件 chip leads back. Defaults to `dock`.
+   */
+  readonly pipMode?: 'dock' | 'chip';
 }
 
 export interface StageGeometry {
@@ -70,10 +83,14 @@ export function computeStageGeometry({
   height,
   hasCaption,
   floatingPip,
+  pipMode = 'dock',
 }: StageGeometryInput): StageGeometry {
   const slotHeight = Math.max(0, height - (hasCaption ? CAPTION_HEIGHT + STAGE_GAP : 0));
-  const boardSlotWidth = Math.max(0, width - (floatingPip ? FLOATING_STRIP : 0));
-  const boardSlotHeight = Math.max(0, height - (floatingPip ? 0 : PIP_HEIGHT + STAGE_GAP));
+  const chip = pipMode === 'chip';
+  const boardSlotWidth = Math.max(0, width - (floatingPip && !chip ? FLOATING_STRIP : 0));
+  const boardSlotHeight = chip
+    ? slotHeight
+    : Math.max(0, height - (floatingPip ? 0 : PIP_HEIGHT + STAGE_GAP));
   const sheet = containBox(
     boardSlotWidth - CARD_CHROME_X,
     boardSlotHeight - CARD_CHROME_Y,
@@ -84,9 +101,10 @@ export function computeStageGeometry({
       ? { width: sheet.width + CARD_CHROME_X, height: sheet.height + CARD_CHROME_Y }
       : null;
 
-  // The slide is contain-fitted and centred in its slot (ContainBox)
+  // The slide is contain-fitted and centred in its slot (ContainBox); with the
+  // chip it stays where it is and only fades
   const box = containBox(width, slotHeight, CLASSROOM_ASPECT_RATIO);
-  if (box.width <= 0) return { card, flip: { x: 0, y: 0, scale: 1 } };
+  if (box.width <= 0 || chip) return { card, flip: { x: 0, y: 0, scale: 1 } };
   const pipLeft = floatingPip ? FLOATING_INSET : width - PIP_WIDTH;
   const pipTop = floatingPip ? FLOATING_INSET : height - PIP_HEIGHT;
   const scale = PIP_WIDTH / box.width;
@@ -125,6 +143,12 @@ export interface StageColumnProps {
   readonly caption?: ReactNode;
   /** No caption row (fullscreen): the PiP floats top left, beside the board. */
   readonly floatingPip?: boolean;
+  /**
+   * `chip` (phone, owner decision): below 600px a 192×108 PiP would crowd the
+   * caption, so the board takes the slide's whole slot (the caption keeps its
+   * full width) and a 返回课件 chip over the board's corner returns.
+   */
+  readonly pipMode?: 'dock' | 'chip';
   readonly className?: string;
   /** On the scene layer only (an interactive scene clips its shadow there). */
   readonly sceneClassName?: string;
@@ -135,7 +159,8 @@ export interface StageColumnProps {
  * the caption. Board mode: the board card takes the slide's slot, the caption
  * narrows to calc(100% − 204px) × 108px and the still-mounted slide morphs
  * into the 192×108 PiP beside it. The PiP (or the control bar's 白板 toggle)
- * swaps back; reduced motion swaps instantly.
+ * swaps back; reduced motion swaps instantly. On a phone (`pipMode="chip"`)
+ * the board takes the slide's slot instead and a 返回课件 chip swaps back.
  */
 export function StageColumn({
   boardOpen,
@@ -147,6 +172,7 @@ export function StageColumn({
   board,
   caption,
   floatingPip = false,
+  pipMode = 'dock',
   className,
   sceneClassName,
 }: StageColumnProps) {
@@ -189,6 +215,7 @@ export function StageColumn({
   // then), not on <body> after the PiP button unmounts
   const sceneBodyRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef(false);
+  // The PiP and the phone's chip share it
   const handleReturn = (event: MouseEvent<HTMLButtonElement>) => {
     restoreFocusRef.current = document.activeElement === event.currentTarget;
     onReturn();
@@ -201,10 +228,12 @@ export function StageColumn({
     sceneBodyRef.current?.focus({ preventScroll: true });
   }, [boardOpen, docked]);
 
-  const { card, flip } = computeStageGeometry({ ...size, hasCaption, floatingPip });
-  // A slide flies into the PiP; any other scene fades out behind its card
+  const chip = pipMode === 'chip';
+  const { card, flip } = computeStageGeometry({ ...size, hasCaption, floatingPip, pipMode });
+  // A slide flies into the PiP; any other scene (and every scene with the
+  // chip) fades out behind the board
   const sceneTarget =
-    pipKind === 'slide'
+    pipKind === 'slide' && !chip
       ? boardOpen
         ? { x: flip.x, y: flip.y, scale: flip.scale, opacity: 1 }
         : { x: 0, y: 0, scale: 1, opacity: 1 }
@@ -213,7 +242,7 @@ export function StageColumn({
   const sceneRadius = pipKind === 'slide' && boardOpen ? PIP_RADIUS / flip.scale : PIP_RADIUS;
   const sceneTransition = reduceMotion
     ? { duration: 0 }
-    : pipKind === 'slide'
+    : pipKind === 'slide' && !chip
       ? { duration: MORPH_S, ease: MORPH_EASE }
       : { duration: 0.2 };
 
@@ -256,10 +285,14 @@ export function StageColumn({
         {/* Board slot: the card hugs its 16:9 sheet, centred like the slide */}
         <div
           className="pointer-events-none absolute inset-x-0 top-0 z-[1] flex items-center justify-center"
-          style={{
-            left: floatingPip ? FLOATING_STRIP : 0,
-            bottom: floatingPip ? 0 : PIP_HEIGHT + STAGE_GAP,
-          }}
+          style={
+            chip
+              ? { left: 0, bottom: hasCaption ? CAPTION_HEIGHT + STAGE_GAP : 0 }
+              : {
+                  left: floatingPip ? FLOATING_STRIP : 0,
+                  bottom: floatingPip ? 0 : PIP_HEIGHT + STAGE_GAP,
+                }
+          }
         >
           <div
             className="relative"
@@ -277,17 +310,38 @@ export function StageColumn({
             data-testid="stage-caption"
             className="absolute bottom-0 left-0 z-[1] transition-[width,height] duration-[550ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none"
             style={{
-              width: boardOpen ? `calc(100% - ${PIP_WIDTH + STAGE_GAP}px)` : '100%',
-              height: boardOpen ? PIP_HEIGHT : CAPTION_HEIGHT,
+              width: boardOpen && !chip ? `calc(100% - ${PIP_WIDTH + STAGE_GAP}px)` : '100%',
+              height: boardOpen && !chip ? PIP_HEIGHT : CAPTION_HEIGHT,
             }}
           >
             {caption}
           </div>
         )}
 
+        {/* Phone: the 返回课件 chip over the board's bottom-start corner */}
+        <AnimatePresence>
+          {boardOpen && chip && (
+            <motion.button
+              key="return-chip"
+              type="button"
+              data-testid="whiteboard-return-chip"
+              onClick={handleReturn}
+              aria-label={t('stage.pip.returnLabel', { n: pageNumber })}
+              className="absolute start-2 z-[3] flex h-11 items-center gap-1.5 rounded-full border border-line bg-background/95 ps-3 pe-3.5 text-[13px] font-semibold text-fg-secondary shadow-[0_6px_16px_-8px_rgba(0,0,0,0.35)] outline-none backdrop-blur-sm transition-colors hover:text-fg focus-visible:ring-2 focus-visible:ring-accent-line cursor-pointer"
+              style={{ bottom: (hasCaption ? CAPTION_HEIGHT + STAGE_GAP : 0) + 8 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: reduceMotion ? 0 : 0.2 } }}
+              exit={{ opacity: 0, transition: { duration: reduceMotion ? 0 : 0.15 } }}
+            >
+              <Presentation aria-hidden="true" className="size-4 shrink-0 text-icon" />
+              {t('stage.pip.return')}
+            </motion.button>
+          )}
+        </AnimatePresence>
+
         {/* PiP: a real button over the inert slide, badge and expand icon */}
         <AnimatePresence>
-          {boardOpen && (
+          {boardOpen && !chip && (
             <motion.div
               key="pip"
               data-testid="stage-pip"

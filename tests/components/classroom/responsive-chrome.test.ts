@@ -200,6 +200,37 @@ describe('Composer density="touch"', () => {
       container.querySelector('button[aria-label="stage.composer.send"]')?.className,
     ).toContain('size-8');
   });
+
+  it('starts the textarea at 72px, 64px stacked and 48px on phone', async () => {
+    const minHeight = async (layout?: 'panel' | 'stacked' | 'phone') => {
+      await act(async () =>
+        root.render(
+          createElement(Composer, {
+            layout,
+            hand: { state: null, onRaise: () => true, onLower: () => true },
+          }),
+        ),
+      );
+      const textarea = container.querySelector('textarea')!;
+      return {
+        className: textarea.className,
+        // jsdom has no layout: the grow effect floors the inline height
+        height: textarea.style.height,
+      };
+    };
+    expect(await minHeight()).toEqual({
+      className: expect.stringContaining('min-h-[72px]'),
+      height: '72px',
+    });
+    expect(await minHeight('stacked')).toEqual({
+      className: expect.stringContaining('min-h-16'),
+      height: '64px',
+    });
+    expect(await minHeight('phone')).toEqual({
+      className: expect.stringContaining('min-h-12'),
+      height: '48px',
+    });
+  });
 });
 
 describe('Header layout="compact"', () => {

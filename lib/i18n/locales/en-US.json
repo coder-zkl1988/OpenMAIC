@@ -279,7 +279,8 @@
     },
     "tabs": {
       "lecture": "Notes",
-      "chat": "Interaction"
+      "chat": "Interaction",
+      "scenes": "Scenes"
     },
     "lectureNotes": {
       "empty": "Notes will appear here after lecture playback",
@@ -361,6 +362,7 @@
     "pauseAnswer": "Pause answer",
     "resumeAnswer": "Resume answer",
     "playbackSpeed": "Playback speed",
+    "playbackMenu": "More: playback speed, volume, auto-play",
     "mute": "Mute",
     "unmute": "Unmute",
     "volume": "Volume",

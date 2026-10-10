@@ -279,7 +279,8 @@
     },
     "tabs": {
       "lecture": "ノート",
-      "chat": "交流"
+      "chat": "交流",
+      "scenes": "シーン"
     },
     "lectureNotes": {
       "empty": "講義の再生後にノートがここに表示されます",
@@ -361,6 +362,7 @@
     "pauseAnswer": "回答を一時停止",
     "resumeAnswer": "回答を再開",
     "playbackSpeed": "再生速度",
+    "playbackMenu": "その他：再生速度、音量、自動再生",
     "mute": "ミュート",
     "unmute": "ミュート解除",
     "volume": "音量",

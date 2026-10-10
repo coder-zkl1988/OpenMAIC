@@ -279,7 +279,8 @@
     },
     "tabs": {
       "lecture": "노트",
-      "chat": "상호작용"
+      "chat": "상호작용",
+      "scenes": "장면"
     },
     "lectureNotes": {
       "empty": "강의 재생 후 여기에 노트가 표시됩니다",
@@ -361,6 +362,7 @@
     "pauseAnswer": "답변 일시정지",
     "resumeAnswer": "답변 재개",
     "playbackSpeed": "재생 속도",
+    "playbackMenu": "더보기: 재생 속도, 볼륨, 자동 재생",
     "mute": "음소거",
     "unmute": "음소거 해제",
     "volume": "볼륨",

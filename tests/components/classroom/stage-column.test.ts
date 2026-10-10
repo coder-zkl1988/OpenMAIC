@@ -21,29 +21,31 @@ vi.mock('@/lib/hooks/use-i18n', () => ({
 // Motion's targets and timings land in data attributes, where the test reads them
 vi.mock('motion/react', async () => {
   const React = await import('react');
-  const div = React.forwardRef<HTMLDivElement, Record<string, unknown>>(
-    function MotionDiv(props, ref) {
+  const motionTag = (tag: 'div' | 'button') =>
+    React.forwardRef<HTMLElement, Record<string, unknown>>(function MotionElement(props, ref) {
       const { initial, animate, exit, transition, ...rest } = props;
       void initial;
       void exit;
-      return React.createElement('div', {
+      return React.createElement(tag, {
         ...rest,
         ref,
         'data-animate': JSON.stringify(animate ?? null),
         'data-transition': JSON.stringify(transition ?? null),
       });
-    },
-  );
+    });
+  const div = motionTag('div');
+  const button = motionTag('button');
   return {
     AnimatePresence: ({ children }: { children: ReactNode }) => children,
     MotionConfig: ({ children }: { children: ReactNode }) => children,
-    motion: { div },
+    motion: { div, button },
     useReducedMotion: () => mocks.reduced,
   };
 });
 
 import {
   CAPTION_HEIGHT,
+  CHIP_BOARD_EXTRA_HEIGHT,
   FLOATING_INSET,
   FLOATING_STRIP,
   PIP_HEIGHT,
@@ -54,6 +56,24 @@ import {
 } from '@/components/classroom/stage-column';
 
 describe('computeStageGeometry', () => {
+  it('chip mode (phone): no flight, the board spans the slide slot at full width', () => {
+    // ClassroomPhone: a 366px column; the stage grew by CHIP_BOARD_EXTRA_HEIGHT
+    // while the board is open, so the board card is width-bound
+    const width = 366;
+    const height = (width * 9) / 16 + CAPTION_HEIGHT + 12 + CHIP_BOARD_EXTRA_HEIGHT;
+    const { flip, card } = computeStageGeometry({
+      width,
+      height,
+      hasCaption: true,
+      floatingPip: false,
+      pipMode: 'chip',
+    });
+    expect(flip).toEqual({ x: 0, y: 0, scale: 1 });
+    expect(card!.width).toBeCloseTo(width, 0);
+    expect(card!.height).toBeLessThanOrEqual(height - CAPTION_HEIGHT - 12);
+    expect(CHIP_BOARD_EXTRA_HEIGHT).toBe(56);
+  });
+
   it('lands the slide box on the PiP to the right of the caption, at 192px wide', () => {
     // 1000 × 700 column: the slide slot is 700 − 92 − 12 = 596 tall, so the
     // 16:9 box is width-bound (1000 × 562.5) and centred 16.75px down
@@ -296,5 +316,37 @@ describe('StageColumn', () => {
     act(() => pip.focus());
     act(() => pip.click());
     expect(document.activeElement).toBe(sceneBody());
+  });
+
+  it('chip mode (phone): the board takes the slot, a 返回课件 chip replaces the PiP', () => {
+    render({ boardOpen: true, pipMode: 'chip' });
+    expect(byTestId('stage-pip')).toBeNull();
+    expect(byTestId('whiteboard-pip')).toBeNull();
+    // The slide fades in place rather than flying into a thumbnail
+    expect(JSON.parse(sceneLayer().dataset.animate!)).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+      opacity: 0,
+    });
+    expect(sceneBody().hasAttribute('inert')).toBe(true);
+    // The caption keeps its full width and height under the board
+    const caption = byTestId('stage-caption')!;
+    expect(caption.style.width).toBe('100%');
+    expect(caption.style.height).toBe(`${CAPTION_HEIGHT}px`);
+
+    const chip = byTestId('whiteboard-return-chip')!;
+    expect(chip.tagName).toBe('BUTTON');
+    expect(chip.getAttribute('aria-label')).toBe('stage.pip.returnLabel:{"n":3}');
+    expect(chip.textContent).toBe('stage.pip.return');
+    // A 44px target over the board's bottom-start corner, above the caption row
+    expect(chip.className).toContain('h-11');
+    expect(chip.className).toContain('start-2');
+    expect(chip.style.bottom).toBe(`${CAPTION_HEIGHT + 12 + 8}px`);
+    act(() => chip.click());
+    expect(onReturn).toHaveBeenCalledTimes(1);
+
+    render({ boardOpen: false, pipMode: 'chip' });
+    expect(byTestId('whiteboard-return-chip')).toBeNull();
   });
 });

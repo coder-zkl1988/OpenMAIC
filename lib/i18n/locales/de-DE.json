@@ -279,7 +279,8 @@
     },
     "tabs": {
       "lecture": "Notizen",
-      "chat": "Interaktion"
+      "chat": "Interaktion",
+      "scenes": "Szenen"
     },
     "lectureNotes": {
       "empty": "Nach der Wiedergabe des Vortrags erscheinen hier Notizen",
@@ -361,6 +362,7 @@
     "pauseAnswer": "Antwort pausieren",
     "resumeAnswer": "Antwort fortsetzen",
     "playbackSpeed": "Wiedergabegeschwindigkeit",
+    "playbackMenu": "Mehr: Wiedergabegeschwindigkeit, Lautstärke, automatische Wiedergabe",
     "mute": "Stummschalten",
     "unmute": "Stummschaltung aufheben",
     "volume": "Lautstärke",

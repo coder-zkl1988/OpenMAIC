@@ -12,6 +12,7 @@ import {
   Monitor,
   Moon,
   MoreHorizontal,
+  MoreVertical,
   NotebookText,
   Package,
   Settings,
@@ -99,6 +100,8 @@ interface HeaderControlsProps {
    * the export submenu.
    */
   readonly variant?: 'inline' | 'overflow';
+  /** The ⋯ trigger's glyph; the phone header uses the vertical ⋮ */
+  readonly overflowIcon?: 'horizontal' | 'vertical';
 }
 
 /** 26px icon button inside the 32px settings pill (Classroom.dc.html). */
@@ -140,6 +143,7 @@ export function HeaderControls({
   showGlobalControls = true,
   showCourseActions = true,
   variant = 'inline',
+  overflowIcon = 'horizontal',
 }: HeaderControlsProps) {
   const { t, locale, setLocale } = useI18n();
   const { theme, setTheme } = useTheme();
@@ -366,6 +370,8 @@ export function HeaderControls({
               ) : videoRendering ? (
                 // The background render's ring stays on the trigger
                 <CircularProgress value={videoRenderPercent} size={20} className="text-primary" />
+              ) : overflowIcon === 'vertical' ? (
+                <MoreVertical className="size-5" />
               ) : (
                 <MoreHorizontal className="size-5" />
               )}

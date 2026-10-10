@@ -279,7 +279,8 @@
     },
     "tabs": {
       "lecture": "Notes",
-      "chat": "Interaction"
+      "chat": "Interaction",
+      "scenes": "Scènes"
     },
     "lectureNotes": {
       "empty": "Les notes apparaîtront ici après la lecture du cours",
@@ -361,6 +362,7 @@
     "pauseAnswer": "Mettre la réponse en pause",
     "resumeAnswer": "Reprendre la réponse",
     "playbackSpeed": "Vitesse de lecture",
+    "playbackMenu": "Plus : vitesse de lecture, volume, lecture auto",
     "mute": "Couper le son",
     "unmute": "Réactiver le son",
     "volume": "Volume",

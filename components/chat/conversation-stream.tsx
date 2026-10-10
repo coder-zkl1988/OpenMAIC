@@ -7,6 +7,7 @@ import type { Scene } from '@/lib/types/stage';
 import type { HandState } from '@/lib/playback';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { AvatarDisplay } from '@/components/ui/avatar-display';
+import { cn } from '@/lib/utils';
 import { ChatSessionComponent } from './chat-session';
 
 /** A page divider '第 N 页 · 场景标题' or one Q&A / discussion session */
@@ -73,7 +74,19 @@ interface ConversationStreamProps {
   readonly onContinueSession: (sessionId: string) => void;
   /** Rendered after the latest item (the inline 发起讨论 card) */
   readonly trailing?: ReactNode;
+  /**
+   * Spacing of the log: `stacked` (TabletPortrait.dc.html, 12px 16px / 10px
+   * gap) and `phone` (ClassroomPhone.dc.html, 10px 12px / 8px gap) are tighter
+   * than the side panel's 16px / 12px.
+   */
+  readonly density?: 'panel' | 'stacked' | 'phone';
 }
+
+const DENSITY_CLASS = {
+  panel: 'gap-3 p-4',
+  stacked: 'gap-2.5 px-4 py-3',
+  phone: 'gap-2 px-3 py-2.5',
+} as const;
 
 /**
  * The 互动 tab's conversation stream (Classroom.dc.html): one scroll container
@@ -89,6 +102,7 @@ export function ConversationStream({
   onEndSession,
   onContinueSession,
   trailing,
+  density = 'panel',
 }: ConversationStreamProps) {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -168,7 +182,10 @@ export function ConversationStream({
       data-testid="conversation-stream"
       className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-page scrollbar-hide outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
     >
-      <div ref={contentRef} className="flex min-h-full flex-col justify-end gap-3 p-4">
+      <div
+        ref={contentRef}
+        className={cn('flex min-h-full flex-col justify-end', DENSITY_CLASS[density])}
+      >
         {items.map((item) => {
           if (item.kind === 'divider') {
             const pageLabel = t('chat.lectureNotes.pageLabel', { n: item.pageNumber });

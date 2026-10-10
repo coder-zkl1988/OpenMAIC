@@ -5,8 +5,10 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleStop,
+  Check,
   Maximize2,
   Minimize2,
+  MoreHorizontal,
   Pause,
   PencilLine,
   Play,
@@ -20,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useStageStore } from '@/lib/store';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { StopKind } from '@/components/canvas/use-playback-controls';
 
 export interface ControlBarProps {
@@ -75,6 +78,14 @@ export interface ControlBarProps {
    * off for `touch`; the host turns it back on when no header carries it
    */
   readonly showPageCounter?: boolean;
+  /**
+   * Phone (ClassroomPhone.dc.html, with `touch`): a 52px bar where speed,
+   * volume and auto-play fold into a ⋯ sheet, and the disabled prev / next
+   * step aside for the stop pill during a Q&A / discussion
+   */
+  readonly condensed?: boolean;
+  /** Where the ⋯ sheet portals (the fullscreen stage element while presenting) */
+  readonly portalContainer?: HTMLElement | null;
   readonly className?: string;
 }
 
@@ -89,15 +100,26 @@ const iconBtn = cn(
 /* 44px touch target (TabletLandscape.dc.html control bar) */
 const touchBtn = cn(iconBtn, 'size-11');
 
+/* A 44px row of the phone's ⋯ sheet */
+const sheetRow = cn(
+  'flex h-11 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-sm text-fg',
+  'transition-colors outline-none cursor-pointer hover:bg-subtle focus-visible:ring-2 focus-visible:ring-ring/50',
+  'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
+);
+
 /* Pressed state shared by the 白板 toggle and the reference picker */
 const pressedBtn =
   'bg-accent-soft text-accent-text ring-1 ring-inset ring-accent-line hover:bg-accent-soft hover:text-accent-text';
 
-function Divider({ touch }: { touch?: boolean }) {
+/* The phone bar (ClassroomPhone.dc.html) spaces its dividers 4px, the tablet 8px */
+function Divider({ touch, condensed }: { touch?: boolean; condensed?: boolean }) {
   return (
     <div
       aria-hidden="true"
-      className={cn('shrink-0 w-px bg-line', touch ? 'mx-2 h-5' : 'mx-1.5 h-4')}
+      className={cn(
+        'shrink-0 w-px bg-line',
+        condensed ? 'mx-1 h-5' : touch ? 'mx-2 h-5' : 'mx-1.5 h-4',
+      )}
     />
   );
 }
@@ -158,6 +180,8 @@ export function ControlBar({
   variant = 'bar',
   density = 'default',
   showPageCounter,
+  condensed = false,
+  portalContainer,
   className,
 }: ControlBarProps) {
   const { t } = useI18n();
@@ -192,6 +216,115 @@ export function ControlBar({
   const stopLabel = stopKind === 'qa' ? t('roundtable.stopQA') : t('roundtable.stopDiscussion');
   const livePauseLabel = livePaused ? t('stage.resumeAnswer') : t('stage.pauseAnswer');
   const whiteboardTitle = whiteboardOpen ? t('whiteboard.minimize') : t('whiteboard.open');
+  // Phone: prev / next are disabled during a session anyway, so they give the
+  // stop pill their room
+  const showSceneNav = !(condensed && inSession);
+
+  // Phone: speed, volume and auto-play in one ⋯ sheet above the bar
+  const hasPlaybackSettings = !!(onCycleSpeed || onToggleMute || onToggleAutoPlay);
+  const playbackSheet = condensed && hasPlaybackSettings && (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-testid="control-bar-more"
+          className={cn(
+            btn,
+            'data-[state=open]:bg-subtle data-[state=open]:text-fg',
+            // Something in the sheet is off its default: hint at it
+            (playbackSpeed !== 1 || (ttsEnabled && ttsMuted)) && 'text-accent-text',
+          )}
+          aria-label={t('stage.playbackMenu')}
+          title={t('stage.playbackMenu')}
+        >
+          <MoreHorizontal className={icon} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        container={portalContainer}
+        side="top"
+        align="end"
+        sideOffset={8}
+        aria-label={t('stage.playbackMenu')}
+        data-testid="control-bar-sheet"
+        className="w-[min(18rem,calc(100vw-1.5rem))] rounded-[14px] p-1.5"
+      >
+        {onCycleSpeed && (
+          <button
+            type="button"
+            onClick={onCycleSpeed}
+            className={sheetRow}
+            aria-label={`${t('stage.playbackSpeed')} ${playbackSpeed}x`}
+          >
+            <span className="flex-1 text-start">{t('stage.playbackSpeed')}</span>
+            <span
+              aria-hidden="true"
+              className={cn(
+                'rounded-md px-1.5 text-[13px] font-semibold tabular-nums',
+                playbackSpeed !== 1 ? 'bg-accent-soft text-accent-text' : 'text-fg-secondary',
+              )}
+            >
+              {`${playbackSpeed}x`}
+            </span>
+          </button>
+        )}
+        {onToggleMute && (
+          <div className="flex h-11 items-center gap-1 pe-2.5">
+            <button
+              type="button"
+              onClick={onToggleMute}
+              disabled={!ttsEnabled}
+              className={cn(touchBtn, ttsEnabled && ttsMuted && 'text-danger hover:text-danger')}
+              aria-label={ttsMuted ? t('stage.unmute') : t('stage.mute')}
+            >
+              <VolumeIcon muted={!!ttsMuted} volume={ttsVolume} disabled={!ttsEnabled} touch />
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={effectiveVolume}
+              disabled={!ttsEnabled}
+              aria-label={t('stage.volume')}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                onVolumeChange?.(v);
+                if (v > 0 && ttsMuted) onToggleMute?.();
+              }}
+              className={cn(
+                'h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-line-strong disabled:cursor-not-allowed disabled:opacity-40',
+                '[&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none',
+                '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-sm',
+                '[&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-primary',
+              )}
+            />
+            <span
+              aria-hidden="true"
+              className="w-8 shrink-0 select-none text-end text-xs font-medium tabular-nums text-fg-tertiary"
+            >
+              {Math.round(effectiveVolume * 100)}
+            </span>
+          </div>
+        )}
+        {onToggleAutoPlay && (
+          <button
+            type="button"
+            onClick={onToggleAutoPlay}
+            className={sheetRow}
+            aria-pressed={!!autoPlayLecture}
+          >
+            <Repeat
+              aria-hidden="true"
+              className={cn('size-[18px]', autoPlayLecture ? 'text-accent-text' : 'text-icon')}
+            />
+            <span className="flex-1 text-start">{t('roundtable.autoPlay')}</span>
+            {autoPlayLecture && <Check aria-hidden="true" className="size-4 text-accent-text" />}
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 
   const fullscreenButton = onTogglePresentation && (
     <button
@@ -215,11 +348,11 @@ export function ControlBar({
         variant === 'bar'
           ? cn(
               'w-full shrink-0 border-t border-line bg-background/85',
-              touch ? 'h-14 px-2' : 'h-12 pl-4 pr-3',
+              touch ? cn(condensed ? 'h-13' : 'h-14', 'px-2') : 'h-12 pl-4 pr-3',
             )
           : cn(
               'rounded-full border border-line bg-background/85 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]',
-              touch ? 'h-14 px-2' : 'h-12 px-3',
+              touch ? cn(condensed ? 'h-13' : 'h-14', 'px-2') : 'h-12 px-3',
             ),
         className,
       )}
@@ -239,15 +372,17 @@ export function ControlBar({
 
       {/* ── Centre: transport, playback settings, whiteboard, reference ── */}
       <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
-        <button
-          type="button"
-          onClick={onPrev}
-          disabled={!canGoPrev}
-          className={btn}
-          aria-label={t('stage.previousScene')}
-        >
-          <ChevronLeft className={icon} />
-        </button>
+        {showSceneNav && (
+          <button
+            type="button"
+            onClick={onPrev}
+            disabled={!canGoPrev}
+            className={btn}
+            aria-label={t('stage.previousScene')}
+          >
+            <ChevronLeft className={icon} />
+          </button>
+        )}
 
         {inSession ? (
           <>
@@ -272,12 +407,15 @@ export function ControlBar({
               type="button"
               onClick={onStop}
               className={cn(
-                'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-danger/30 bg-danger-soft px-3 font-semibold text-danger transition-colors hover:border-danger/50 active:scale-95 cursor-pointer',
+                'flex items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-danger/30 bg-danger-soft px-3 font-semibold text-danger transition-colors hover:border-danger/50 active:scale-95 cursor-pointer',
                 touch ? 'h-11 text-sm' : 'h-8 text-xs',
+                // Phone: a long label truncates rather than push the bar wide
+                condensed ? 'min-w-0 shrink' : 'shrink-0',
               )}
+              title={condensed ? stopLabel : undefined}
             >
-              <CircleStop className="size-3" />
-              {stopLabel}
+              <CircleStop className="size-3 shrink-0" />
+              {condensed ? <span className="min-w-0 truncate">{stopLabel}</span> : stopLabel}
             </button>
           </>
         ) : (
@@ -298,19 +436,21 @@ export function ControlBar({
           </button>
         )}
 
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={!canGoNext}
-          className={btn}
-          aria-label={t('stage.nextScene')}
-        >
-          <ChevronRight className={icon} />
-        </button>
+        {showSceneNav && (
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={!canGoNext}
+            className={btn}
+            aria-label={t('stage.nextScene')}
+          >
+            <ChevronRight className={icon} />
+          </button>
+        )}
 
-        <Divider touch={touch} />
+        <Divider touch={touch} condensed={condensed} />
 
-        {onCycleSpeed && (
+        {!condensed && onCycleSpeed && (
           <TooltipProvider delayDuration={0}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -337,7 +477,7 @@ export function ControlBar({
         )}
 
         {/* Volume with a vertical slider that pops up on hover */}
-        {onToggleMute && (
+        {!condensed && onToggleMute && (
           <div
             className="relative flex items-center"
             onMouseEnter={handleVolumeEnter}
@@ -393,7 +533,7 @@ export function ControlBar({
           </div>
         )}
 
-        {onToggleAutoPlay && (
+        {!condensed && onToggleAutoPlay && (
           <TooltipProvider delayDuration={0}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -414,7 +554,7 @@ export function ControlBar({
           </TooltipProvider>
         )}
 
-        <Divider touch={touch} />
+        {!condensed && <Divider touch={touch} />}
 
         {/* Labeled whiteboard toggle (touch: the 44px icon button) */}
         <button
@@ -459,6 +599,8 @@ export function ControlBar({
             <Quote className={touch ? 'size-[17px]' : 'size-[15px]'} />
           </button>
         )}
+
+        {playbackSheet}
 
         {touch && fullscreenButton}
       </div>

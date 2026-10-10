@@ -170,7 +170,8 @@ describe('header / CommandBar cross-fade contract', () => {
     // No height arithmetic against the header / roundtable heights: the canvas
     // wrapper is flex-1 and the 48px control bar sits in the same column
     expect(root).not.toContain('sceneViewerHeight');
-    expect(root).toContain('<div className="overflow-hidden relative flex-1 min-h-0 isolate"');
+    // (stacked layouts size the canvas from the width instead)
+    expect(root).toContain(": 'overflow-hidden relative flex-1 min-h-0 isolate'");
     expect(root).toContain('<ControlBar');
   });
 

@@ -279,7 +279,8 @@
     },
     "tabs": {
       "lecture": "筆記",
-      "chat": "互動"
+      "chat": "互動",
+      "scenes": "場景"
     },
     "lectureNotes": {
       "empty": "播放課程後，筆記將在此顯示",
@@ -361,6 +362,7 @@
     "pauseAnswer": "暫停回答",
     "resumeAnswer": "繼續回答",
     "playbackSpeed": "播放速度",
+    "playbackMenu": "更多：播放速度、音量、自動播放",
     "mute": "靜音",
     "unmute": "取消靜音",
     "volume": "音量",
