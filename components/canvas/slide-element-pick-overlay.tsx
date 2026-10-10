@@ -349,7 +349,11 @@ export function ElementPickOverlay({
         />
       ))}
 
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-gray-950/80 px-3 py-1.5 text-xs font-medium text-white shadow-lg pointer-events-none">
+      <div
+        role="status"
+        data-testid={`${testId}-hint`}
+        className="absolute top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-neutral-950/85 px-3 py-1.5 text-xs font-medium text-white shadow-lg pointer-events-none"
+      >
         {t('chat.elementReference.instruction')}
       </div>
 

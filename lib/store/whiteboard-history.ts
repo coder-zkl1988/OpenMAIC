@@ -19,6 +19,16 @@ export interface WhiteboardSnapshot {
   timestamp: number;
   /** Cached fingerprint used for deduplication and no-op restore checks */
   fingerprint: string;
+  /** Sheet width of the board the elements came from (thumbnails, restore) */
+  viewportSize?: number;
+  /** Sheet height/width ratio of the board the elements came from */
+  viewportRatio?: number;
+}
+
+/** Sheet geometry captured with a snapshot so it can be drawn and restored as it was. */
+export interface WhiteboardSnapshotViewport {
+  viewportSize?: number;
+  viewportRatio?: number;
 }
 
 interface WhiteboardHistoryState {
@@ -28,7 +38,7 @@ interface WhiteboardHistoryState {
   maxSnapshots: number;
   // Actions
   /** Save a snapshot of the current whiteboard elements */
-  pushSnapshot: (elements: PPTElement[]) => void;
+  pushSnapshot: (elements: PPTElement[], viewport?: WhiteboardSnapshotViewport) => void;
   /** Get a snapshot by index */
   getSnapshot: (index: number) => WhiteboardSnapshot | null;
   /** Clear all history */
@@ -39,7 +49,7 @@ export const useWhiteboardHistoryStore = create<WhiteboardHistoryState>((set, ge
   snapshots: [],
   maxSnapshots: 20,
 
-  pushSnapshot: (elements) => {
+  pushSnapshot: (elements, viewport) => {
     // Don't save empty snapshots
     if (!elements || elements.length === 0) return;
 
@@ -53,6 +63,8 @@ export const useWhiteboardHistoryStore = create<WhiteboardHistoryState>((set, ge
       elements: JSON.parse(JSON.stringify(elements)), // Deep copy
       timestamp: Date.now(),
       fingerprint: newFingerprint,
+      ...(viewport?.viewportSize !== undefined && { viewportSize: viewport.viewportSize }),
+      ...(viewport?.viewportRatio !== undefined && { viewportRatio: viewport.viewportRatio }),
     };
 
     set((state) => {

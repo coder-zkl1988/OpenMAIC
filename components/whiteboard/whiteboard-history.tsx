@@ -1,103 +1,169 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo, useState, type RefObject } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotateCcw } from 'lucide-react';
-import { useWhiteboardHistoryStore } from '@/lib/store/whiteboard-history';
-import { useStageStore } from '@/lib/store';
+import type { Slide } from '@openmaic/dsl';
+import { SlideThumbnail } from '@/components/slide-renderer/SlideThumbnail';
+import { useWhiteboardHistoryStore, type WhiteboardSnapshot } from '@/lib/store/whiteboard-history';
 import { useCanvasStore } from '@/lib/store/canvas';
-import { createStageAPI } from '@/lib/api/stage-api';
-import { elementFingerprint } from '@/lib/utils/element-fingerprint';
+import { restoreWhiteboardElements } from '@/lib/whiteboard/restore';
+import { normalizeWhiteboardViewportRatio } from '@/lib/whiteboard/viewport';
 import { toast } from 'sonner';
 import { useI18n } from '@/lib/hooks/use-i18n';
 
 interface WhiteboardHistoryProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
+  /** id for the trigger's aria-controls */
+  readonly id?: string;
+  /** The toggle button: excluded from outside-click and refocused on Escape. */
+  readonly triggerRef?: RefObject<HTMLElement | null>;
+}
+
+const THUMBNAIL_THEME: Slide['theme'] = {
+  backgroundColor: '#ffffff',
+  themeColors: ['#5b9bd5', '#ed7d31', '#a5a5a5', '#ffc000', '#4472c4'],
+  fontColor: '#333333',
+  fontName: 'Microsoft YaHei',
+};
+
+/** A read-only slide built from a snapshot so SlideThumbnail can draw it. */
+function snapshotSlide(snapshot: WhiteboardSnapshot, index: number): Slide {
+  return {
+    id: `whiteboard-history-${index}-${snapshot.timestamp}`,
+    viewportSize: snapshot.viewportSize ?? 1000,
+    viewportRatio: normalizeWhiteboardViewportRatio(snapshot.viewportRatio ?? 9 / 16),
+    theme: THUMBNAIL_THEME,
+    elements: snapshot.elements,
+    background: { type: 'solid', color: '#ffffff' },
+  };
 }
 
 /**
- * Whiteboard history dropdown panel.
- * Shows a list of saved whiteboard snapshots with timestamps and element counts.
- * Clicking "Restore" replaces the current whiteboard content with the snapshot.
+ * 64×36 snapshot preview. Thumbnails are full SlideCanvas trees (ResizeObserver,
+ * charts, KaTeX), so a row only renders its canvas once it scrolls into view of
+ * the open popover; the popover itself unmounts them all when it closes.
  */
-export function WhiteboardHistory({ isOpen, onClose }: WhiteboardHistoryProps) {
+function SnapshotThumbnail({
+  snapshot,
+  index,
+  scrollRootRef,
+}: {
+  snapshot: WhiteboardSnapshot;
+  index: number;
+  scrollRootRef: RefObject<HTMLDivElement | null>;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined');
+  const slide = useMemo(() => snapshotSlide(snapshot, index), [snapshot, index]);
+
+  useEffect(() => {
+    if (visible) return;
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { root: scrollRootRef.current, rootMargin: '48px 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [visible, scrollRootRef]);
+
+  return (
+    <span
+      ref={ref}
+      aria-hidden="true"
+      data-testid="whiteboard-history-thumbnail"
+      className="relative block h-9 w-16 shrink-0 overflow-hidden rounded-md bg-white ring-1 ring-line"
+    >
+      {visible && <SlideThumbnail slide={slide} viewportRatio={slide.viewportRatio} />}
+    </span>
+  );
+}
+
+function formatTime(ts: number) {
+  const d = new Date(ts);
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+}
+
+/**
+ * Whiteboard history popover.
+ * Lists saved whiteboard snapshots (newest first) with a thumbnail, time and
+ * element count. "Restore" is always visible so it works with touch and the
+ * keyboard; Escape closes the popover and returns focus to the trigger.
+ */
+export function WhiteboardHistory({ isOpen, onClose, id, triggerRef }: WhiteboardHistoryProps) {
   const { t } = useI18n();
   const snapshots = useWhiteboardHistoryStore((s) => s.snapshots);
   const isClearing = useCanvasStore.use.whiteboardClearing();
   const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
+  // Close on outside press (mouse or touch); the trigger toggles on its own.
   useEffect(() => {
     if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        onClose();
-      }
+    const handler = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (triggerRef?.current?.contains(target)) return;
+      onClose();
     };
-    // Delay listener so the click that opens the panel doesn't immediately close it
-    const id = setTimeout(() => document.addEventListener('mousedown', handler), 0);
-    return () => {
-      clearTimeout(id);
-      document.removeEventListener('mousedown', handler);
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [isOpen, onClose, triggerRef]);
+
+  // Escape closes and hands focus back to the trigger.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+      triggerRef?.current?.focus();
     };
-  }, [isOpen, onClose]);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [isOpen, onClose, triggerRef]);
+
+  // Move focus into the popover when it opens: the newest restore, or the panel.
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const first = panel.querySelector<HTMLButtonElement>('button:not([disabled])');
+    (first ?? panel).focus();
+  }, [isOpen]);
 
   const handleRestore = (index: number) => {
-    // P1: Block restore while a clear animation is in flight — the pending
-    // delete/update would overwrite the restored content moments later.
-    if (isClearing) {
-      toast.error(t('whiteboard.restoreError'));
-      return;
-    }
-
     const snapshot = useWhiteboardHistoryStore.getState().getSnapshot(index);
     if (!snapshot) return;
 
-    const stageStore = useStageStore;
-    const stageAPI = createStageAPI(stageStore);
-
-    // Get or create whiteboard
-    const wbResult = stageAPI.whiteboard.get();
-    if (!wbResult.success || !wbResult.data) {
-      return;
+    const result = restoreWhiteboardElements(snapshot.elements, { viewport: snapshot });
+    switch (result.status) {
+      case 'busy':
+        // A clear animation is in flight — its pending delete would overwrite
+        // the restored content moments later.
+        toast.error(t('whiteboard.restoreError'));
+        return;
+      case 'error':
+        console.error('Failed to restore whiteboard snapshot:', result.error);
+        toast.error(t('whiteboard.restoreError') + result.error);
+        return;
+      case 'restored':
+      case 'unchanged':
+        toast.success(t('whiteboard.restored'));
+        onClose();
+        // The focused Restore unmounts with the popover; hand focus back.
+        triggerRef?.current?.focus();
+        return;
     }
-    const whiteboardId = wbResult.data.id;
-
-    // P2a: Skip no-op restores — if the snapshot matches what's already
-    // on screen, restoring would be a no-op.
-    const restoredElementsKey = snapshot.fingerprint;
-    const currentKey = elementFingerprint(wbResult.data.elements ?? []);
-    if (restoredElementsKey === currentKey) {
-      toast.success(t('whiteboard.restored'));
-      onClose();
-      return;
-    }
-
-    // Save current content before overwriting so the user can undo the restore
-    const currentElements = wbResult.data.elements ?? [];
-    if (currentElements.length > 0) {
-      useWhiteboardHistoryStore.getState().pushSnapshot(currentElements);
-    }
-
-    // Transactional restore: replace all elements in one update() call
-    // instead of looping delete/add which produces intermediate states.
-    const result = stageAPI.whiteboard.update({ elements: snapshot.elements }, whiteboardId);
-
-    if (!result.success) {
-      console.error('Failed to restore whiteboard snapshot:', result.error);
-      // P3: Dedicated restoreError key (not clearError)
-      toast.error(t('whiteboard.restoreError') + (result.error ?? ''));
-      return;
-    }
-
-    toast.success(t('whiteboard.restored'));
-    onClose();
-  };
-
-  const formatTime = (ts: number) => {
-    const d = new Date(ts);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
   };
 
   return (
@@ -105,42 +171,45 @@ export function WhiteboardHistory({ isOpen, onClose }: WhiteboardHistoryProps) {
       {isOpen && (
         <motion.div
           ref={panelRef}
+          id={id}
+          role="dialog"
+          aria-label={t('whiteboard.history')}
+          tabIndex={-1}
           initial={{ opacity: 0, y: -8, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -8, scale: 0.95 }}
           transition={{ duration: 0.15 }}
-          className="absolute right-0 top-full mt-2 z-[130] w-72 max-h-80 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col"
+          className="absolute right-0 top-full mt-2 z-[130] w-72 max-h-80 overflow-hidden rounded-[14px] border border-line bg-background shadow-[0_24px_48px_-16px_rgba(0,0,0,0.25)] flex flex-col outline-none"
         >
           {/* Header */}
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-              {t('whiteboard.history')}
-            </span>
-            <span className="text-xs text-gray-400">
-              {snapshots.length > 0 ? `${snapshots.length}` : ''}
-            </span>
+          <div className="flex items-center justify-between border-b border-line px-3.5 py-3">
+            <span className="text-sm font-semibold text-fg">{t('whiteboard.history')}</span>
+            {snapshots.length > 0 && (
+              <span className="text-xs text-fg-tertiary">{snapshots.length}</span>
+            )}
           </div>
 
           {/* Snapshot list */}
-          <div className="flex-1 overflow-y-auto">
+          <div ref={listRef} className="flex-1 overflow-y-auto">
             {snapshots.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+              <div className="px-4 py-8 text-center text-sm text-fg-tertiary">
                 {t('whiteboard.noHistory')}
               </div>
             ) : (
-              <div className="py-1">
+              <ul className="m-0 list-none p-0">
                 {[...snapshots].reverse().map((snap, reverseIdx) => {
                   const realIdx = snapshots.length - 1 - reverseIdx;
                   return (
-                    <div
+                    <li
                       key={`${snap.timestamp}-${realIdx}`}
-                      className="px-4 py-2.5 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
+                      className="flex items-center gap-2.5 border-t border-subtle px-3.5 py-2.5 first:border-t-0"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
+                      <SnapshotThumbnail snapshot={snap} index={realIdx} scrollRootRef={listRef} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-semibold text-fg">
                           {`#${realIdx + 1}`}
                         </div>
-                        <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                        <div className="mt-0.5 text-xs text-fg-tertiary">
                           {formatTime(snap.timestamp)} ·{' '}
                           {t('whiteboard.elementCount', { count: snap.elements.length })}
                         </div>
@@ -149,15 +218,16 @@ export function WhiteboardHistory({ isOpen, onClose }: WhiteboardHistoryProps) {
                         type="button"
                         onClick={() => handleRestore(realIdx)}
                         disabled={isClearing}
-                        className="ml-2 px-2 py-1 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        aria-label={t('whiteboard.restoreSnapshot', { index: realIdx + 1 })}
+                        className="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-accent-line bg-background px-2.5 text-xs font-semibold text-accent-text transition-colors hover:bg-accent-soft hover:text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-line disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        <RotateCcw className="w-3 h-3" />
+                        <RotateCcw className="size-3" aria-hidden="true" />
                         {t('whiteboard.restore')}
                       </button>
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             )}
           </div>
         </motion.div>

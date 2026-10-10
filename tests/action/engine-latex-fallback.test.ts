@@ -4,6 +4,11 @@ import type { StageStore } from '@/lib/api/stage-api';
 import { ActionEngine } from '@/lib/action/engine';
 
 const mocks = vi.hoisted(() => ({
+  canvasState: {
+    whiteboardOpen: true,
+    whiteboardDrawing: null as { agentId: string | null } | null,
+    setWhiteboardDrawing: vi.fn(),
+  },
   addElement: vi.fn(),
   getWhiteboard: vi.fn(() => ({ success: true, data: { id: 'wb-1', elements: [] } })),
   renderToString: vi.fn((latex: string) =>
@@ -30,9 +35,7 @@ vi.mock('@/lib/api/stage-api', () => ({
 
 vi.mock('@/lib/store/canvas', () => ({
   useCanvasStore: {
-    getState: () => ({
-      whiteboardOpen: true,
-    }),
+    getState: () => mocks.canvasState,
   },
 }));
 
@@ -80,6 +83,11 @@ describe('ActionEngine wb_draw_text LaTeX fallback', () => {
     mocks.addElement.mockClear();
     mocks.getWhiteboard.mockClear();
     mocks.renderToString.mockClear();
+    mocks.canvasState.whiteboardDrawing = null;
+    mocks.canvasState.setWhiteboardDrawing.mockReset();
+    mocks.canvasState.setWhiteboardDrawing.mockImplementation((drawing) => {
+      mocks.canvasState.whiteboardDrawing = drawing;
+    });
   });
 
   afterEach(() => {
@@ -208,5 +216,42 @@ describe('ActionEngine wb_draw_text LaTeX fallback', () => {
         output: 'html',
       }),
     );
+  });
+
+  test('marks the board as being drawn on while the formula draws, then clears it', async () => {
+    const engine = new ActionEngine(stageStore);
+    const execution = engine.execute(
+      { id: 'text-1', type: 'wb_draw_text', content: '$E = mc^2$', x: 100, y: 80 },
+      { agentId: 'teacher-1' },
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.canvasState.whiteboardDrawing).toEqual({ agentId: 'teacher-1' });
+
+    await vi.advanceTimersByTimeAsync(800);
+    await execution;
+    expect(mocks.canvasState.whiteboardDrawing).toBeNull();
+    expect(mocks.canvasState.setWhiteboardDrawing).toHaveBeenLastCalledWith(null);
+  });
+
+  test('clears the drawing marker even when the draw throws', async () => {
+    mocks.addElement.mockImplementationOnce(() => {
+      throw new Error('boom');
+    });
+    const engine = new ActionEngine(stageStore);
+
+    await expect(
+      engine.execute({ id: 'text-1', type: 'wb_draw_text', content: 'Plain text', x: 0, y: 0 }),
+    ).rejects.toThrow('boom');
+    expect(mocks.canvasState.setWhiteboardDrawing).toHaveBeenCalledWith({ agentId: null });
+    expect(mocks.canvasState.whiteboardDrawing).toBeNull();
+  });
+
+  test('does not mark the board during a silent replay', async () => {
+    await new ActionEngine(stageStore).execute(
+      { id: 'text-1', type: 'wb_draw_text', content: 'Plain text', x: 0, y: 0 },
+      { silent: true },
+    );
+    expect(mocks.canvasState.setWhiteboardDrawing).not.toHaveBeenCalled();
   });
 });

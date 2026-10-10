@@ -1,25 +1,44 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Eraser, History, Minimize2, PencilLine, RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import {
+  CircleCheck,
+  Eraser,
+  History,
+  Maximize,
+  Minimize2,
+  Minus,
+  PencilLine,
+  Plus,
+} from 'lucide-react';
 import type { PPTElement } from '@openmaic/dsl';
 import type { WhiteboardElementReference } from '@/lib/types/chat';
 import { ElementPickOverlay } from '@/components/canvas/slide-element-pick-overlay';
+import { AvatarDisplay } from '@/components/ui/avatar-display';
 import {
   getDisplayedWhiteboard,
   isWhiteboardReferenceAvailable,
 } from '@/lib/whiteboard/element-reference';
-import { WhiteboardCanvas } from './whiteboard-canvas';
-import type { WhiteboardCanvasHandle } from './whiteboard-canvas';
+import { WHITEBOARD_MAX_ZOOM, WHITEBOARD_MIN_ZOOM, WhiteboardCanvas } from './whiteboard-canvas';
+import type { WhiteboardCanvasHandle, WhiteboardViewState } from './whiteboard-canvas';
 import { WhiteboardHistory } from './whiteboard-history';
 import { useStageStore } from '@/lib/store';
-import { useCanvasStore } from '@/lib/store/canvas';
+import { useCanvasStore, type WhiteboardDrawing } from '@/lib/store/canvas';
+import { useSettingsStore } from '@/lib/store/settings';
 import { useWhiteboardHistoryStore } from '@/lib/store/whiteboard-history';
+import { agentsToParticipants, useAgentRegistry } from '@/lib/orchestration/registry/store';
 import { createStageAPI } from '@/lib/api/stage-api';
+import { restoreWhiteboardElements } from '@/lib/whiteboard/restore';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { refreshWhiteboardRuntimeProjection } from '@/lib/whiteboard/runtime/browser-projection';
+
+/** −/+ step: 1.25 up, 0.8 down, so one step each way lands back on 100%. */
+const ZOOM_STEP = 1.25;
+/** How long the in-card "cleared · Undo" status stays up. */
+const UNDO_TOAST_MS = 8000;
 
 interface WhiteboardProps {
   readonly isOpen: boolean;
@@ -29,6 +48,64 @@ interface WhiteboardProps {
   readonly onPickElement?: (element: PPTElement) => void;
   readonly onCancelElementPick?: () => void;
 }
+
+/** A user clear that can still be undone from the in-card status. */
+interface ClearedBoard {
+  readonly elements: PPTElement[];
+  readonly viewportSize?: number;
+  readonly viewportRatio?: number;
+  /** Board shown right after the clear; the undo is only offered while it still is. */
+  readonly displayedIdAfterClear: string | null;
+}
+
+/** Display name and avatar for the "… is drawing" chip (teacher when unnamed). */
+function useDrawingAgent(drawing: WhiteboardDrawing | null) {
+  const { t } = useI18n();
+  const selectedAgentIds = useSettingsStore((s) => s.selectedAgentIds);
+  const agents = useAgentRegistry((s) => s.agents);
+
+  return useMemo(() => {
+    if (!drawing) return null;
+    const participants = agentsToParticipants(selectedAgentIds, t);
+    if (drawing.agentId) {
+      const participant = participants.find((p) => p.id === drawing.agentId);
+      if (participant) return { name: participant.name, avatar: participant.avatar };
+      const agent = agents[drawing.agentId];
+      if (agent) return { name: agent.name, avatar: agent.avatar };
+    }
+    const teacher = participants.find((p) => p.role === 'teacher');
+    return teacher ? { name: teacher.name, avatar: teacher.avatar } : null;
+  }, [drawing, selectedAgentIds, agents, t]);
+}
+
+/** Three bars that pulse while the agent draws (static under reduced motion). */
+function DrawingWave() {
+  const reduceMotion = useReducedMotion();
+  return (
+    <span aria-hidden="true" className="inline-flex h-2.5 items-center gap-0.5 text-accent-text">
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="block h-2.5 w-[2.5px] rounded-[2px] bg-current"
+          initial={{ scaleY: 0.35 }}
+          animate={reduceMotion ? { scaleY: 0.7 } : { scaleY: [0.35, 1, 0.35] }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { duration: 1, ease: 'easeInOut', repeat: Infinity, delay: i * 0.15 }
+          }
+        />
+      ))}
+    </span>
+  );
+}
+
+const headerIconButton =
+  'flex size-8 shrink-0 items-center justify-center rounded-[10px] text-icon transition-colors hover:bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-line disabled:pointer-events-none disabled:opacity-40';
+// Empty board: the whole group dims, so `disabled` adds no opacity of its own.
+// At a zoom limit the button stays focusable (aria-disabled) and dims itself.
+const zoomButton =
+  'flex size-7 items-center justify-center rounded-lg text-icon transition-colors hover:bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-line disabled:pointer-events-none aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-transparent aria-disabled:hover:text-icon';
 
 /**
  * Whiteboard component
@@ -44,13 +121,18 @@ export function Whiteboard({
   const { t } = useI18n();
   const stage = useStageStore.use.stage();
   const isClearing = useCanvasStore.use.whiteboardClearing();
+  const drawing = useCanvasStore.use.whiteboardDrawing();
+  const drawingAgent = useDrawingAgent(drawing);
   const clearingRef = useRef(false);
   const previousStageIdRef = useRef<string | undefined>(undefined);
   const wasOpenRef = useRef(isOpen);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [viewModified, setViewModified] = useState(false);
+  const [view, setView] = useState<WhiteboardViewState>({ zoom: 1, modified: false });
+  const [clearedBoard, setClearedBoard] = useState<ClearedBoard | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<WhiteboardCanvasHandle>(null);
+  const historyTriggerRef = useRef<HTMLButtonElement>(null);
+  const historyPanelId = useId();
   const snapshotCount = useWhiteboardHistoryStore((s) => s.snapshots.length);
   const runtimeProjection = useCanvasStore.use.runtimeWhiteboardProjection();
 
@@ -63,6 +145,18 @@ export function Whiteboard({
       ? whiteboardElementReference.elementId
       : undefined;
   const elementCount = whiteboard?.elements?.length || 0;
+  const boardEmpty = elementCount === 0;
+  const zoomPercent = Math.round(view.zoom * 100);
+  const atMinZoom = view.zoom <= WHITEBOARD_MIN_ZOOM;
+  const atMaxZoom = view.zoom >= WHITEBOARD_MAX_ZOOM;
+
+  // The undo is offered only while the cleared state is still what is shown:
+  // new content (the AI drawing again, a history restore) retires it.
+  const undoVisible =
+    clearedBoard !== null &&
+    !runtimeAuthoritative &&
+    boardEmpty &&
+    (whiteboard?.id ?? null) === clearedBoard.displayedIdAfterClear;
 
   useEffect(() => {
     const stageId = stage?.id;
@@ -84,16 +178,42 @@ export function Whiteboard({
     if (runtimeAuthoritative) setHistoryOpen(false);
   }, [runtimeAuthoritative]);
 
+  // The card unmounts on close but this component does not: a close that skips
+  // the popover's outside press (AI wb_close, scene change) must not leave it
+  // open, or the next open would remount it and pull focus out of the composer.
+  useEffect(() => {
+    if (!isOpen) setHistoryOpen(false);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!clearedBoard) return;
+    const timer = window.setTimeout(() => setClearedBoard(null), UNDO_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [clearedBoard]);
+
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
+
   const stageAPI = createStageAPI(useStageStore);
 
   const handleClear = async () => {
     if (!whiteboard || elementCount === 0 || clearingRef.current) return;
     clearingRef.current = true;
+    setClearedBoard(null);
+
+    // Keep the cleared board locally for the undo. Not "the latest snapshot":
+    // pushSnapshot drops a fingerprint already stored anywhere in the stack, so
+    // the newest snapshot is not necessarily this board.
+    const cleared = {
+      elements: JSON.parse(JSON.stringify(whiteboard.elements)) as PPTElement[],
+      viewportSize: whiteboard.viewportSize,
+      viewportRatio: whiteboard.viewportRatio,
+    };
 
     // Save snapshot before clearing
-    if (whiteboard.elements && whiteboard.elements.length > 0) {
-      useWhiteboardHistoryStore.getState().pushSnapshot(whiteboard.elements);
-    }
+    useWhiteboardHistoryStore.getState().pushSnapshot(whiteboard.elements, {
+      viewportSize: whiteboard.viewportSize,
+      viewportRatio: whiteboard.viewportRatio,
+    });
 
     // Trigger cascade exit animation
     useCanvasStore.getState().setWhiteboardClearing(true);
@@ -108,18 +228,47 @@ export function Whiteboard({
     clearingRef.current = false;
 
     if (result.success) {
-      toast.success(t('whiteboard.clearSuccess'));
+      const after = getDisplayedWhiteboard(
+        useStageStore.getState().stage,
+        useCanvasStore.getState().runtimeWhiteboardProjection,
+      );
+      setClearedBoard({ ...cleared, displayedIdAfterClear: after.whiteboard?.id ?? null });
     } else {
       toast.error(t('whiteboard.clearError') + result.error);
     }
   };
+
+  const handleUndoClear = () => {
+    if (!clearedBoard) return;
+    const result = restoreWhiteboardElements(clearedBoard.elements, {
+      viewport: {
+        viewportSize: clearedBoard.viewportSize,
+        viewportRatio: clearedBoard.viewportRatio,
+      },
+    });
+    if (result.status === 'busy') {
+      toast.error(t('whiteboard.restoreError'));
+      return;
+    }
+    if (result.status === 'error') {
+      toast.error(t('whiteboard.restoreError') + result.error);
+      return;
+    }
+    setClearedBoard(null);
+  };
+
+  const historyLabel =
+    snapshotCount > 0
+      ? t('whiteboard.historyWithCount', { count: snapshotCount })
+      : t('whiteboard.history');
 
   return (
     <>
       {/* Main Whiteboard Overlay */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div
+          <motion.section
+            aria-label={t('whiteboard.title')}
             initial={{ opacity: 0, scale: 0.92, y: 30 }}
             animate={{
               opacity: 1,
@@ -138,86 +287,167 @@ export function Whiteboard({
               y: 16,
               transition: { duration: 0.5, ease: [0.4, 0, 0.2, 1] },
             }}
-            className="absolute inset-4 pointer-events-auto bg-white/95 dark:bg-gray-800/95 backdrop-blur-2xl rounded-3xl shadow-[0_32px_80px_-20px_rgba(0,0,0,0.25)] border-2 border-purple-200/60 dark:border-purple-700/60 flex flex-col overflow-hidden z-[120] ring-4 ring-purple-100/40 dark:ring-purple-800/40"
+            className="absolute inset-4 pointer-events-auto bg-background rounded-[18px] border border-accent-line ring-4 ring-accent-soft shadow-[0_24px_60px_-24px_rgba(0,0,0,0.2)] flex flex-col overflow-hidden z-[120]"
           >
             {/* Header */}
-            <div className="h-14 px-6 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between shrink-0 bg-white/50 dark:bg-gray-800/50">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
-                  <PencilLine className="w-4 h-4" />
-                </div>
-                <span className="font-bold text-gray-800 dark:text-gray-200 tracking-tight">
-                  {t('whiteboard.title')}
-                </span>
-              </div>
+            <div className="h-11 shrink-0 pl-3 pr-2 border-b border-line flex items-center gap-2.5">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-text">
+                <PencilLine className="size-4" aria-hidden="true" />
+              </span>
+              <h2 className="m-0 truncate text-[15px] font-semibold text-fg">
+                {t('whiteboard.title')}
+              </h2>
 
-              <div className="flex items-center gap-2">
-                <AnimatePresence>
-                  {viewModified && (
-                    <motion.button
-                      type="button"
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ duration: 0.15 }}
-                      onClick={() => canvasRef.current?.resetView()}
-                      whileTap={{ scale: 0.9 }}
-                      className="p-2 text-gray-400 dark:text-gray-500 hover:text-purple-500 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
-                      title={t('whiteboard.resetView')}
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </motion.button>
+              <AnimatePresence>
+                {drawing && (
+                  <motion.span
+                    key="drawing"
+                    role="status"
+                    data-testid="whiteboard-drawing-chip"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.15 }}
+                    className={cn(
+                      'inline-flex h-[26px] min-w-0 shrink items-center gap-1.5 rounded-full bg-accent-soft pr-2.5 text-xs font-semibold text-accent-hover',
+                      drawingAgent?.avatar ? 'pl-[3px]' : 'pl-2.5',
+                    )}
+                  >
+                    {drawingAgent?.avatar && (
+                      <span className="size-5 shrink-0 overflow-hidden rounded-full text-[13px] leading-none">
+                        <AvatarDisplay src={drawingAgent.avatar} />
+                      </span>
+                    )}
+                    <span className="truncate">
+                      {drawingAgent
+                        ? t('whiteboard.drawing', { name: drawingAgent.name })
+                        : t('whiteboard.drawingAnonymous')}
+                    </span>
+                    <DrawingWave />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+
+              <div className="ml-auto flex shrink-0 items-center gap-1">
+                <div
+                  role="group"
+                  aria-label={t('whiteboard.zoom')}
+                  className={cn(
+                    'flex h-8 items-center rounded-[10px] border border-line px-0.5',
+                    boardEmpty && 'opacity-40',
                   )}
-                </AnimatePresence>
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!atMinZoom) canvasRef.current?.zoomBy(1 / ZOOM_STEP);
+                    }}
+                    disabled={boardEmpty}
+                    aria-disabled={!boardEmpty && atMinZoom ? true : undefined}
+                    className={zoomButton}
+                    aria-label={t('whiteboard.zoomOut')}
+                    title={t('whiteboard.zoomOut')}
+                  >
+                    <Minus className="size-3.5" aria-hidden="true" />
+                  </button>
+                  <span
+                    data-testid="whiteboard-zoom-level"
+                    aria-live="polite"
+                    className="min-w-11 text-center text-xs font-semibold tabular-nums text-fg-secondary"
+                  >
+                    {`${zoomPercent}%`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!atMaxZoom) canvasRef.current?.zoomBy(ZOOM_STEP);
+                    }}
+                    disabled={boardEmpty}
+                    aria-disabled={!boardEmpty && atMaxZoom ? true : undefined}
+                    className={zoomButton}
+                    aria-label={t('whiteboard.zoomIn')}
+                    title={t('whiteboard.zoomIn')}
+                  >
+                    <Plus className="size-3.5" aria-hidden="true" />
+                  </button>
+                  <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-line" />
+                  <button
+                    type="button"
+                    onClick={() => canvasRef.current?.fit()}
+                    disabled={boardEmpty}
+                    className={zoomButton}
+                    aria-label={t('whiteboard.fit')}
+                    title={t('whiteboard.fit')}
+                  >
+                    <Maximize className="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+
                 {!runtimeAuthoritative && (
                   <>
-                    <motion.button
+                    <div className="relative">
+                      <button
+                        ref={historyTriggerRef}
+                        type="button"
+                        onClick={() => setHistoryOpen((open) => !open)}
+                        className={cn(
+                          headerIconButton,
+                          'relative',
+                          historyOpen &&
+                            'bg-accent-soft text-accent-text hover:bg-accent-soft hover:text-accent-text',
+                        )}
+                        aria-label={historyLabel}
+                        aria-haspopup="dialog"
+                        aria-expanded={historyOpen}
+                        aria-controls={historyOpen ? historyPanelId : undefined}
+                        title={t('whiteboard.history')}
+                      >
+                        <History className="size-4" aria-hidden="true" />
+                        {snapshotCount > 0 && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute top-px right-0 min-w-4 h-4 box-border px-1 rounded-full border-2 border-background bg-primary text-[9px] leading-3 font-bold text-primary-foreground text-center"
+                          >
+                            {snapshotCount}
+                          </span>
+                        )}
+                      </button>
+                      <WhiteboardHistory
+                        id={historyPanelId}
+                        isOpen={historyOpen}
+                        onClose={closeHistory}
+                        triggerRef={historyTriggerRef}
+                      />
+                    </div>
+                    <button
                       type="button"
                       onClick={handleClear}
-                      disabled={isClearing || elementCount === 0}
-                      whileTap={{ scale: 0.9 }}
-                      className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                      disabled={isClearing || boardEmpty}
+                      className={cn(headerIconButton, 'hover:bg-danger-soft hover:text-danger')}
+                      aria-label={t('whiteboard.clear')}
                       title={t('whiteboard.clear')}
                     >
-                      <motion.div
+                      <motion.span
+                        className="flex"
                         animate={isClearing ? { rotate: [0, -15, 15, -10, 10, 0] } : { rotate: 0 }}
                         transition={
                           isClearing ? { duration: 0.5, ease: 'easeInOut' } : { duration: 0.2 }
                         }
                       >
-                        <Eraser className="w-4 h-4" />
-                      </motion.div>
-                    </motion.button>
-                    <div className="relative">
-                      <motion.button
-                        type="button"
-                        onClick={() => setHistoryOpen(!historyOpen)}
-                        whileTap={{ scale: 0.9 }}
-                        className="relative p-2 text-gray-400 dark:text-gray-500 hover:text-purple-500 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
-                        title={t('whiteboard.history')}
-                      >
-                        <History className="w-4 h-4" />
-                        {snapshotCount > 0 && (
-                          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-purple-500 text-white text-[10px] font-bold flex items-center justify-center">
-                            {snapshotCount}
-                          </span>
-                        )}
-                      </motion.button>
-                      <WhiteboardHistory
-                        isOpen={historyOpen}
-                        onClose={() => setHistoryOpen(false)}
-                      />
-                    </div>
+                        <Eraser className="size-4" aria-hidden="true" />
+                      </motion.span>
+                    </button>
                   </>
                 )}
-                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+                <span aria-hidden="true" className="mx-1 h-4 w-px bg-line" />
                 <button
                   type="button"
                   onClick={onClose}
-                  className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  className={headerIconButton}
+                  aria-label={t('whiteboard.minimize')}
                   title={t('whiteboard.minimize')}
                 >
-                  <Minimize2 className="w-5 h-5" />
+                  <Minimize2 className="size-4" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -225,13 +455,9 @@ export function Whiteboard({
             {/* Whiteboard Content Area */}
             <div
               ref={contentRef}
-              className="flex-1 relative bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#374151_1px,transparent_1px)] [background-size:24px_24px] overflow-hidden"
+              className="flex-1 relative p-3 bg-page bg-[radial-gradient(var(--line)_1px,transparent_1px)] [background-size:24px_24px] overflow-hidden"
             >
-              <WhiteboardCanvas
-                ref={canvasRef}
-                whiteboard={whiteboard}
-                onViewModifiedChange={setViewModified}
-              />
+              <WhiteboardCanvas ref={canvasRef} whiteboard={whiteboard} onViewChange={setView} />
               {(elementPickActive || selectedElementId) &&
                 !runtimeAuthoritative &&
                 !isClearing &&
@@ -250,7 +476,35 @@ export function Whiteboard({
                   />
                 )}
             </div>
-          </motion.div>
+
+            {/* Cleared · Undo — in-card status, user clears only */}
+            <AnimatePresence>
+              {undoVisible && (
+                <motion.div
+                  key="cleared"
+                  role="status"
+                  data-testid="whiteboard-cleared-status"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-14 left-1/2 z-[115] -translate-x-1/2 flex h-10 items-center gap-2.5 whitespace-nowrap rounded-xl border border-line bg-background pl-3 pr-1.5 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.2)]"
+                >
+                  <CircleCheck className="size-4 text-success" aria-hidden="true" />
+                  <span className="text-[13px] font-medium text-fg">
+                    {t('whiteboard.clearSuccess')}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleUndoClear}
+                    className="h-7 rounded-lg bg-accent-soft px-2.5 text-[13px] font-semibold text-accent-text transition-colors hover:text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-line"
+                  >
+                    {t('whiteboard.undo')}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.section>
         )}
       </AnimatePresence>
     </>

@@ -772,13 +772,21 @@
     "readyHint": "Les éléments ajoutés par l’IA apparaîtront ici",
     "clearSuccess": "Tableau blanc effacé",
     "clearError": "Échec de l’effacement du tableau blanc : ",
-    "resetView": "Réinitialiser la vue",
     "restoreError": "Échec de la restauration du tableau blanc : ",
     "history": "Historique",
     "restore": "Restaurer",
     "noHistory": "Aucun historique pour l’instant",
     "restored": "Tableau blanc restauré",
-    "elementCount": "{{count}} éléments"
+    "elementCount": "{{count}} éléments",
+    "drawing": "{{name}} écrit au tableau",
+    "drawingAnonymous": "Écriture au tableau",
+    "zoom": "Zoom",
+    "zoomIn": "Zoom avant",
+    "zoomOut": "Zoom arrière",
+    "fit": "Ajuster à la fenêtre",
+    "historyWithCount": "Historique ({{count}})",
+    "undo": "Annuler",
+    "restoreSnapshot": "Restaurer #{{index}}"
   },
   "quiz": {
     "title": "Quiz",

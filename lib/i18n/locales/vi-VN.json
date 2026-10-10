@@ -772,13 +772,21 @@
     "readyHint": "Các phần tử sẽ hiện ở đây khi AI thêm vào",
     "clearSuccess": "Đã xóa bảng",
     "clearError": "Không xóa được bảng: ",
-    "resetView": "Đặt lại khung nhìn",
     "restoreError": "Không phục hồi được bảng: ",
     "history": "Lịch sử",
     "restore": "Phục hồi",
     "noHistory": "Chưa có lịch sử",
     "restored": "Đã phục hồi bảng",
-    "elementCount": "{{count}} phần tử"
+    "elementCount": "{{count}} phần tử",
+    "drawing": "{{name}} đang viết bảng",
+    "drawingAnonymous": "Đang viết bảng",
+    "zoom": "Thu phóng",
+    "zoomIn": "Phóng to",
+    "zoomOut": "Thu nhỏ",
+    "fit": "Vừa cửa sổ",
+    "historyWithCount": "Lịch sử ({{count}})",
+    "undo": "Hoàn tác",
+    "restoreSnapshot": "Khôi phục #{{index}}"
   },
   "quiz": {
     "title": "Câu đố",

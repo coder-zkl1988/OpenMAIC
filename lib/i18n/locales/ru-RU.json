@@ -772,13 +772,21 @@
     "readyHint": "Элементы появятся здесь, когда AI их добавит",
     "clearSuccess": "Доска очищена",
     "clearError": "Ошибка очистки доски: ",
-    "resetView": "Сбросить вид",
     "restoreError": "Ошибка восстановления доски: ",
     "history": "История",
     "restore": "Восстановить",
     "noHistory": "Истории пока нет",
     "restored": "Доска восстановлена",
-    "elementCount": "{{count}} элементов"
+    "elementCount": "{{count}} элементов",
+    "drawing": "{{name}} пишет на доске",
+    "drawingAnonymous": "Запись на доске",
+    "zoom": "Масштаб",
+    "zoomIn": "Увеличить",
+    "zoomOut": "Уменьшить",
+    "fit": "По размеру окна",
+    "historyWithCount": "История ({{count}})",
+    "undo": "Отменить",
+    "restoreSnapshot": "Восстановить #{{index}}"
   },
   "quiz": {
     "title": "Тест",

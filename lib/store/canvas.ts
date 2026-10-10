@@ -43,6 +43,11 @@ export type PickTarget =
       ownerSessionId: string;
     };
 
+/** Who is drawing on the whiteboard right now (see `whiteboardDrawing`). */
+export interface WhiteboardDrawing {
+  agentId: string | null;
+}
+
 /**
  * Canvas Store - Manages all UI state of the Canvas editor
  *
@@ -118,6 +123,12 @@ interface CanvasState {
   // ===== Whiteboard =====
   whiteboardOpen: boolean; // Whether whiteboard is open
   whiteboardClearing: boolean; // Whiteboard clear animation in progress
+  /**
+   * Set while an agent action is drawing on the whiteboard (wb_draw_* and
+   * wb_edit_code, for playback and live chat alike). `agentId` is null when
+   * the caller did not say who is drawing; the board then names the teacher.
+   */
+  whiteboardDrawing: WhiteboardDrawing | null;
   whiteboardManualVisibilityRevision: number;
   runtimeWhiteboardProjection: {
     stageId: string;
@@ -179,6 +190,7 @@ interface CanvasState {
   setWhiteboardOpen: (open: boolean) => void;
   setWhiteboardOpenManually: (open: boolean) => void;
   setWhiteboardClearing: (clearing: boolean) => void;
+  setWhiteboardDrawing: (drawing: WhiteboardDrawing | null) => void;
   beginRuntimeWhiteboardProjection: (stageId: string) => number;
   setRuntimeWhiteboardProjection: (projection: {
     stageId: string;
@@ -259,6 +271,7 @@ const initialState = {
   // Whiteboard
   whiteboardOpen: false,
   whiteboardClearing: false,
+  whiteboardDrawing: null,
   whiteboardManualVisibilityRevision: 0,
   runtimeWhiteboardProjection: null,
   runtimeWhiteboardProjectionGeneration: 0,
@@ -381,6 +394,7 @@ const useCanvasStoreBase = create<CanvasState>((set, get) => ({
       whiteboardManualVisibilityRevision: state.whiteboardManualVisibilityRevision + 1,
     })),
   setWhiteboardClearing: (clearing) => set({ whiteboardClearing: clearing }),
+  setWhiteboardDrawing: (drawing) => set({ whiteboardDrawing: drawing }),
   beginRuntimeWhiteboardProjection: (stageId) => {
     const generation = get().runtimeWhiteboardProjectionGeneration + 1;
     set((state) => ({

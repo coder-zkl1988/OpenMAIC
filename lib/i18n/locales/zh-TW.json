@@ -757,13 +757,21 @@
     "readyHint": "AI 新增元素後將在此顯示",
     "clearSuccess": "白板已清空",
     "clearError": "清空白板失敗：",
-    "resetView": "重設檢視",
     "restoreError": "恢復白板失敗：",
     "history": "歷史紀錄",
     "restore": "恢復",
     "noHistory": "暫無歷史紀錄",
     "restored": "已恢復白板內容",
-    "elementCount": "{{count}} 個元素"
+    "elementCount": "{{count}} 個元素",
+    "drawing": "{{name}} 正在板書",
+    "drawingAnonymous": "正在板書",
+    "zoom": "縮放",
+    "zoomIn": "放大",
+    "zoomOut": "縮小",
+    "fit": "適應視窗",
+    "historyWithCount": "歷史記錄（{{count}} 筆）",
+    "undo": "復原",
+    "restoreSnapshot": "還原 #{{index}}"
   },
   "quiz": {
     "title": "課堂小測",

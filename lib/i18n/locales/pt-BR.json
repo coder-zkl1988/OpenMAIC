@@ -772,13 +772,21 @@
     "readyHint": "Os elementos aparecerão aqui quando adicionados pela IA",
     "clearSuccess": "Quadro limpo com sucesso",
     "clearError": "Falha ao limpar o quadro: ",
-    "resetView": "Reiniciar Visão",
     "restoreError": "Falha ao restaurar o quadro: ",
     "history": "Histórico",
     "restore": "Restaurar",
     "noHistory": "Sem histórico ainda",
     "restored": "Quadro restaurado",
-    "elementCount": "{{count}} elementos"
+    "elementCount": "{{count}} elementos",
+    "drawing": "{{name}} está escrevendo no quadro",
+    "drawingAnonymous": "Escrevendo no quadro",
+    "zoom": "Zoom",
+    "zoomIn": "Aumentar zoom",
+    "zoomOut": "Diminuir zoom",
+    "fit": "Ajustar à janela",
+    "historyWithCount": "Histórico ({{count}})",
+    "undo": "Desfazer",
+    "restoreSnapshot": "Restaurar #{{index}}"
   },
   "quiz": {
     "title": "Questionário",

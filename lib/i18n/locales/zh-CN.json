@@ -772,13 +772,21 @@
     "readyHint": "AI 添加元素后将在此显示",
     "clearSuccess": "白板已清空",
     "clearError": "清空白板失败：",
-    "resetView": "重置视图",
     "restoreError": "恢复白板失败：",
     "history": "历史记录",
     "restore": "恢复",
     "noHistory": "暂无历史记录",
     "restored": "已恢复白板内容",
-    "elementCount": "{{count}} 个元素"
+    "elementCount": "{{count}} 个元素",
+    "drawing": "{{name}} 正在板书",
+    "drawingAnonymous": "正在板书",
+    "zoom": "缩放",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fit": "适应窗口",
+    "historyWithCount": "历史记录（{{count}} 条）",
+    "undo": "撤销",
+    "restoreSnapshot": "恢复 #{{index}}"
   },
   "quiz": {
     "title": "随堂测验",

@@ -772,13 +772,21 @@
     "readyHint": "ستظهر العناصر هنا عند إضافتها بواسطة الذكاء الاصطناعي",
     "clearSuccess": "تم مسح السبورة بنجاح",
     "clearError": "فشل مسح السبورة: ",
-    "resetView": "إعادة تعيين العرض",
     "restoreError": "فشل استعادة السبورة: ",
     "history": "السجل",
     "restore": "استعادة",
     "noHistory": "لا يوجد سجل بعد",
     "restored": "تمت استعادة السبورة",
-    "elementCount": "{{count}} عنصر"
+    "elementCount": "{{count}} عنصر",
+    "drawing": "{{name}} يكتب على السبورة",
+    "drawingAnonymous": "جارٍ الكتابة على السبورة",
+    "zoom": "التكبير/التصغير",
+    "zoomIn": "تكبير",
+    "zoomOut": "تصغير",
+    "fit": "ملاءمة النافذة",
+    "historyWithCount": "السجل ({{count}})",
+    "undo": "تراجع",
+    "restoreSnapshot": "استعادة #{{index}}"
   },
   "quiz": {
     "title": "اختبار",

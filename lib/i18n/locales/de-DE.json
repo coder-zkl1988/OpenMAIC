@@ -772,13 +772,21 @@
     "readyHint": "Elemente erscheinen hier, wenn die KI sie hinzufügt",
     "clearSuccess": "Whiteboard erfolgreich geleert",
     "clearError": "Whiteboard konnte nicht geleert werden: ",
-    "resetView": "Ansicht zurücksetzen",
     "restoreError": "Whiteboard konnte nicht wiederhergestellt werden: ",
     "history": "Verlauf",
     "restore": "Wiederherstellen",
     "noHistory": "Noch kein Verlauf",
     "restored": "Whiteboard wiederhergestellt",
-    "elementCount": "Elemente: {{count}}"
+    "elementCount": "Elemente: {{count}}",
+    "drawing": "{{name}} schreibt an die Tafel",
+    "drawingAnonymous": "Schreibt an die Tafel",
+    "zoom": "Zoom",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern",
+    "fit": "An Fenster anpassen",
+    "historyWithCount": "Verlauf ({{count}})",
+    "undo": "Rückgängig",
+    "restoreSnapshot": "#{{index}} wiederherstellen"
   },
   "quiz": {
     "title": "Quiz",

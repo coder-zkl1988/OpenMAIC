@@ -772,13 +772,21 @@
     "readyHint": "Elements will appear here when added by AI",
     "clearSuccess": "Whiteboard cleared successfully",
     "clearError": "Failed to clear whiteboard: ",
-    "resetView": "Reset View",
     "restoreError": "Failed to restore whiteboard: ",
     "history": "History",
     "restore": "Restore",
     "noHistory": "No history yet",
     "restored": "Whiteboard restored",
-    "elementCount": "{{count}} elements"
+    "elementCount": "{{count}} elements",
+    "drawing": "{{name}} is drawing",
+    "drawingAnonymous": "Drawing on the board",
+    "zoom": "Zoom",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to window",
+    "historyWithCount": "History ({{count}})",
+    "undo": "Undo",
+    "restoreSnapshot": "Restore #{{index}}"
   },
   "quiz": {
     "title": "Quiz",

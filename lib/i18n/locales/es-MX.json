@@ -772,13 +772,21 @@
     "readyHint": "Los elementos aparecerán aquí cuando la IA los agregue",
     "clearSuccess": "El pizarrón se limpió correctamente",
     "clearError": "Error al limpiar el pizarrón: ",
-    "resetView": "Restablecer vista",
     "restoreError": "Error al restaurar el pizarrón: ",
     "history": "Historial",
     "restore": "Restaurar",
     "noHistory": "Aún no hay historial",
     "restored": "Pizarrón restaurado",
-    "elementCount": "{{count}} elementos"
+    "elementCount": "{{count}} elementos",
+    "drawing": "{{name}} está escribiendo en la pizarra",
+    "drawingAnonymous": "Escribiendo en la pizarra",
+    "zoom": "Zoom",
+    "zoomIn": "Acercar",
+    "zoomOut": "Alejar",
+    "fit": "Ajustar a la ventana",
+    "historyWithCount": "Historial ({{count}})",
+    "undo": "Deshacer",
+    "restoreSnapshot": "Restaurar #{{index}}"
   },
   "quiz": {
     "title": "Cuestionario",

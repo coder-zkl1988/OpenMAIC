@@ -772,13 +772,21 @@
     "readyHint": "AI가 요소를 추가하면 여기에 표시됩니다",
     "clearSuccess": "화이트보드를 성공적으로 지웠습니다",
     "clearError": "화이트보드 지우기 실패: ",
-    "resetView": "보기 초기화",
     "restoreError": "화이트보드 복원 실패: ",
     "history": "기록",
     "restore": "복원",
     "noHistory": "아직 기록이 없습니다",
     "restored": "화이트보드가 복원되었습니다",
-    "elementCount": "요소 {{count}}개"
+    "elementCount": "요소 {{count}}개",
+    "drawing": "{{name}} 판서 중",
+    "drawingAnonymous": "판서 중",
+    "zoom": "확대/축소",
+    "zoomIn": "확대",
+    "zoomOut": "축소",
+    "fit": "창에 맞추기",
+    "historyWithCount": "기록 ({{count}}개)",
+    "undo": "실행 취소",
+    "restoreSnapshot": "#{{index}} 복원"
   },
   "quiz": {
     "title": "퀴즈",
