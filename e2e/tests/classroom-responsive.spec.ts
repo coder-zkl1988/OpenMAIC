@@ -363,10 +363,12 @@ for (const board of [
       expect(barBox.height).toBeCloseTo(board.barHeight, 0);
       // Directly under the control bar, edge to edge, down to the bottom
       expect(sectionBox.y).toBeGreaterThanOrEqual(barBox.y + barBox.height - 1);
-      // Edge to edge of the content box: <html> always reserves the scrollbar
-      // gutter, which desktop Chromium draws (15px) and phones overlay (0px)
-      const contentWidth = await page.evaluate(() => document.documentElement.clientWidth);
-      expect(sectionBox.width).toBeCloseTo(contentWidth, 0);
+      // Edge to edge of the classroom. Compared with the classroom root rather
+      // than the viewport: <html> always reserves a scrollbar gutter, which
+      // headless Chromium draws (15px) and phones overlay (0px)
+      const rootBox = (await page.locator('[data-ui="v2"]').boundingBox())!;
+      expect(sectionBox.x).toBeCloseTo(rootBox.x, 0);
+      expect(sectionBox.width).toBeCloseTo(rootBox.width, 0);
       expect(sectionBox.y + sectionBox.height).toBeCloseTo(board.viewport.height, 0);
       await expectNoHorizontalScroll(page);
 

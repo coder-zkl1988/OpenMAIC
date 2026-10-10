@@ -77,7 +77,11 @@ async function openClassroom(page: Page) {
 }
 
 async function openExportMenu(page: Page) {
-  await page.getByRole('button', { name: 'Export PPTX' }).click();
+  const trigger = page.getByRole('button', { name: 'Export PPTX' });
+  // The download fires before the previous export settles; the trigger is
+  // disabled until it has, and re-enabling it would close a menu opened early
+  await expect(trigger).toBeEnabled({ timeout: 15_000 });
+  await trigger.click();
   await expect(page.getByRole('menu')).toBeVisible();
 }
 
