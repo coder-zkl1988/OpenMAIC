@@ -110,11 +110,20 @@ test.describe('Export menu: PPTX and Resource Pack submenus', () => {
     expect(plain.name).toMatch(/\.pptx$/);
     expect(await slideCount(plain.bytes)).toBe(1);
 
+    // The second choice goes through the keyboard: in headless CI a pointer
+    // re-opening this submenu right after a download can close it again during
+    // its enter animation, which made the click wait on a detached item
     await openExportMenu(page);
-    await subTrigger(page, /^Export PPTX/).hover();
+    const pptxTrigger = subTrigger(page, /^Export PPTX/);
+    await pptxTrigger.focus();
+    await page.keyboard.press('ArrowRight');
     const withPlaceholders = page.getByRole('menuitem', { name: /^With placeholder slides/ });
-    await expect(withPlaceholders).toBeVisible();
-    const full = await download(page, withPlaceholders);
+    await expect(withPlaceholders).toBeFocused();
+    const [fullFile] = await Promise.all([
+      page.waitForEvent('download'),
+      page.keyboard.press('Enter'),
+    ]);
+    const full = { bytes: await fs.readFile((await fullFile.path())!) };
     // The interactive and quiz scenes add one placeholder slide each.
     expect(await slideCount(full.bytes)).toBe(3);
   });

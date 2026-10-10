@@ -197,8 +197,10 @@ test.describe('Classroom at tablet landscape (1180×820)', () => {
     // Theme opens its submenu
     await menu.getByRole('menuitem', { name: 'Theme' }).click();
     await expect(page.getByRole('menuitem', { name: 'Dark' })).toBeVisible();
+    // Escape closes the whole menu tree; wait until it is gone, or the next
+    // click on ⋯ lands while it is still closing and toggles it shut
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toHaveCount(0);
 
     // Settings opens the dialog
     await more.click();
@@ -206,6 +208,7 @@ test.describe('Classroom at tablet landscape (1180×820)', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('menu')).toHaveCount(0);
 
     // Pro mode toggles from the menu
     await more.click();
