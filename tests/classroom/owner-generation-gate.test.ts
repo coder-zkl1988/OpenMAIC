@@ -176,6 +176,8 @@ describe('classroom surfaces feed the sidecar into the gate', () => {
     expect(surface).toMatch(
       /onRetryOutline=\{mayGenerate && runCourse\.runId \? runCourse\.retryOutline : undefined\}/,
     );
+    // So is the paused run's notice, which carries the same Retry.
+    expect(surface).toMatch(/\{mayGenerate && runCourse\.paused && \(\s*<GenerationPausedNotice/);
   });
 
   it('the standalone route mounts the shared page variant', () => {

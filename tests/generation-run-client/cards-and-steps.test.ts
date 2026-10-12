@@ -7,7 +7,11 @@ import {
 } from '@/lib/generation-run-client/course-card';
 import { previewStepIds, previewStepIndex } from '@/lib/generation-run-client/preview-steps';
 import { mergeOwnerRun } from '@/lib/generation-run-client/use-owner-runs';
-import { failedOutlinesOfRun, runIdOfCourse } from '@/lib/generation-run-client/use-run-course';
+import {
+  failedOutlinesOfRun,
+  runIdOfCourse,
+  runPauseOf,
+} from '@/lib/generation-run-client/use-run-course';
 import { applyRunEvent, viewFromSnapshot } from '@/lib/generation-run-client/reducer';
 
 import { event, outline, snapshot } from './fixtures';
@@ -131,5 +135,35 @@ describe('the classroom of a run course', () => {
     view = applyRunEvent(view, event(3, 'step_failed', { step: 'scene:1:actions', message: 'y' }));
     view = applyRunEvent(view, event(4, 'state', { state: 'paused', step: 'scene:1:actions' }));
     expect(failedOutlinesOfRun(view, outlines).map((o) => o.id)).toEqual(['o2', 'o3']);
+  });
+});
+
+describe('what a paused run stopped at', () => {
+  const outlines = [outline(1), outline(2), outline(3, 'From frequency back to time')];
+
+  it('names the failed page (1-based) and why it failed', () => {
+    let view = viewFromSnapshot(snapshot({ state: 'generating', seq: 1 }));
+    expect(runPauseOf(view, outlines)).toBeNull();
+    view = applyRunEvent(
+      view,
+      event(2, 'step_failed', {
+        step: 'scene:2:actions',
+        message: 'Service Unavailable',
+        errorCode: 'UPSTREAM_ERROR',
+        statusCode: 503,
+      }),
+    );
+    view = applyRunEvent(view, event(3, 'state', { state: 'paused', step: 'scene:2:actions' }));
+    expect(runPauseOf(view, outlines)).toEqual({
+      scene: { number: 3, title: 'From frequency back to time' },
+      failure: { key: 'generation.sceneGenerateProviderUnavailable' },
+    });
+  });
+
+  it('has no page for a step that is not a scene', () => {
+    const view = viewFromSnapshot(
+      snapshot({ state: 'paused', seq: 4, error: { step: 'agents', message: 'boom' } }),
+    );
+    expect(runPauseOf(view, outlines)).toEqual({ scene: null, failure: { text: 'boom' } });
   });
 });

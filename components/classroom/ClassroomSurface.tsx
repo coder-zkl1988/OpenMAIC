@@ -53,6 +53,7 @@ import {
   useClassroomLayoutObserver,
 } from '@/lib/hooks/use-classroom-layout';
 import { CourseGeneratingPlaceholder } from './CourseGeneratingPlaceholder';
+import { GenerationPausedNotice } from './GenerationPausedNotice';
 
 const log = createLogger('Classroom');
 
@@ -390,6 +391,9 @@ export function ClassroomSurface({
             />
           ) : (
             <ClassroomLayoutContext.Provider value={layout}>
+              {mayGenerate && runCourse.paused && (
+                <GenerationPausedNotice pause={runCourse.paused} onRetry={runCourse.retryRun} />
+              )}
               <Stage
                 classroomId={classroomId}
                 onRetryOutline={mayGenerate && runCourse.runId ? runCourse.retryOutline : undefined}

@@ -49,9 +49,12 @@ export function CourseRunStatusIcon({
 export function CourseRunStatusLabel({
   status,
   size = 'sm',
+  title,
 }: {
   readonly status: CourseRunStatus;
   readonly size?: 'sm' | 'md';
+  /** A tooltip: why a paused run stopped. */
+  readonly title?: string;
 }) {
   const { t } = useI18n();
   const paused = status.kind === 'paused';
@@ -74,6 +77,7 @@ export function CourseRunStatusLabel({
             ),
       )}
       data-testid="course-run-status"
+      title={title}
     >
       <CourseRunStatusIcon status={status} className="size-3" />
       {courseRunStatusText(status, t)}

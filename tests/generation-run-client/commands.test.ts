@@ -4,6 +4,7 @@ import {
   confirmOutline,
   resetCommandIds,
   retryPausedRun,
+  retryPausedRunSnapshot,
   retryRunMedia,
 } from '@/lib/generation-run-client/commands';
 import { viewFromSnapshot, applyRunEvent } from '@/lib/generation-run-client/reducer';
@@ -73,6 +74,20 @@ describe('run commands', () => {
       event(14, 'step_failed', { step: 'scene:0:content', message: 'again' }),
     );
     await retryPausedRun(view);
+    const [a, b, c] = bodies();
+    expect(a!.url).toBe('/api/generation-runs/run-AAAAAAAAAAAAAAAA/retry');
+    expect(a!.body).toEqual({ commandId: a!.body.commandId });
+    expect(b!.body.commandId).toBe(a!.body.commandId);
+    expect(c!.body.commandId).not.toBe(a!.body.commandId);
+  });
+
+  it('retries a paused run from its list snapshot, one command id per pause', async () => {
+    const failure = { step: 'scene:9:actions', message: 'Service Unavailable' };
+    await retryPausedRunSnapshot(snapshot({ state: 'paused', seq: 123, error: failure }));
+    // A second click on the same card resends the same command.
+    await retryPausedRunSnapshot(snapshot({ state: 'paused', seq: 123, error: failure }));
+    // The run paused again later: a new Retry.
+    await retryPausedRunSnapshot(snapshot({ state: 'paused', seq: 140, error: failure }));
     const [a, b, c] = bodies();
     expect(a!.url).toBe('/api/generation-runs/run-AAAAAAAAAAAAAAAA/retry');
     expect(a!.body).toEqual({ commandId: a!.body.commandId });

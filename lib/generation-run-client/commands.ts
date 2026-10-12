@@ -7,7 +7,7 @@
  * same id and the server answers what the first one did.
  */
 import { confirmRunOutline, holdRunOutline, newCommandId, retryRun } from './api';
-import type { RunView } from './types';
+import type { RunSnapshot, RunView } from './types';
 import type { SceneOutline } from '@/lib/types/generation';
 
 const commandIds = new Map<string, string>();
@@ -59,6 +59,19 @@ export async function retryPausedRun(
     seq?: unknown;
   };
   return typeof result.seq === 'number' ? result.seq : view.failedSeq;
+}
+
+/**
+ * Re-run the step a paused run stopped at, from a course list: the list holds
+ * the run's snapshot, not its folded view, so the snapshot's seq (the pause
+ * it reports) keys the command. A second click on the same pause resends the
+ * same id.
+ */
+export async function retryPausedRunSnapshot(
+  run: Pick<RunSnapshot, 'id' | 'seq' | 'error'>,
+): Promise<void> {
+  const key = `${run.id}:retry-snapshot:${run.error?.step ?? ''}:${run.seq}`;
+  await retryRun(run.id, { commandId: commandIdFor(key, 'retry') });
 }
 
 /** Generate one failed (or disabled) image or video of the run again. */

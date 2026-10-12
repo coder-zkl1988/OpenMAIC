@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Atom, FolderInput, Pencil, Sparkles, Trash2 } from 'lucide-react';
+import { Atom, FolderInput, Pencil, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import type { Slide } from '@openmaic/dsl';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { useNearViewport } from '@/lib/hooks/use-near-viewport';
@@ -38,6 +38,8 @@ export function ClassroomCard({
   requestThumbnail,
   formatDate,
   runStatus = null,
+  runFailure,
+  onRetryRun,
   pendingCourse = false,
   moveTarget,
   overlay,
@@ -56,6 +58,10 @@ export function ClassroomCard({
   formatDate: (ts: number) => string;
   /** The state of the run generating this course, while it runs. */
   runStatus?: CourseRunStatus | null;
+  /** Why the run is paused (the paused pill's tooltip). */
+  runFailure?: string;
+  /** Retries a paused run where it stopped (absent: no Retry on the card). */
+  onRetryRun?: () => Promise<void>;
   /** The card is a run whose course does not exist yet: it can only be opened or deleted. */
   pendingCourse?: boolean;
   /** Folders the course can be moved to (absent: no 移动到文件夹 entry). */
@@ -80,6 +86,7 @@ export function ClassroomCard({
   // input instead of back to its trigger.
   const renameFromMenu = useRef(false);
   const nearViewport = useNearViewport(thumbRef);
+  const [retryingRun, setRetryingRun] = useState(false);
 
   useEffect(() => {
     if (!nearViewport || !requestThumbnail) return;
@@ -277,8 +284,35 @@ export function ClassroomCard({
             </p>
           )}
           {runStatus ? (
-            <div className="mt-1 flex">
-              <CourseRunStatusLabel status={runStatus} size="md" />
+            <div className="mt-1 flex items-center gap-1.5">
+              <CourseRunStatusLabel status={runStatus} size="md" title={runFailure} />
+              {runStatus.kind === 'paused' && onRetryRun && (
+                <button
+                  type="button"
+                  data-testid="card-retry-run"
+                  aria-label={`${retryingRun ? t('generation.retryingScene') : t('generation.retryScene')}: ${classroom.name}`}
+                  disabled={retryingRun}
+                  onClick={(e) => {
+                    // The card opens the course on click.
+                    e.stopPropagation();
+                    if (retryingRun) return;
+                    setRetryingRun(true);
+                    void onRetryRun().finally(() => setRetryingRun(false));
+                  }}
+                  className={cn(
+                    'inline-flex h-[20px] items-center gap-1 rounded-full px-2 text-xs font-medium transition-colors',
+                    'text-primary-6 hover:bg-primary-1 dark:text-accent-text dark:hover:bg-accent-soft',
+                    'outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                    'disabled:cursor-default disabled:opacity-60',
+                  )}
+                >
+                  <RefreshCw
+                    className={cn('size-3', retryingRun && 'animate-spin')}
+                    aria-hidden="true"
+                  />
+                  {retryingRun ? t('generation.retryingScene') : t('generation.retryScene')}
+                </button>
+              )}
             </div>
           ) : (
             <p className="mt-0.5 text-xs leading-[18px] text-fg-tertiary truncate">
