@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Q&A",
       "discussion": "Debate",
-      "lecture": "CLASE"
+      "lecture": "CLASE",
+      "aside": "Preguntas al asistente"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "Levantar la mano",
       "raiseHandHint": "Levanta la mano: el profesor te dará la palabra al terminar esta frase",
+      "raiseHandHintAssistant": "Levanta la mano: el asistente responde en el panel de Interacción mientras el profesor sigue explicando",
       "raiseHandInLiveSession": "Durante las preguntas puedes hablar directamente",
       "lowerHand": "Bajar",
       "lowerHandHint": "Bajar la mano y retirar la pregunta",
@@ -390,6 +392,7 @@
       "cancelRecording": "Cancelar grabación",
       "handRaised": "Mano levantada · te toca al terminar esta frase",
       "handRaisedStep": "Mano levantada · te toca al terminar este paso",
+      "handRaisedAssistant": "Mano levantada · el asistente te responde en el panel de Interacción",
       "raisedPlaceholder": "Puedes escribir tu pregunta antes...",
       "followUpPlaceholder": "Haz una pregunta de seguimiento...",
       "referencePlaceholder": "{{type}}: ¿qué quieres preguntar sobre esto?",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "Levantaste la mano; el debate de {{name}} va después de ti",
       "calledBy": "{{name}} te da la palabra",
       "pendingQuestion": "En cola · se responde al terminar esta frase",
-      "pendingQuestionStep": "En cola · se responde al terminar este paso"
+      "pendingQuestionStep": "En cola · se responde al terminar este paso",
+      "assistantPrompt": "Dime tu pregunta y te ayudo.",
+      "assistantAnswering": "El asistente está respondiendo…"
     },
     "participants": {
       "label": "Participantes",
       "online": "{{count}} en línea",
       "speaking": "Hablando",
+      "answering": "Respondiendo",
       "wantsToSpeak": "Quiere hablar",
       "handRaised": "Mano levantada",
       "more": "{{count}} participantes más"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "Atajos",
     "generalSettings": "General",
     "systemSettings": "Sistema",
+    "classroomSection": "Clase",
+    "assistantAnswersDuringLecture": "El asistente responde las preguntas durante la clase",
+    "assistantAnswersDuringLectureDesc": "Si está activado, las preguntas durante la clase no interrumpen al profesor: el asistente las responde en el panel de Interacción.",
     "importFromClipboard": "Importar del portapapeles",
     "baseUrlRegion": {
       "china": "China",

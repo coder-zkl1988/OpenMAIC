@@ -290,7 +290,8 @@
     "badge": {
       "qa": "أسئلة",
       "discussion": "نقاش",
-      "lecture": "محاضرة"
+      "lecture": "محاضرة",
+      "aside": "أسئلة المساعد"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "رفع اليد",
       "raiseHandHint": "ارفع يدك: سيمنحك المعلم الكلمة بعد انتهاء هذه الجملة",
+      "raiseHandHintAssistant": "ارفع يدك: يجيب المساعد في لوحة التفاعل بينما يواصل المعلم الشرح",
       "raiseHandInLiveSession": "يمكنك التحدث مباشرة أثناء الأسئلة",
       "lowerHand": "إنزال",
       "lowerHandHint": "أنزل يدك واسحب السؤال",
@@ -390,6 +392,7 @@
       "cancelRecording": "إلغاء التسجيل",
       "handRaised": "يدك مرفوعة · سيأتي دورك بعد هذه الجملة",
       "handRaisedStep": "يدك مرفوعة · سيأتي دورك بعد هذه الخطوة",
+      "handRaisedAssistant": "يدك مرفوعة · سيجيبك المساعد في لوحة التفاعل",
       "raisedPlaceholder": "يمكنك كتابة سؤالك مسبقًا...",
       "followUpPlaceholder": "اطرح سؤال متابعة...",
       "referencePlaceholder": "{{type}}: ماذا تريد أن تسأل عنه؟",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "رفعت يدك، ونقاش {{name}} يأتي بعدك",
       "calledBy": "{{name}} يطلب منك التحدث",
       "pendingQuestion": "في الانتظار · سيُجاب بعد هذه الجملة",
-      "pendingQuestionStep": "في الانتظار · سيُجاب بعد هذه الخطوة"
+      "pendingQuestionStep": "في الانتظار · سيُجاب بعد هذه الخطوة",
+      "assistantPrompt": "اطرح سؤالك وسأساعدك.",
+      "assistantAnswering": "المساعد يجيب…"
     },
     "participants": {
       "label": "المشاركون",
       "online": "{{count}} متصل الآن",
       "speaking": "يتحدث",
+      "answering": "يجيب",
       "wantsToSpeak": "يريد التحدث",
       "handRaised": "رافع يده",
       "more": "{{count}} مشاركين آخرين"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "اختصارات لوحة المفاتيح",
     "generalSettings": "عام",
     "systemSettings": "النظام",
+    "classroomSection": "الفصل",
+    "assistantAnswersDuringLecture": "المساعد يجيب عن الأسئلة أثناء الشرح",
+    "assistantAnswersDuringLectureDesc": "عند التفعيل، لا تقاطع الأسئلة المطروحة أثناء الشرح المعلم: يجيب عنها المساعد في لوحة التفاعل.",
     "importFromClipboard": "استيراد من الحافظة",
     "baseUrlRegion": {
       "china": "الصين",

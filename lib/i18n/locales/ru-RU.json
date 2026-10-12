@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Вопросы",
       "discussion": "Обсуждение",
-      "lecture": "ЛЕКЦ"
+      "lecture": "ЛЕКЦ",
+      "aside": "Вопросы ассистенту"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "Поднять руку",
       "raiseHandHint": "Поднять руку: преподаватель вызовет вас после этой фразы",
+      "raiseHandHintAssistant": "Поднять руку: ассистент ответит в панели взаимодействия, а преподаватель продолжит лекцию",
       "raiseHandInLiveSession": "Во время вопросов можно говорить сразу",
       "lowerHand": "Опустить",
       "lowerHandHint": "Опустить руку и отозвать вопрос",
@@ -390,6 +392,7 @@
       "cancelRecording": "Отменить запись",
       "handRaised": "Рука поднята · вас вызовут после этой фразы",
       "handRaisedStep": "Рука поднята · вас вызовут после этого шага",
+      "handRaisedAssistant": "Рука поднята · ассистент ответит вам в панели взаимодействия",
       "raisedPlaceholder": "Можно заранее написать вопрос...",
       "followUpPlaceholder": "Задайте уточняющий вопрос...",
       "referencePlaceholder": "{{type}}: что вы хотите об этом спросить?",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "Вы подняли руку — обсуждение {{name}} будет после вас",
       "calledBy": "{{name}} просит вас высказаться",
       "pendingQuestion": "В очереди · ответ после этой фразы",
-      "pendingQuestionStep": "В очереди · ответ после этого шага"
+      "pendingQuestionStep": "В очереди · ответ после этого шага",
+      "assistantPrompt": "Задайте свой вопрос, я помогу.",
+      "assistantAnswering": "Ассистент отвечает…"
     },
     "participants": {
       "label": "Участники",
       "online": "В сети: {{count}}",
       "speaking": "Говорит",
+      "answering": "Отвечает",
       "wantsToSpeak": "Хочет высказаться",
       "handRaised": "Рука поднята",
       "more": "Ещё участников: {{count}}"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "Горячие клавиши",
     "generalSettings": "Общие",
     "systemSettings": "Система",
+    "classroomSection": "Урок",
+    "assistantAnswersDuringLecture": "Ассистент отвечает на вопросы во время лекции",
+    "assistantAnswersDuringLectureDesc": "Если включено, вопросы во время лекции не прерывают преподавателя: ассистент отвечает на них в панели взаимодействия.",
     "importFromClipboard": "Импорт из буфера",
     "baseUrlRegion": {
       "china": "Китай",

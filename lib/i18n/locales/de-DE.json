@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Q&A",
       "discussion": "Diskussion",
-      "lecture": "Vortrag"
+      "lecture": "Vortrag",
+      "aside": "Assistenz-Q&A"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "Melden",
       "raiseHandHint": "Melden: Die Lehrkraft ruft dich nach diesem Satz auf",
+      "raiseHandHintAssistant": "Melden: Die Assistenz antwortet im Interaktionsbereich, die Lehrkraft unterrichtet weiter",
       "raiseHandInLiveSession": "Während der Fragerunde kannst du direkt sprechen",
       "lowerHand": "Senken",
       "lowerHandHint": "Hand senken und Frage zurückziehen",
@@ -390,6 +392,7 @@
       "cancelRecording": "Aufnahme abbrechen",
       "handRaised": "Gemeldet · du bist nach diesem Satz dran",
       "handRaisedStep": "Gemeldet · du bist nach diesem Schritt dran",
+      "handRaisedAssistant": "Gemeldet · die Assistenz antwortet dir im Interaktionsbereich",
       "raisedPlaceholder": "Du kannst deine Frage schon aufschreiben...",
       "followUpPlaceholder": "Nachfrage stellen...",
       "referencePlaceholder": "{{type}}: Was möchtest du dazu fragen?",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "Du hast dich gemeldet – die Diskussion von {{name}} kommt nach dir",
       "calledBy": "{{name}} bittet dich zu sprechen",
       "pendingQuestion": "In der Warteschlange · Antwort nach diesem Satz",
-      "pendingQuestionStep": "In der Warteschlange · Antwort nach diesem Schritt"
+      "pendingQuestionStep": "In der Warteschlange · Antwort nach diesem Schritt",
+      "assistantPrompt": "Stell mir deine Frage, ich helfe dir weiter.",
+      "assistantAnswering": "Die Assistenz antwortet…"
     },
     "participants": {
       "label": "Teilnehmende",
       "online": "{{count}} online",
       "speaking": "Spricht",
+      "answering": "Antwortet",
       "wantsToSpeak": "Möchte sprechen",
       "handRaised": "Meldet sich",
       "more": "{{count}} weitere Teilnehmende"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "Tastenkürzel",
     "generalSettings": "Allgemein",
     "systemSettings": "System",
+    "classroomSection": "Unterricht",
+    "assistantAnswersDuringLecture": "Assistenz beantwortet Fragen während des Vortrags",
+    "assistantAnswersDuringLectureDesc": "Wenn aktiviert, unterbrechen Fragen während des Vortrags die Lehrkraft nicht: Die Assistenz beantwortet sie im Interaktionsbereich.",
     "importFromClipboard": "Aus Zwischenablage importieren",
     "baseUrlRegion": {
       "china": "China",

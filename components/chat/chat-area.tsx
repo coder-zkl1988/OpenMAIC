@@ -21,7 +21,9 @@ import { PanelRightClose, BookOpen, Users } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   useChatSessions,
+  isAsideSession,
   MANUAL_STOP_END_OPTIONS,
+  type AsideMessageSendOptions,
   type EndSessionOptions,
   type SessionCleanupPayload,
   type ChatMessageSendOptions,
@@ -53,6 +55,14 @@ interface ChatAreaProps {
   ) => void;
   /** When provided and returns true, StreamBuffer holds on the current text item after reveal. */
   shouldHoldAfterReveal?: () => { holding: boolean; segmentDone: number } | boolean;
+  /**
+   * The teaching assistant's aside (it answers while the lecture keeps
+   * playing): its live text and speaker, its thinking, and whether it is open
+   * and streaming. Never reported through the lecture-facing callbacks.
+   */
+  onAsideLiveSpeech?: (text: string | null, agentId?: string | null) => void;
+  onAsideThinking?: (state: { stage: string; agentId?: string } | null) => void;
+  onAsideStateChange?: (state: { sessionId: string | null; isStreaming: boolean }) => void;
   currentSceneId?: string | null;
   currentActionIndex?: number | null;
   canJumpToAction?: (sceneId: string, actionIndex: number) => boolean;
@@ -132,6 +142,10 @@ export interface ChatAreaRef {
   pauseActiveLiveBuffer: () => boolean;
   resumeActiveLiveBuffer: () => void;
   switchToTab: (tab: ChatAreaTab) => void;
+  /** Ask the teaching assistant on the side (a new aside, or a follow-up in the open one) */
+  sendAsideMessage: (content: string, options: AsideMessageSendOptions) => Promise<void>;
+  /** End the open aside, keeping its messages */
+  endAsideSession: () => Promise<void>;
 }
 
 const DEFAULT_WIDTH = 360;
@@ -158,6 +172,9 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       onStopSession,
       onSegmentSealed,
       shouldHoldAfterReveal,
+      onAsideLiveSpeech,
+      onAsideThinking,
+      onAsideStateChange,
       currentSceneId,
       currentActionIndex,
       canJumpToAction,
@@ -199,6 +216,10 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       resumeBuffer,
       pauseActiveLiveBuffer,
       resumeActiveLiveBuffer,
+      asideSessionId,
+      isAsideStreaming,
+      sendAsideMessage,
+      endAsideSession,
     } = useChatSessions({
       onLiveSpeech,
       onSpeechProgress,
@@ -210,7 +231,22 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       onStopSession,
       onSegmentSealed,
       shouldHoldAfterReveal,
+      onAsideLiveSpeech,
+      onAsideThinking,
     });
+
+    // The aside's open / streaming state, reported on the way out (the
+    // callback read through a ref, so an inline one does not re-report)
+    const onAsideStateChangeRef = useRef(onAsideStateChange);
+    useEffect(() => {
+      onAsideStateChangeRef.current = onAsideStateChange;
+    });
+    useEffect(() => {
+      onAsideStateChangeRef.current?.({
+        sessionId: asideSessionId ?? null,
+        isStreaming: !!isAsideStreaming,
+      });
+    }, [asideSessionId, isAsideStreaming]);
 
     // 互动 is the default tab: participants, the conversation and the composer live there
     const [selectedTab, setActiveTab] = useState<PanelTab>('interaction');
@@ -235,8 +271,9 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
     // A 发起讨论 offer waits for an answer: the 互动 dot shows it on 笔记 too
     const hasPendingOffer = Boolean(streamTrailing);
 
+    // The lecture-facing session (an aside never soft-closes or takes the stop pill)
     const softClosingChatSession = useMemo(
-      () => chatSessions.find((s) => s.status === 'soft-closing'),
+      () => chatSessions.find((s) => s.status === 'soft-closing' && !isAsideSession(s)),
       [chatSessions],
     );
 
@@ -252,6 +289,12 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
     const handleEndSession = useCallback(
       async (sessionId: string) => {
         const session = chatSessions.find((candidate) => candidate.id === sessionId);
+        // An aside ends on its own: the lecture keeps playing, so the
+        // parent's engine cleanup (which ends a Q&A's interruption) never runs
+        if (session && isAsideSession(session)) {
+          if (session.id === asideSessionId) await endAsideSession();
+          return;
+        }
         if (session?.status === 'soft-closing') {
           const payload = await confirmSoftClosingSession(sessionId);
           if (payload) onStopSession?.(payload);
@@ -260,18 +303,30 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
         await endSession(sessionId, MANUAL_STOP_END_OPTIONS);
         onStopSession?.({ sessionId, source: 'manual_stop' });
       },
-      [chatSessions, confirmSoftClosingSession, endSession, onStopSession],
+      [
+        asideSessionId,
+        chatSessions,
+        confirmSoftClosingSession,
+        endAsideSession,
+        endSession,
+        onStopSession,
+      ],
     );
 
+    // The stop pill acts on the lecture-facing Q&A / discussion, never the aside
     const handleStopActiveSession = useCallback(async () => {
       const active = chatSessions.find(
-        (session) => session.status === 'active' || session.status === 'soft-closing',
+        (session) =>
+          (session.status === 'active' || session.status === 'soft-closing') &&
+          !isAsideSession(session),
       );
       if (active) await handleEndSession(active.id);
     }, [chatSessions, handleEndSession]);
 
     const handleContinueActiveSoftClosingSession = useCallback((): boolean => {
-      const softClosing = chatSessions.find((session) => session.status === 'soft-closing');
+      const softClosing = chatSessions.find(
+        (session) => session.status === 'soft-closing' && !isAsideSession(session),
+      );
       return softClosing ? continueSoftClosingSession(softClosing.id) : false;
     }, [chatSessions, continueSoftClosingSession]);
 
@@ -319,6 +374,8 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       pauseActiveLiveBuffer,
       resumeActiveLiveBuffer,
       switchToTab,
+      sendAsideMessage,
+      endAsideSession,
     }));
 
     // Drag-to-resize
@@ -505,6 +562,8 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
             sessions={chatSessions}
             scenes={scenes}
             isStreaming={isStreaming}
+            asideSessionId={asideSessionId}
+            isAsideStreaming={isAsideStreaming}
             activeBubbleId={activeBubbleId}
             onEndSession={handleEndSession}
             onContinueSession={handleContinueSession}

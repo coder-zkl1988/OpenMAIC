@@ -7,6 +7,7 @@ import type { AgentTurnSummary, WhiteboardActionRecord } from '@/lib/orchestrati
 import type { StatelessChatRequest, StatelessEvent } from '@/lib/types/chat';
 import type { ThinkingConfig } from '@/lib/types/provider';
 import { buildDirectorPrompt, buildUserPrompt, toHistoryMessages } from './prompts';
+import { isAsideToLecture } from './config';
 import { createDirectorCompactionRuntime } from './director-compaction';
 import type { DirectorToolTraceEntry, SendEvent } from './types';
 import type { ChildRuntimeMode } from './child-runtime';
@@ -70,6 +71,8 @@ export async function runPiDirectorLoop(opts: {
         })
       : undefined;
   const directorToolTrace: DirectorToolTraceEntry[] = [];
+  // The assistant answers on the side while the teacher keeps lecturing
+  const asideToLecture = isAsideToLecture(opts.body);
   const maxDirectorToolCalls = Math.max(opts.maxAgentTurns * 3, opts.maxAgentTurns + 3);
   const piAgentResponses: AgentTurnSummary[] = [];
   const piWhiteboardLedger: WhiteboardActionRecord[] = [];
@@ -200,11 +203,16 @@ export async function runPiDirectorLoop(opts: {
       },
       elementReferenceEvidence,
     }),
-    buildCloseSessionTool({
-      closeSession,
-      canCloseSession: hasVisibleAgentTurn,
-      isUserCued: () => userCued,
-    }),
+    // An aside to the lecture stays open for follow-ups: it has no close_session
+    ...(asideToLecture
+      ? []
+      : [
+          buildCloseSessionTool({
+            closeSession,
+            canCloseSession: hasVisibleAgentTurn,
+            isUserCued: () => userCued,
+          }),
+        ]),
     buildCueUserTool({
       cueUser,
       getLastAgentId: () => piAgentResponses.at(-1)?.agentId,

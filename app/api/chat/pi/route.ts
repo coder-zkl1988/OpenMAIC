@@ -17,6 +17,7 @@ import {
 } from '@/lib/config/feature-flags';
 import { createLogger } from '@/lib/logger';
 import {
+  getPiEnableWhiteboardTools,
   getPiMaxActionsPerAgent,
   getPiMaxAgentTurns,
   resolveAgentConfigs,
@@ -204,7 +205,8 @@ async function chat(req: NextRequest, principal: OwnerPrincipal): Promise<Respon
 
     const maxAgentTurns = getPiMaxAgentTurns(body);
     const maxActionsPerAgent = getPiMaxActionsPerAgent(body);
-    const enableWhiteboardTools = body.config.piEnableWhiteboardTools === true;
+    // Never in an aside to the lecture: the assistant answers in text only
+    const enableWhiteboardTools = getPiEnableWhiteboardTools(body);
     const childRuntimeMode = isPiNativeChildRuntimeEnabled() ? 'native' : 'legacy';
     const enableNativeChildSpotlight = isPiNativeChildSpotlightEnabled();
     const requestStartStageId = body.storeState.stage?.id;

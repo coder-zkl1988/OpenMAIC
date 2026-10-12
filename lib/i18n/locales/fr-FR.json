@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Q/R",
       "discussion": "Discussion",
-      "lecture": "COURS"
+      "lecture": "COURS",
+      "aside": "Q/R assistant"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "Lever la main",
       "raiseHandHint": "Levez la main : l’enseignant vous donne la parole après cette phrase",
+      "raiseHandHintAssistant": "Levez la main : l’assistant répond dans le panneau Interaction pendant que l’enseignant poursuit le cours",
       "raiseHandInLiveSession": "Pendant les questions, vous pouvez parler directement",
       "lowerHand": "Baisser",
       "lowerHandHint": "Baisser la main et retirer la question",
@@ -390,6 +392,7 @@
       "cancelRecording": "Annuler l’enregistrement",
       "handRaised": "Main levée · à vous après cette phrase",
       "handRaisedStep": "Main levée · à vous après cette étape",
+      "handRaisedAssistant": "Main levée · l’assistant vous répond dans le panneau Interaction",
       "raisedPlaceholder": "Vous pouvez déjà écrire votre question...",
       "followUpPlaceholder": "Poser une question de suivi...",
       "referencePlaceholder": "{{type}} : que voulez-vous demander à ce sujet ?",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "Vous avez levé la main ; la discussion de {{name}} passe après vous",
       "calledBy": "{{name}} vous donne la parole",
       "pendingQuestion": "En attente · réponse après cette phrase",
-      "pendingQuestionStep": "En attente · réponse après cette étape"
+      "pendingQuestionStep": "En attente · réponse après cette étape",
+      "assistantPrompt": "Posez-moi votre question, je vais vous aider.",
+      "assistantAnswering": "L’assistant répond…"
     },
     "participants": {
       "label": "Participants",
       "online": "{{count}} en ligne",
       "speaking": "Parle",
+      "answering": "Répond",
       "wantsToSpeak": "Veut parler",
       "handRaised": "Main levée",
       "more": "{{count}} autres participants"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "Raccourcis",
     "generalSettings": "Général",
     "systemSettings": "Système",
+    "classroomSection": "Cours",
+    "assistantAnswersDuringLecture": "L’assistant répond aux questions pendant le cours",
+    "assistantAnswersDuringLectureDesc": "Activé, les questions posées pendant le cours n’interrompent pas l’enseignant : l’assistant y répond dans le panneau Interaction.",
     "importFromClipboard": "Importer depuis le presse-papiers",
     "baseUrlRegion": {
       "china": "Chine",

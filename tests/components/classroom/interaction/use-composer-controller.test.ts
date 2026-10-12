@@ -288,4 +288,46 @@ describe('useComposerController', () => {
     // No lower handler: nothing happens
     expect(composer.hand.toggle()).toBe(false);
   });
+
+  it('reports the end of voice input whichever way it ends', () => {
+    const onVoiceEnd = vi.fn();
+    render({ onVoiceEnd });
+
+    // Sent
+    act(() => composer.voice.toggle());
+    expect(onVoiceEnd).not.toHaveBeenCalled();
+    act(() => audio.onTranscription?.('Why?'));
+    expect(options.onMessageSend).toHaveBeenCalledExactlyOnceWith('Why?');
+    expect(onVoiceEnd).toHaveBeenCalledTimes(1);
+
+    // Nothing heard
+    render({ isStreaming: true });
+    render({ isStreaming: false });
+    act(() => composer.voice.toggle());
+    act(() => audio.onTranscription?.('  '));
+    expect(onVoiceEnd).toHaveBeenCalledTimes(2);
+
+    // Cancelled; dismissing with nothing open reports nothing
+    act(() => composer.voice.toggle());
+    act(() => composer.dismiss());
+    expect(audio.cancelRecording).not.toHaveBeenCalled();
+    expect(onVoiceEnd).toHaveBeenCalledTimes(3);
+    act(() => composer.dismiss());
+    expect(onVoiceEnd).toHaveBeenCalledTimes(3);
+
+    // Closed before anything was recorded
+    act(() => composer.voice.toggle());
+    act(() => composer.voice.toggle());
+    expect(onVoiceEnd).toHaveBeenCalledTimes(4);
+  });
+
+  it("lifts the send lock once the assistant's answer starts", () => {
+    render({ speakingAgentId: null, isStreaming: true });
+    act(() => composer.setDraft('Why?'));
+    act(() => composer.send());
+    expect(composer.isSendCooldown).toBe(true);
+    // The owner feeds the aside's speaker while the lecture has none
+    render({ speakingAgentId: 'default-2', isStreaming: true });
+    expect(composer.isSendCooldown).toBe(false);
+  });
 });

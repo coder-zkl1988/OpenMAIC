@@ -45,7 +45,10 @@ import {
 import type { MessageSendResult } from '@/components/classroom/interaction/use-composer-controller';
 import type { QueuedQuestionState } from '@/components/classroom/interaction/use-queued-question-effects';
 import { ProactiveCard } from '@/components/chat/proactive-card';
-import { HandRaiseStreamStatus } from '@/components/chat/conversation-stream';
+import {
+  AssistantAsideStreamStatus,
+  HandRaiseStreamStatus,
+} from '@/components/chat/conversation-stream';
 import { DEFAULT_TEACHER_AVATAR } from '@/lib/constants/avatar-fallbacks';
 import { useASRAvailable } from '@/lib/hooks/use-asr-available';
 import { usePlaybackControls } from '@/components/canvas/use-playback-controls';
@@ -76,6 +79,7 @@ import {
   takeRaisedHandDraft,
 } from '@/lib/playback/raised-hand-draft';
 import { loadCursor, saveCursor, type PlaybackCursor } from '@/lib/playback/cursor';
+import { pickAssistantAgent, shouldAssistantAnswer } from '@/lib/playback/assistant-aside';
 import { ActionEngine } from '@/lib/action/engine';
 import { createAudioPlayer } from '@/lib/utils/audio-player';
 import { useDiscussionTTS } from '@/lib/hooks/use-discussion-tts';
@@ -84,7 +88,10 @@ import type { AudioIndicatorState } from '@/components/roundtable/audio-indicato
 import type { Action, DiscussionAction, SpeechAction } from '@/lib/types/action';
 import { cn } from '@/lib/utils';
 import { ChatArea, type ChatAreaRef } from '@/components/chat/chat-area';
-import type { SessionCleanupPayload } from '@/components/chat/use-chat-sessions';
+import type {
+  ChatMessageSendOptions,
+  SessionCleanupPayload,
+} from '@/components/chat/use-chat-sessions';
 import { agentsToParticipants, useAgentRegistry } from '@/lib/orchestration/registry/store';
 import type { AgentConfig } from '@/lib/orchestration/registry/types';
 import {
@@ -247,6 +254,46 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const handCalledUiRef = useRef<() => void>(() => {});
     // Set while voice calls a raised hand: the recording owns focus
     const suppressHandCallFocusRef = useRef(false);
+    // The teaching assistant's aside: while the lecture plays the teacher
+    // keeps lecturing and the assistant answers in the 互动 panel, text only.
+    // Tracked apart from the lecture-facing live state (chatSessionType,
+    // isCueUser, thinkingState, speakingAgentId), which keeps driving the
+    // caption, play / pause, the stop pill and the shortcuts for the lecture.
+    const [asideSessionOpen, setAsideSessionOpenState] = useState(false);
+    const asideSessionOpenRef = useRef(false);
+    const [asideStreaming, setAsideStreamingState] = useState(false);
+    const asideStreamingRef = useRef(false);
+    // Who answers in the aside's current turn, once its answer has started
+    // (kept until the turn settles, so 助教正在回答… never flashes back)
+    const [asideSpeakingAgentId, setAsideSpeakingAgentId] = useState<string | null>(null);
+    const [asideThinking, setAsideThinking] = useState<{
+      stage: string;
+      agentId?: string;
+    } | null>(null);
+    // A bare hand raised to the assistant: the lecture is not paused for it
+    // (never the engine's hand); the next question goes to the assistant
+    const [assistantHandRaised, setAssistantHandRaisedState] = useState(false);
+    const assistantHandRaisedRef = useRef(false);
+    // The engine, paused only while the learner records a question for the
+    // assistant (the mic would pick up the teacher): resumed once it is sent
+    // or the recording is dropped
+    const assistantVoicePauseRef = useRef<PlaybackEngine | null>(null);
+    // Shows the learner where to ask once a hand goes up to the assistant (set each render)
+    const assistantHandUiRef = useRef<() => void>(() => {});
+    // A Q&A / discussion with the teacher is open: mirrored for routing at call time
+    const liveSessionOpenRef = useRef(false);
+    const setAsideSessionOpen = useCallback((open: boolean) => {
+      asideSessionOpenRef.current = open;
+      setAsideSessionOpenState(open);
+    }, []);
+    const setAsideStreaming = useCallback((streaming: boolean) => {
+      asideStreamingRef.current = streaming;
+      setAsideStreamingState(streaming);
+    }, []);
+    const setAssistantHandRaised = useCallback((raised: boolean) => {
+      assistantHandRaisedRef.current = raised;
+      setAssistantHandRaisedState(raised);
+    }, []);
     // The interaction panel, where focus may move to the composer on a call
     const panelRef = useRef<HTMLDivElement>(null);
     // The raised hand's text until the server accepts it or it is given back:
@@ -366,6 +413,11 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         selectedAgentIds.map((id) => agentsRecord[id]).filter((a): a is AgentConfig => a != null),
       [agentsRecord, selectedAgentIds],
     );
+    // The classroom's teaching assistant, who answers on the side while the
+    // lecture plays (assistantAnswersDuringLecture; the setting defaults on)
+    const assistantAgent = useMemo(() => pickAssistantAgent(selectedAgents), [selectedAgents]);
+    const assistantAnswersEnabled =
+      useSettingsStore((s) => s.assistantAnswersDuringLecture) !== false;
 
     // Discussion TTS: audio indicator state
     const [audioIndicatorState, setAudioIndicatorState] = useState<AudioIndicatorState>('idle');
@@ -420,10 +472,11 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     // Auto-play's scene advance, held while the student composes (typing no
     // longer pauses the lecture, so it can complete under an open input)
     const heldAutoAdvanceRef = useRef<{ engine: PlaybackEngine; advance: () => void } | null>(null);
-    // Run a held advance once the input closes — unless the student asked a
-    // question instead (that Q&A now owns the slide) or playback moved on.
+    // Run a held advance once the input closes and the assistant has finished
+    // answering — unless the student asked a question instead (that Q&A now
+    // owns the slide) or playback moved on. The switch ends the aside.
     useEffect(() => {
-      if (isPresentationInteractionActive) return;
+      if (isPresentationInteractionActive || asideStreaming) return;
       const held = heldAutoAdvanceRef.current;
       heldAutoAdvanceRef.current = null;
       if (!held || chatSessionType) return;
@@ -432,37 +485,90 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         return;
       }
       advance();
-    }, [chatSessionType, isPresentationInteractionActive]);
+    }, [asideStreaming, chatSessionType, isPresentationInteractionActive]);
+
+    /** A send's reference and receipt: an accepted reference clears the draft it froze */
+    const elementReferenceSendOptions = useCallback(
+      (
+        snapshot?: ElementReferenceSendSnapshot,
+        onAccepted?: () => void,
+      ): ChatMessageSendOptions | undefined =>
+        snapshot
+          ? {
+              elementReference: snapshot.reference,
+              onResponseAccepted: (response) => {
+                onAccepted?.();
+                const current = draftElementReferenceRef.current;
+                if (
+                  !shouldClearDraftElementReference(
+                    response,
+                    snapshot.selectionVersion,
+                    current?.selectionVersion,
+                  )
+                ) {
+                  return;
+                }
+                setDraftElementReference(null);
+              },
+            }
+          : onAccepted
+            ? { onResponseAccepted: onAccepted }
+            : undefined,
+      [setDraftElementReference],
+    );
 
     const sendMessageWithElementReference = useCallback(
       (text: string, snapshot?: ElementReferenceSendSnapshot, onAccepted?: () => void) => {
         return chatAreaRef.current?.sendMessage(
           text,
-          snapshot
-            ? {
-                elementReference: snapshot.reference,
-                onResponseAccepted: (response) => {
-                  onAccepted?.();
-                  const current = draftElementReferenceRef.current;
-                  if (
-                    !shouldClearDraftElementReference(
-                      response,
-                      snapshot.selectionVersion,
-                      current?.selectionVersion,
-                    )
-                  ) {
-                    return;
-                  }
-                  setDraftElementReference(null);
-                },
-              }
-            : onAccepted
-              ? { onResponseAccepted: onAccepted }
-              : undefined,
+          elementReferenceSendOptions(snapshot, onAccepted),
         );
       },
-      [setDraftElementReference],
+      [elementReferenceSendOptions],
     );
+
+    /**
+     * Who answers the learner now: the teaching assistant's id when its aside
+     * applies (shouldAssistantAnswer), else null for the teacher. Read at call
+     * time from refs and the stores: a voice transcript arrives through a
+     * callback captured when the recording started.
+     */
+    const resolveAssistantRoute = useCallback((): string | null => {
+      const engine = engineRef.current;
+      const settings = useSettingsStore.getState();
+      const registry = useAgentRegistry.getState();
+      const assistantAgentId =
+        pickAssistantAgent((settings.selectedAgentIds ?? []).map((id) => registry.getAgent(id)))
+          ?.id ?? null;
+      const answers = shouldAssistantAnswer({
+        enabled: settings.assistantAnswersDuringLecture !== false,
+        assistantAgentId,
+        asideOpen:
+          asideSessionOpenRef.current ||
+          asideStreamingRef.current ||
+          assistantHandRaisedRef.current,
+        engineMode: engine?.getMode() ?? null,
+        liveSessionOpen: liveSessionOpenRef.current,
+        teacherHandPending: !!queuedQuestionRef.current || !!engine?.getHandState(),
+        pausedForVoice: !!engine && assistantVoicePauseRef.current === engine,
+      });
+      return answers ? assistantAgentId : null;
+    }, []);
+
+    /**
+     * A recording for the assistant is over (sent, cancelled, nothing heard):
+     * the lecture it paused plays on, text reveal included. Only the pause it
+     * made itself, on the engine that is still installed.
+     */
+    const resumeAfterAssistantVoice = useCallback(() => {
+      const paused = assistantVoicePauseRef.current;
+      assistantVoicePauseRef.current = null;
+      if (!paused || engineRef.current !== paused || paused.getMode() !== 'paused') return;
+      paused.resume();
+      if (lectureSessionIdRef.current) {
+        chatAreaRef.current?.resumeBuffer(lectureSessionIdRef.current);
+      }
+    }, []);
 
     /** UI side effects of a question going out, immediately or from a raised hand. */
     const markQuestionSent = useCallback(() => {
@@ -490,6 +596,38 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       unsentQuestionRef.current = null;
       if (unsent) clearRaisedHandDraft(getSessionStorage(), unsent.stageId);
     }, []);
+
+    /**
+     * The question goes to the teaching assistant: the lecture is neither
+     * paused nor interrupted, and nothing lecture-facing is touched — no
+     * discussion TTS cleanup (it would cancel browser speech narrating the
+     * lecture), no live-buffer resume, no Q&A session type or thinking state.
+     */
+    const sendToAssistant = useCallback(
+      (text: string, agentId: string, snapshot?: ElementReferenceSendSnapshot) => {
+        // Sent now: supersedes an unsent raised hand (e.g. one Pro mode gave back)
+        forgetUnsentQuestion();
+        setAssistantHandRaised(false);
+        chatAreaRef.current?.switchToTab('interaction');
+        // Optimistic, until the aside reports its own state; a new turn has
+        // not started answering yet (the send cooldown waits for it)
+        setAsideStreaming(true);
+        setAsideSpeakingAgentId(null);
+        setAsideThinking({ stage: 'director' });
+        void chatAreaRef.current?.sendAsideMessage?.(text, {
+          agentId,
+          ...elementReferenceSendOptions(snapshot),
+        });
+        resumeAfterAssistantVoice();
+      },
+      [
+        elementReferenceSendOptions,
+        forgetUnsentQuestion,
+        resumeAfterAssistantVoice,
+        setAsideStreaming,
+        setAssistantHandRaised,
+      ],
+    );
 
     /**
      * Leaving playback aborts a delivered raised hand's request on purpose,
@@ -558,9 +696,16 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     /**
      * 举手 without a question: the engine calls the learner when the current
      * action ends (at once while paused or idle). Never kept as a draft —
-     * there is no text to give back.
+     * there is no text to give back. While the assistant answers during the
+     * lecture, the hand goes to the assistant instead: nothing pauses, the
+     * composer opens and the assistant invites the question in the stream.
      */
     const raiseHandOnly = useCallback((): boolean => {
+      if (resolveAssistantRoute()) {
+        setAssistantHandRaised(true);
+        assistantHandUiRef.current();
+        return true;
+      }
       const engine = engineRef.current;
       if (!engine) return false;
       // Worded before raising: a hand called at once leaves nothing in flight
@@ -569,10 +714,15 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       setHandWaitsFor(waitsFor);
       setHandState(engine.getHandState());
       return true;
-    }, []);
+    }, [resolveAssistantRoute, setAssistantHandRaised]);
 
     /** 放下: a waiting hand is withdrawn; a called one gives the floor back and the lecture resumes. */
     const lowerHand = useCallback((): boolean => {
+      // A hand raised to the assistant only comes down (the lecture never paused)
+      if (assistantHandRaisedRef.current) {
+        setAssistantHandRaised(false);
+        return true;
+      }
       const engine = engineRef.current;
       if (!engine?.lowerHand()) return false;
       setHandState(engine.getHandState());
@@ -582,7 +732,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         chatAreaRef.current?.resumeBuffer(lectureSessionIdRef.current);
       }
       return true;
-    }, []);
+    }, [setAssistantHandRaised]);
 
     /** The engine moves the hand on its own (the boundary, play, a jump, a Q&A): mirror it. */
     const refreshHandState = useCallback(() => {
@@ -752,8 +902,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         setDiscussionTrigger(null);
         setHandState(null);
         setDeferredDiscussion(null);
+        // The assistant's hand belongs to the scene it went up in (the
+        // aside itself ends with the session, which reports back)
+        setAssistantHandRaised(false);
+        assistantVoicePauseRef.current = null;
       },
-      [resetLiveState, updateCurrentPlaybackActionIndex],
+      [resetLiveState, setAssistantHandRaised, updateCurrentPlaybackActionIndex],
     );
 
     /** Request failure should exit live discussion UI without hard-closing the session. */
@@ -1319,8 +1473,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               setTimeout(() => {
                 // Typing no longer pauses the lecture: don't move the slide out
                 // from under a question the student is still composing — hold
-                // the advance until the input closes
-                if (studentComposingRef.current) {
+                // the advance until the input closes. Likewise while the
+                // assistant is still answering on the side.
+                if (studentComposingRef.current || asideStreamingRef.current) {
                   heldAutoAdvanceRef.current = { engine, advance };
                   return;
                 }
@@ -1462,6 +1617,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
      */
     const handleDiscussionSSE = useCallback(
       async (topic: string, prompt?: string, agentId?: string) => {
+        // The teacher's discussion takes over: a hand raised to the assistant
+        // comes down (startDiscussion ends an open aside first)
+        setAssistantHandRaised(false);
         // Start discussion display in ChatArea (lecture speech is preserved independently)
         chatAreaRef.current?.startDiscussion({
           topic,
@@ -1476,7 +1634,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         // Optimistic thinking: show thinking dots immediately (same as onMessageSend)
         setThinkingState({ stage: 'director' });
       },
-      [],
+      [setAssistantHandRaised],
     );
 
     // First speech text for idle display (extracted here for playbackView)
@@ -1532,6 +1690,22 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     );
 
     const isTopicActive = playbackView.isTopicActive;
+
+    // A Q&A / discussion with the teacher is open: the assistant's aside does not apply
+    const liveSessionOpen = !!chatSessionType || isTopicPending || chatIsSoftClosing;
+    useEffect(() => {
+      liveSessionOpenRef.current = liveSessionOpen;
+    }, [liveSessionOpen]);
+    // A question asked now goes to the assistant (举手 says so)
+    const assistantAnswersNow = shouldAssistantAnswer({
+      enabled: assistantAnswersEnabled,
+      assistantAgentId: assistantAgent?.id ?? null,
+      asideOpen: asideSessionOpen || asideStreaming || assistantHandRaised,
+      engineMode,
+      liveSessionOpen,
+      teacherHandPending: queuedQuestion?.status === 'queued' || handState !== null,
+      pausedForVoice: false,
+    });
 
     /**
      * Gated scene switch — if a topic is active, show AlertDialog before switching.
@@ -2016,6 +2190,21 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       };
     });
 
+    // A hand went up to the assistant: open the composer for the question —
+    // the panel's, or the dock's card while presenting — without reporting
+    // activation (nothing pauses)
+    useEffect(() => {
+      assistantHandUiRef.current = () => {
+        if (mode !== 'playback') return;
+        if (isPresenting) {
+          presentationDockRef.current?.continueText();
+          return;
+        }
+        revealInteraction();
+        composerRef.current?.openTextInput();
+      };
+    });
+
     // A 发起讨论 offer: the lecture waits on join / skip, so put the card in view
     const discussionTriggerId = discussionTrigger?.id;
     useEffect(() => {
@@ -2231,7 +2420,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       [],
     );
 
-    /** A question from the composer: raise a hand mid-line, else send it now. */
+    /**
+     * A question from the composer: to the teaching assistant while it answers
+     * during the lecture, else raise a hand mid-line, else send it now.
+     */
     const handleMessageSend = (msg: string): MessageSendResult => {
       const draft = showElementReference ? draftElementReferenceRef.current : null;
       const elementReferenceSnapshot: ElementReferenceSendSnapshot | undefined = draft
@@ -2240,6 +2432,15 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
             selectionVersion: draft.selectionVersion,
           }
         : undefined;
+      // The assistant answers on the side: the lecture is not paused or
+      // interrupted (and a voice question's pause is undone)
+      const assistantAgentId = resolveAssistantRoute();
+      if (assistantAgentId) {
+        sendToAssistant(msg, assistantAgentId, elementReferenceSnapshot);
+        return;
+      }
+      // The teacher answers: a recording's pause is now the Q&A's
+      assistantVoicePauseRef.current = null;
       // While the lecture plays, the question raises a hand: the
       // teacher finishes the current line, then answers it.
       const raised = raiseHand(msg, elementReferenceSnapshot);
@@ -2307,6 +2508,11 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       // voice must pause so the microphone doesn't record the teacher.
       const engine = engineRef.current;
       const mode = engine?.getMode();
+      // A voice question for the assistant pauses the lecture only while
+      // recording (the mic would pick up the teacher): resumed once it is
+      // sent or dropped (onVoiceEnd)
+      const forAssistant =
+        !!engine && mode === 'playing' && kind === 'voice' && !!resolveAssistantRoute();
       // Voice stops the lecture like the pause button does: the text reveal
       // freezes with the audio, and a reload resumes from here
       const freezeLecture = () => {
@@ -2332,6 +2538,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       } else if (engine && mode === 'playing' && kind === 'voice') {
         engine.pause();
         freezeLecture();
+        if (forAssistant) assistantVoicePauseRef.current = engine;
       }
     };
 
@@ -2375,7 +2582,26 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       };
     })();
     const showHandStreamStatus =
-      handState !== null || queuedQuestion?.status === 'queued' || streamCueSpeaker !== null;
+      handState !== null ||
+      assistantHandRaised ||
+      queuedQuestion?.status === 'queued' ||
+      streamCueSpeaker !== null;
+    // The assistant's rows in the stream: its invitation while a hand is up
+    // to it, then 助教正在回答… until its answer's bubble starts
+    const assistantParticipant = assistantAgent
+      ? participants.find((p) => p.id === assistantAgent.id)
+      : undefined;
+    const assistantStreamStatus: 'prompt' | 'answering' | null = !assistantAgent
+      ? null
+      : asideStreaming && !asideSpeakingAgentId
+        ? 'answering'
+        : assistantHandRaised
+          ? 'prompt'
+          : null;
+    // The assistant answering on the side (回答中 on its participant tile)
+    const asideAnsweringAgentId = asideStreaming
+      ? (asideSpeakingAgentId ?? assistantAgent?.id ?? null)
+      : null;
 
     // The stacked chrome is off while presenting: fullscreen shows the stage
     // and the dock, whatever the classroom's width
@@ -2624,7 +2850,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               composerSlot={<ComposerSlot host={composerHost} active />}
               composerRef={composerRef}
               isComposing={isComposerComposing}
-              hasRaisedHand={queuedQuestion?.status === 'queued' || handState === 'raised'}
+              hasRaisedHand={
+                queuedQuestion?.status === 'queued' || handState === 'raised' || assistantHandRaised
+              }
               onInteractionChange={setIsDockInteractionActive}
               discussionRequest={discussionRequest}
               discussionAgent={discussionAgentConfig}
@@ -2761,12 +2989,15 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   playbackView={playbackView}
                   speakingAgentId={speakingAgentId}
                   isLivePaused={isDiscussionPaused}
-                  thinkingState={thinkingState}
+                  thinkingState={thinkingState ?? asideThinking}
+                  answeringAgentId={asideAnsweringAgentId}
                   discussionAgentId={
                     discussionRequest?.agentId ??
                     (handState === 'called' ? deferredDiscussion?.agentId : undefined)
                   }
-                  userHandRaised={queuedQuestion?.status === 'queued' || handState !== null}
+                  userHandRaised={
+                    queuedQuestion?.status === 'queued' || handState !== null || assistantHandRaised
+                  }
                   layout={phoneLayout ? 'phone' : stackedLayout ? 'stacked' : 'panel'}
                 />
               ) : undefined
@@ -2775,11 +3006,11 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               // Fullscreen shows the offer and the hand over the dock instead
               mode === 'playback' &&
               !isPresenting &&
-              (showHandStreamStatus || discussionRequest) ? (
+              (showHandStreamStatus || assistantStreamStatus || discussionRequest) ? (
                 <>
                   {showHandStreamStatus && (
                     <HandRaiseStreamStatus
-                      handState={handState}
+                      handState={handState ?? (assistantHandRaised ? 'raised' : null)}
                       pendingQuestion={
                         queuedQuestion?.status === 'queued'
                           ? { text: queuedQuestion.text, waitsFor: queuedQuestion.waitsFor }
@@ -2787,6 +3018,15 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                       }
                       deferredDiscussionAgentName={deferredDiscussionAgentName}
                       cueSpeaker={streamCueSpeaker}
+                    />
+                  )}
+                  {assistantStreamStatus && assistantAgent && (
+                    <AssistantAsideStreamStatus
+                      status={assistantStreamStatus}
+                      assistant={{
+                        name: assistantParticipant?.name || assistantAgent.name,
+                        avatar: assistantParticipant?.avatar || assistantAgent.avatar,
+                      }}
                     />
                   )}
                   {discussionRequest && (
@@ -2818,6 +3058,20 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               if (!isPresenting) composerRef.current?.dismiss();
             }}
             onStopSession={handleSessionStop}
+            // The assistant's aside reports on its own channel: never the
+            // lecture-facing live state, stop / error cleanup or TTS above
+            onAsideLiveSpeech={(_text, agentId) => {
+              if (agentId) setAsideSpeakingAgentId(agentId);
+            }}
+            onAsideThinking={setAsideThinking}
+            onAsideStateChange={({ sessionId, isStreaming }) => {
+              setAsideSessionOpen(!!sessionId);
+              setAsideStreaming(isStreaming);
+              if (!isStreaming) {
+                setAsideThinking(null);
+                setAsideSpeakingAgentId(null);
+              }
+            }}
             onSegmentSealed={discussionTTS.handleSegmentSealed}
             shouldHoldAfterReveal={discussionTTS.shouldHold}
           />
@@ -2876,8 +3130,9 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           createPortal(
             <Composer
               composerRef={composerRef}
-              speakingAgentId={speakingAgentId}
-              isStreaming={chatIsStreaming}
+              // The send cooldown also ends when the assistant's answer starts
+              speakingAgentId={speakingAgentId ?? asideSpeakingAgentId}
+              isStreaming={chatIsStreaming || asideStreaming}
               canSendMessage={canSendReferencedMessage}
               onMessageSend={handleMessageSend}
               onInputActivate={handleInputActivate}
@@ -2887,15 +3142,18 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               queuedQuestion={queuedQuestion}
               onCancelQueuedQuestion={cancelQueuedQuestion}
               hand={{
-                state: handState,
+                state: assistantHandRaised ? 'raised' : handState,
                 waitsFor: handWaitsFor,
                 onRaise: raiseHandOnly,
                 onLower: lowerHand,
+                assistant: assistantHandRaised,
               }}
               getSpeechProgress={getSpeechProgress}
               isCueUser={isLearnerCued}
               isLiveSession={!!sessionTypeForUi}
-              isFollowUp={sessionTypeForUi === 'qa'}
+              isFollowUp={sessionTypeForUi === 'qa' || asideSessionOpen}
+              assistantAnswers={assistantAnswersNow}
+              onVoiceEnd={resumeAfterAssistantVoice}
               onInteractionChange={setIsComposerComposing}
               // Fullscreen only: the overlay's learner line and the card closing
               onUserMessage={showPresentationUserMessage}

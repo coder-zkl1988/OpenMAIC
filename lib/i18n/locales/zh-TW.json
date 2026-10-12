@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Q&A",
       "discussion": "討論",
-      "lecture": "授課"
+      "lecture": "授課",
+      "aside": "助教答疑"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "舉手",
       "raiseHandHint": "舉手提問：老師講完目前這句後請你發言",
+      "raiseHandHintAssistant": "舉手提問：助教會在互動面板裡回答，老師繼續講課",
       "raiseHandInLiveSession": "問答中可直接發言",
       "lowerHand": "放下",
       "lowerHandHint": "放下手，撤回提問",
@@ -390,6 +392,7 @@
       "cancelRecording": "取消錄音",
       "handRaised": "已舉手 · 講完這句就請你發言",
       "handRaisedStep": "已舉手 · 這一步結束就請你發言",
+      "handRaisedAssistant": "已舉手 · 助教會在互動面板裡回答你",
       "raisedPlaceholder": "可以先寫下問題...",
       "followUpPlaceholder": "繼續追問...",
       "referencePlaceholder": "關於這個{{type}}，你想問什麼？",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "你舉手了，{{name}} 的討論排在你之後",
       "calledBy": "{{name}} 請你發言",
       "pendingQuestion": "排隊中 · 老師講完這句就回答",
-      "pendingQuestionStep": "排隊中 · 老師完成目前步驟就回答"
+      "pendingQuestionStep": "排隊中 · 老師完成目前步驟就回答",
+      "assistantPrompt": "請說出你的問題，我來幫你解答",
+      "assistantAnswering": "助教正在回答…"
     },
     "participants": {
       "label": "課堂成員",
       "online": "{{count}} 人在線",
       "speaking": "講解中",
+      "answering": "回答中",
       "wantsToSpeak": "想發言",
       "handRaised": "舉手中",
       "more": "另外 {{count}} 位成員"
@@ -1444,6 +1450,9 @@
     "keyboardShortcuts": "鍵盤快速鍵",
     "generalSettings": "一般設定",
     "systemSettings": "系統設定",
+    "classroomSection": "課堂",
+    "assistantAnswersDuringLecture": "講課時由助教回答提問",
+    "assistantAnswersDuringLectureDesc": "開啟後，講課中提問不打斷老師，由助教在互動面板裡回答",
     "importFromClipboard": "從剪貼簿匯入",
     "baseUrlRegion": {
       "china": "中國",

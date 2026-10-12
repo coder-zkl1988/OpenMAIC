@@ -81,6 +81,11 @@ export interface UseQueuedQuestionEffectsOptions {
   handState?: HandState | null;
   /** What the bare hand waits for: the line in flight (default) or another step */
   handWaitsFor?: 'sentence' | 'step';
+  /**
+   * The bare hand went up to the teaching assistant: the lecture keeps
+   * playing and the assistant answers in the chat (nothing to wait for)
+   */
+  handToAssistant?: boolean;
   /** The learner holds the floor (a called hand, or the director's cue): announced */
   isCueUser?: boolean;
   /** Engine getSpeechProgress: polled for the "hand raised" progress while something waits */
@@ -102,6 +107,7 @@ export function useQueuedQuestionEffects({
   focusTargetRef,
   handState,
   handWaitsFor,
+  handToAssistant,
   isCueUser,
   getSpeechProgress,
 }: UseQueuedQuestionEffectsOptions) {
@@ -176,9 +182,14 @@ export function useQueuedQuestionEffects({
       ? 'roundtable.handRaisedQueuedStep'
       : 'roundtable.handRaisedQueued',
   );
-  // A bare hand: the learner is called (not answered) once it is over
+  // A bare hand: the learner is called (not answered) once it is over — or,
+  // raised to the assistant, answered in the chat while the lecture plays
   const handLabel = t(
-    handWaitsFor === 'step' ? 'stage.composer.handRaisedStep' : 'stage.composer.handRaised',
+    handToAssistant
+      ? 'stage.composer.handRaisedAssistant'
+      : handWaitsFor === 'step'
+        ? 'stage.composer.handRaisedStep'
+        : 'stage.composer.handRaised',
   );
 
   // One-shot outcomes. The owner keeps the last question's status for the
@@ -218,7 +229,11 @@ export function useQueuedQuestionEffects({
             ? t('stage.composer.handLowered')
             : '';
 
-  const speechProgress = useSpeechProgress(getSpeechProgress, isQueued || isHandRaised);
+  // Nothing to wait for when the assistant answers: no progress bar
+  const speechProgress = useSpeechProgress(
+    getSpeechProgress,
+    isQueued || (isHandRaised && !handToAssistant),
+  );
 
   return {
     isQueued,

@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Q&A",
       "discussion": "議論",
-      "lecture": "講義"
+      "lecture": "講義",
+      "aside": "アシスタントQ&A"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "挙手",
       "raiseHandHint": "挙手：先生がこの文を話し終えたらあなたを指名します",
+      "raiseHandHintAssistant": "挙手：アシスタントが交流パネルで回答し、先生は講義を続けます",
       "raiseHandInLiveSession": "Q&A 中はそのまま発言できます",
       "lowerHand": "手を下ろす",
       "lowerHandHint": "手を下ろして質問を取り消す",
@@ -390,6 +392,7 @@
       "cancelRecording": "録音をキャンセル",
       "handRaised": "挙手中 · この文が終わったら指名されます",
       "handRaisedStep": "挙手中 · このステップが終わったら指名されます",
+      "handRaisedAssistant": "挙手中 · アシスタントが交流パネルで回答します",
       "raisedPlaceholder": "先に質問を書いておけます...",
       "followUpPlaceholder": "続けて質問する...",
       "referencePlaceholder": "この{{type}}について、何を聞きたいですか？",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "手を挙げました。{{name}} のディスカッションはあなたの後です",
       "calledBy": "{{name}} があなたを指名しました",
       "pendingQuestion": "待機中 · この文が終わったら回答します",
-      "pendingQuestionStep": "待機中 · このステップが終わったら回答します"
+      "pendingQuestionStep": "待機中 · このステップが終わったら回答します",
+      "assistantPrompt": "質問をどうぞ。お手伝いします",
+      "assistantAnswering": "アシスタントが回答中…"
     },
     "participants": {
       "label": "参加者",
       "online": "{{count}} 人がオンライン",
       "speaking": "説明中",
+      "answering": "回答中",
       "wantsToSpeak": "発言したい",
       "handRaised": "挙手中",
       "more": "ほか {{count}} 人の参加者"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "ショートカット",
     "generalSettings": "一般",
     "systemSettings": "システム",
+    "classroomSection": "授業",
+    "assistantAnswersDuringLecture": "講義中の質問はアシスタントが回答",
+    "assistantAnswersDuringLectureDesc": "オンにすると、講義中の質問で先生を中断せず、アシスタントが交流パネルで回答します",
     "importFromClipboard": "クリップボードからインポート",
     "baseUrlRegion": {
       "china": "中国",

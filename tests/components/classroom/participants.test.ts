@@ -98,6 +98,17 @@ describe('participant status mapping', () => {
     );
   });
 
+  it('marks the assistant answering on the side (回答中) while the teacher lectures', () => {
+    const context = { speakingId: 'teacher', answeringAgentId: 'assistant', userHandRaised: true };
+    expect(resolveParticipantStatus(teacher, context)).toBe('speaking');
+    expect(resolveParticipantStatus(assistant, context)).toBe('answering');
+    expect(resolveParticipantStatus(user, context)).toBe('handRaised');
+    // Speaking still wins for the same agent
+    expect(resolveParticipantStatus(assistant, { ...context, speakingId: 'assistant' })).toBe(
+      'speaking',
+    );
+  });
+
   it('fits five tiles; past that keeps the learner and folds the rest into +N', () => {
     expect(layoutParticipantGrid(roster).overflow).toEqual([]);
     const many = [
@@ -151,6 +162,19 @@ describe('Participants block', () => {
     expect(tile('user-1')?.textContent).toContain('stage.participants.handRaised');
     // The registry's role wins over the participant role (助教, not 学生)
     expect(tile('assistant')?.textContent).toContain('settings.agentRoles.assistant');
+  });
+
+  it('labels the assistant 回答中 while it answers during the lecture', () => {
+    render({
+      playbackView: view('lecturePlaying', 'teacher'),
+      answeringAgentId: 'assistant',
+      userHandRaised: true,
+    });
+    expect(tile('teacher')?.getAttribute('data-status')).toBe('speaking');
+    expect(tile('assistant')?.getAttribute('data-status')).toBe('answering');
+    expect(tile('assistant')?.textContent).toContain('stage.participants.answering');
+    expect(tile('assistant')?.innerHTML).toContain('ring-success');
+    expect(tile('user-1')?.textContent).toContain('stage.participants.handRaised');
   });
 
   it('keeps the learner last and spins the agent being prepared', () => {

@@ -90,6 +90,13 @@ export interface SettingsState {
   ttsVolume: number; // 0-1, actual volume level
   autoPlayLecture: boolean;
   playbackSpeed: PlaybackSpeed;
+  /**
+   * While the lecture plays, a question (typed, 举手 or voice) goes to the
+   * classroom's teaching assistant, who answers in the interaction panel
+   * while the teacher keeps lecturing. Off, or without an assistant: the
+   * teacher pauses at the end of the line and answers.
+   */
+  assistantAnswersDuringLecture: boolean;
 
   // Agent settings
   selectedAgentIds: string[];
@@ -136,6 +143,7 @@ export interface SettingsState {
   setTTSVolume: (volume: number) => void;
   setAutoPlayLecture: (autoPlay: boolean) => void;
   setPlaybackSpeed: (speed: PlaybackSpeed) => void;
+  setAssistantAnswersDuringLecture: (enabled: boolean) => void;
 
   // Agent actions
   setSelectedAgentIds: (ids: string[]) => void;
@@ -164,6 +172,7 @@ const PERSISTED_FIELDS = [
   'ttsVolume',
   'autoPlayLecture',
   'playbackSpeed',
+  'assistantAnswersDuringLecture',
   'selectedAgentIds',
   'agentMode',
   'autoAgentCount',
@@ -265,6 +274,8 @@ export const useSettingsStore = create<SettingsState>()(
       ttsVolume: 1,
       autoPlayLecture: false,
       playbackSpeed: 1,
+      // Blobs persisted before this field pick it up through merge
+      assistantAnswersDuringLecture: true,
 
       // Agents
       selectedAgentIds: ['default-1', 'default-2', 'default-3'],
@@ -289,6 +300,8 @@ export const useSettingsStore = create<SettingsState>()(
       setTTSVolume: (volume) => set({ ttsVolume: Math.max(0, Math.min(1, volume)) }),
       setAutoPlayLecture: (autoPlay) => set({ autoPlayLecture: autoPlay }),
       setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
+      setAssistantAnswersDuringLecture: (enabled) =>
+        set({ assistantAnswersDuringLecture: enabled }),
 
       setSelectedAgentIds: (ids) => set({ selectedAgentIds: ids }),
       setAgentMode: (mode) => set({ agentMode: mode }),

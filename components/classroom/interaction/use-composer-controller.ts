@@ -79,6 +79,8 @@ export interface UseComposerControllerOptions {
   onSent?: () => void;
   /** Which input opened: voice must pause narration (the mic would record it); text need not */
   onInputActivate?: (kind: 'text' | 'voice') => void;
+  /** Voice input is over (sent, cancelled, nothing heard, failed, or back into the draft) */
+  onVoiceEnd?: () => void;
   onUserInputActivity?: (kind: InputActivityKind) => void;
   onClearElementReference?: () => void;
   /**
@@ -112,6 +114,7 @@ export function useComposerController({
   onUserMessage,
   onSent,
   onInputActivate,
+  onVoiceEnd,
   onUserInputActivity,
   onClearElementReference,
   onTextInputOpened,
@@ -171,6 +174,7 @@ export function useComposerController({
       onUserInputActivity?.('recording_start');
       setIsInputOpen(false);
     },
+    onEnd: onVoiceEnd,
   });
 
   const send = () => {

@@ -69,6 +69,12 @@ interface ConversationStreamProps {
   readonly sessions: readonly ChatSession[];
   readonly scenes: readonly Scene[];
   readonly isStreaming: boolean;
+  /**
+   * The teaching assistant's aside (it answers while the lecture plays): it
+   * streams on its own, so its session shows its own live state
+   */
+  readonly asideSessionId?: string | null;
+  readonly isAsideStreaming?: boolean;
   readonly activeBubbleId?: string | null;
   readonly onEndSession: (sessionId: string) => Promise<void> | void;
   readonly onContinueSession: (sessionId: string) => void;
@@ -98,6 +104,8 @@ export function ConversationStream({
   sessions,
   scenes,
   isStreaming,
+  asideSessionId,
+  isAsideStreaming = false,
   activeBubbleId,
   onEndSession,
   onContinueSession,
@@ -177,7 +185,7 @@ export function ConversationStream({
       // history scrolls with the keyboard.
       role="log"
       aria-label={t('chat.conversationLog')}
-      aria-busy={isStreaming || undefined}
+      aria-busy={isStreaming || isAsideStreaming || undefined}
       tabIndex={0}
       data-testid="conversation-stream"
       className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-page scrollbar-hide outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
@@ -205,12 +213,15 @@ export function ConversationStream({
           }
           const { session } = item;
           const isActive = session.status === 'active' || session.status === 'soft-closing';
+          // The aside streams on its own channel; the shared flag is the Q&A's
+          const sessionStreaming =
+            asideSessionId && session.id === asideSessionId ? isAsideStreaming : isStreaming;
           return (
             <ChatSessionComponent
               key={item.key}
               session={session}
               isActive={isActive}
-              isStreaming={isStreaming && isActive}
+              isStreaming={sessionStreaming && isActive}
               activeBubbleId={activeBubbleId}
               onEndSession={onEndSession}
               onContinueSession={onContinueSession}
@@ -291,5 +302,57 @@ export function HandRaiseStreamStatus({
         </div>
       )}
     </>
+  );
+}
+
+interface AssistantAsideStreamStatusProps {
+  /** The teaching assistant who answers on the side while the lecture plays */
+  readonly assistant: { readonly name: string; readonly avatar: string };
+  /**
+   * `prompt`: the learner raised a hand to the assistant, who invites the
+   * question (a local row, no request); `answering`: the assistant's answer
+   * is on its way
+   */
+  readonly status: 'prompt' | 'answering';
+}
+
+/**
+ * The stream's rows for the teaching assistant's aside, after the latest
+ * session: its invitation once the learner raises a hand while the lecture
+ * plays ('请说出你的问题，我来帮你解答', drawn like an agent row), and
+ * '助教正在回答…' until its bubble starts. Visual only.
+ */
+export function AssistantAsideStreamStatus({ assistant, status }: AssistantAsideStreamStatusProps) {
+  const { t } = useI18n();
+  if (status === 'answering') {
+    return (
+      <div
+        data-testid="stream-assistant-answering"
+        className="flex items-center justify-center gap-1.5 text-xs font-semibold text-fg-secondary"
+      >
+        <span className="relative size-[18px] shrink-0 overflow-hidden rounded-full">
+          <AvatarDisplay src={assistant.avatar} alt="" />
+        </span>
+        {t('stage.handRaise.assistantAnswering')}
+      </div>
+    );
+  }
+  return (
+    <div data-testid="stream-assistant-prompt" className="flex items-start gap-2">
+      <span className="size-7 shrink-0 overflow-hidden rounded-full bg-subtle ring-1 ring-line">
+        <AvatarDisplay src={assistant.avatar} alt="" className="text-xs" />
+      </span>
+      <div className="flex min-w-0 max-w-[85%] flex-col gap-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-xs font-semibold text-fg-secondary">{assistant.name}</span>
+          <span className="shrink-0 rounded-full bg-success-soft px-1.5 text-[10px] font-semibold leading-4 text-success">
+            {t('settings.agentRoles.assistant')}
+          </span>
+        </div>
+        <p className="w-fit max-w-full whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] border border-line bg-background px-3 py-2 text-[14px] leading-[1.6] text-fg">
+          {t('stage.handRaise.assistantPrompt')}
+        </p>
+      </div>
+    </div>
   );
 }

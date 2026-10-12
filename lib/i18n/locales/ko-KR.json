@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Q&A",
       "discussion": "토론",
-      "lecture": "강의"
+      "lecture": "강의",
+      "aside": "보조 선생님 Q&A"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "손들기",
       "raiseHandHint": "손들기: 선생님이 이 문장을 마친 뒤 발언을 요청합니다",
+      "raiseHandHintAssistant": "손들기: 선생님은 계속 강의하고, 보조 선생님이 상호작용 패널에서 답변합니다",
       "raiseHandInLiveSession": "Q&A 중에는 바로 말할 수 있어요",
       "lowerHand": "내리기",
       "lowerHandHint": "손을 내리고 질문 취소",
@@ -390,6 +392,7 @@
       "cancelRecording": "녹음 취소",
       "handRaised": "손을 들었어요 · 이 문장이 끝나면 발언할 차례예요",
       "handRaisedStep": "손을 들었어요 · 이 단계가 끝나면 발언할 차례예요",
+      "handRaisedAssistant": "손을 들었어요 · 보조 선생님이 상호작용 패널에서 답변해요",
       "raisedPlaceholder": "질문을 먼저 적어 두세요...",
       "followUpPlaceholder": "이어서 질문하기...",
       "referencePlaceholder": "이 {{type}}에 대해 무엇을 묻고 싶나요?",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "손을 들었어요. {{name}} 님의 토론은 내 다음 순서예요",
       "calledBy": "{{name}} 님이 발언을 요청했어요",
       "pendingQuestion": "대기 중 · 이 문장이 끝나면 답변해요",
-      "pendingQuestionStep": "대기 중 · 이 단계가 끝나면 답변해요"
+      "pendingQuestionStep": "대기 중 · 이 단계가 끝나면 답변해요",
+      "assistantPrompt": "질문을 말해 주세요. 제가 도와드릴게요",
+      "assistantAnswering": "보조 선생님이 답변하는 중…"
     },
     "participants": {
       "label": "참여자",
       "online": "{{count}}명 접속 중",
       "speaking": "설명 중",
+      "answering": "답변 중",
       "wantsToSpeak": "발언 희망",
       "handRaised": "손 든 상태",
       "more": "참여자 {{count}}명 더 보기"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "단축키",
     "generalSettings": "일반",
     "systemSettings": "시스템",
+    "classroomSection": "수업",
+    "assistantAnswersDuringLecture": "강의 중 질문은 보조 선생님이 답변",
+    "assistantAnswersDuringLectureDesc": "켜면 강의 중 질문이 선생님을 방해하지 않고, 보조 선생님이 상호작용 패널에서 답변합니다",
     "importFromClipboard": "클립보드에서 가져오기",
     "baseUrlRegion": {
       "china": "중국",

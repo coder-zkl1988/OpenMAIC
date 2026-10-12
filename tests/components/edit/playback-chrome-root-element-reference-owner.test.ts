@@ -5,9 +5,18 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  /** Agents the registry knows by id (getAgent) */
-  registryAgents: {} as Record<string, { name: string }>,
+  /** Agents the registry knows by id (getAgent, and the agents record) */
+  registryAgents: {} as Record<
+    string,
+    { name: string; id?: string; role?: string; priority?: number; avatar?: string }
+  >,
   sendMessage: vi.fn(),
+  // The teaching assistant's aside, and the lecture-facing calls it must avoid
+  sendAsideMessage: vi.fn(),
+  endAsideSession: vi.fn(),
+  resumeBuffer: vi.fn(),
+  resumeActiveLiveBuffer: vi.fn(),
+  ttsCleanup: vi.fn(),
   whiteboardOpen: false,
   /** Who is drawing on the board (canvasStore.whiteboardDrawing) */
   whiteboardDrawing: null as { agentId?: string } | null,
@@ -207,7 +216,8 @@ const settingsState = {
   setChatAreaCollapsed: vi.fn(),
   setTTSMuted: vi.fn(),
   setTTSVolume: vi.fn(),
-  selectedAgentIds: [],
+  selectedAgentIds: [] as string[],
+  assistantAnswersDuringLecture: true,
   ttsMuted: false,
   ttsEnabled: false,
   ttsVolume: 1,
@@ -392,13 +402,15 @@ vi.mock('@/components/chat/chat-area', async () => {
         getLectureMessageId: vi.fn(),
         startDiscussion: vi.fn(),
         switchToTab: mocks.switchToTab,
-        resumeActiveLiveBuffer: vi.fn(),
+        resumeActiveLiveBuffer: mocks.resumeActiveLiveBuffer,
+        sendAsideMessage: mocks.sendAsideMessage,
+        endAsideSession: mocks.endAsideSession,
         pauseActiveLiveBuffer: vi.fn(),
         stopActiveSession: vi.fn(),
         continueActiveSoftClosingSession: vi.fn(),
         getActiveSessionType: vi.fn(),
         pauseBuffer: mocks.pauseBuffer,
-        resumeBuffer: vi.fn(),
+        resumeBuffer: mocks.resumeBuffer,
         resumeActiveSession: vi.fn(),
       }));
       // The 互动 tab's slots: participants, the inline card, the composer
@@ -619,7 +631,7 @@ vi.mock('@/lib/utils/audio-player', () => ({
 }));
 vi.mock('@/lib/hooks/use-discussion-tts', () => ({
   useDiscussionTTS: () => ({
-    cleanup: vi.fn(),
+    cleanup: mocks.ttsCleanup,
     pause: vi.fn(),
     resume: vi.fn(),
     handleSegmentSealed: vi.fn(),
@@ -632,7 +644,8 @@ vi.mock('@/lib/store/widget-iframe', () => ({
 vi.mock('@/lib/orchestration/registry/store', () => ({
   agentsToParticipants: () => [],
   useAgentRegistry: Object.assign(
-    (selector: (state: { agents: Record<string, unknown> }) => unknown) => selector({ agents: {} }),
+    (selector: (state: { agents: Record<string, unknown> }) => unknown) =>
+      selector({ agents: mocks.registryAgents }),
     { getState: () => ({ getAgent: (id: string) => mocks.registryAgents[id] }) },
   ),
 }));
@@ -654,6 +667,19 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
 
   beforeEach(() => {
     mocks.registryAgents = {};
+    settingsState.selectedAgentIds = [];
+    settingsState.assistantAnswersDuringLecture = true;
+    for (const spy of [
+      mocks.sendAsideMessage,
+      mocks.endAsideSession,
+      mocks.resumeBuffer,
+      mocks.resumeActiveLiveBuffer,
+      mocks.ttsCleanup,
+    ]) {
+      spy.mockReset();
+    }
+    mocks.sendAsideMessage.mockResolvedValue(undefined);
+    mocks.endAsideSession.mockResolvedValue(undefined);
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     mocks.whiteboardOpen = false;
     mocks.whiteboardDrawing = null;
@@ -2724,6 +2750,363 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       expect(mocks.confirmDiscussion).toHaveBeenCalledOnce();
       act(() => (mocks.presentationDockProps?.onDiscussionSkip as () => void)());
       expect(mocks.skipDiscussion).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('the teaching assistant answers while the lecture plays', () => {
+    type ComposerHandProp = {
+      state: 'raised' | 'called' | null;
+      onRaise: () => boolean;
+      onLower: () => boolean;
+      assistant?: boolean;
+    };
+    const composerHand = () => mocks.composerProps?.hand as ComposerHandProp;
+
+    /** A question from the composer (typed, or a voice transcript) */
+    function send(text: string) {
+      act(() => {
+        mocks.lastSendResult = (mocks.composerProps?.onMessageSend as (message: string) => unknown)(
+          text,
+        );
+      });
+    }
+
+    /** The chat layer reports the aside: open (its id) or not, streaming or not */
+    function reportAside(sessionId: string | null, isStreaming: boolean) {
+      act(() =>
+        (
+          mocks.chatAreaProps?.onAsideStateChange as (state: {
+            sessionId: string | null;
+            isStreaming: boolean;
+          }) => void
+        )({ sessionId, isStreaming }),
+      );
+    }
+
+    const streamRow = (testId: string) => container.querySelector(`[data-testid="${testId}"]`);
+
+    /** The classroom's agents: the teacher and the teaching assistant */
+    function withAssistant() {
+      mocks.registryAgents = {
+        'default-1': { id: 'default-1', name: 'Teacher', role: 'teacher', priority: 10 },
+        'default-2': {
+          id: 'default-2',
+          name: 'AI助教',
+          role: 'assistant',
+          priority: 7,
+          avatar: '/avatars/assist.png',
+        },
+      };
+      settingsState.selectedAgentIds = ['default-1', 'default-2'];
+    }
+
+    /** Mounting stops the previous scene's discussion audio: only what follows counts */
+    async function renderClassroom() {
+      await renderOwner();
+      mocks.ttsCleanup.mockClear();
+    }
+
+    /** Nothing lecture-facing moved: no pause, interrupt, queue, TTS cleanup or Q&A state */
+    function expectLectureUntouched() {
+      expect(mocks.enginePause).not.toHaveBeenCalled();
+      expect(mocks.handleUserInterrupt).not.toHaveBeenCalled();
+      expect(mocks.queueUserInterrupt).not.toHaveBeenCalled();
+      expect(mocks.raiseHand).not.toHaveBeenCalled();
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+      expect(mocks.ttsCleanup).not.toHaveBeenCalled();
+      expect(mocks.resumeActiveLiveBuffer).not.toHaveBeenCalled();
+      expect(mocks.composerProps?.isLiveSession).toBe(false);
+      expect(captionElementProps()?.sessionType).toBeUndefined();
+      expect(captionElementProps()?.thinkingState).toBeNull();
+      expect(mocks.controlBarProps?.showStop).toBeFalsy();
+    }
+
+    it('sends a question to the assistant: the lecture plays on, untouched', async () => {
+      withAssistant();
+      mocks.engineMode = 'playing';
+      await renderClassroom();
+      // 举手's hint says the assistant answers while the teacher keeps teaching
+      expect(mocks.composerProps?.assistantAnswers).toBe(true);
+
+      send('Why are leaves green?');
+      expect(mocks.lastSendResult).toBeUndefined();
+      expect(mocks.sendAsideMessage).toHaveBeenCalledExactlyOnceWith('Why are leaves green?', {
+        agentId: 'default-2',
+      });
+      expectLectureUntouched();
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+
+      // Until the answer starts: 助教正在回答… and the assistant is answering
+      expect(streamRow('stream-assistant-answering')?.textContent).toContain(
+        'stage.handRaise.assistantAnswering',
+      );
+      expect(mocks.participantsProps?.answeringAgentId).toBe('default-2');
+      // The composer's send cooldown follows the aside, not the lecture
+      expect(mocks.composerProps?.isStreaming).toBe(true);
+      expect(mocks.composerProps?.speakingAgentId).toBeNull();
+
+      reportAside('aside-1', true);
+      act(() =>
+        (
+          mocks.chatAreaProps?.onAsideLiveSpeech as (
+            text: string | null,
+            agentId?: string | null,
+          ) => void
+        )(null, 'default-2'),
+      );
+      expect(mocks.composerProps?.speakingAgentId).toBe('default-2');
+      expect(streamRow('stream-assistant-answering')).toBeNull();
+      expectLectureUntouched();
+
+      // The answer settled: follow-ups are invited, nobody is answering
+      reportAside('aside-1', false);
+      expect(mocks.participantsProps?.answeringAgentId).toBeNull();
+      expect(mocks.composerProps?.isStreaming).toBe(false);
+      expect(mocks.composerProps?.speakingAgentId).toBeNull();
+      expect(mocks.composerProps?.isFollowUp).toBe(true);
+    });
+
+    it('sends the frozen element reference with the question to the assistant', async () => {
+      withAssistant();
+      mocks.engineMode = 'playing';
+      await renderClassroom();
+      click('toggle-pick');
+      click('pick-text');
+      send('Explain this');
+
+      const [, options] = mocks.sendAsideMessage.mock.calls[0];
+      expect(options).toMatchObject({
+        agentId: 'default-2',
+        elementReference: { kind: 'slide_element', sceneId: 'scene-1', elementId: 'text-1' },
+      });
+      expectLectureUntouched();
+    });
+
+    it('keeps follow-ups with the open aside even after the lecture paused', async () => {
+      withAssistant();
+      mocks.engineMode = 'playing';
+      await renderClassroom();
+      send('Why are leaves green?');
+      reportAside('aside-1', true);
+      reportAside('aside-1', false);
+
+      mocks.engineMode = 'paused';
+      act(() => mocks.engineOptions?.onModeChange?.('paused'));
+      send('And in autumn?');
+      expect(mocks.sendAsideMessage).toHaveBeenCalledTimes(2);
+      expect(mocks.sendAsideMessage).toHaveBeenLastCalledWith('And in autumn?', {
+        agentId: 'default-2',
+      });
+      expect(mocks.handleUserInterrupt).not.toHaveBeenCalled();
+
+      // The aside ended (a scene switch): the paused lecture's question is the teacher's again
+      reportAside(null, false);
+      send('Teacher?');
+      expect(mocks.handleUserInterrupt).toHaveBeenCalledExactlyOnceWith('Teacher?');
+      expect(mocks.sendAsideMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      [
+        'without an assistant in the classroom',
+        () => {
+          mocks.registryAgents = {
+            'default-1': { id: 'default-1', name: 'Teacher', role: 'teacher', priority: 10 },
+            'default-3': { id: 'default-3', name: 'Student', role: 'student', priority: 4 },
+          };
+          settingsState.selectedAgentIds = ['default-1', 'default-3'];
+        },
+      ],
+      [
+        'with the setting off',
+        () => {
+          withAssistant();
+          settingsState.assistantAnswersDuringLecture = false;
+        },
+      ],
+    ])('raises a hand for the teacher as before %s', async (_label, setUp) => {
+      setUp();
+      mocks.engineMode = 'playing';
+      await renderClassroom();
+      expect(mocks.composerProps?.assistantAnswers).toBe(false);
+
+      send('Why are leaves green?');
+      expect(mocks.lastSendResult).toBe('queued');
+      expect(mocks.queueUserInterrupt).toHaveBeenCalledExactlyOnceWith('Why are leaves green?');
+      expect(mocks.sendAsideMessage).not.toHaveBeenCalled();
+
+      // A bare hand goes to the engine too
+      mocks.queuedText = null;
+      act(() => {
+        (mocks.composerProps?.onCancelQueuedQuestion as () => void)();
+      });
+      act(() => {
+        composerHand().onRaise();
+      });
+      expect(mocks.raiseHand).toHaveBeenCalledOnce();
+      expect(composerHand().assistant).toBe(false);
+    });
+
+    it.each([
+      ['paused', () => expect(mocks.handleUserInterrupt).toHaveBeenCalledWith('Why?')],
+      ['idle', () => expect(mocks.sendMessage).toHaveBeenCalledWith('Why?', undefined)],
+    ] as const)('leaves a %s lecture to the teacher', async (engineMode, expectTeacher) => {
+      withAssistant();
+      mocks.engineMode = engineMode;
+      await renderClassroom();
+      expect(mocks.composerProps?.assistantAnswers).toBe(false);
+      send('Why?');
+      expectTeacher();
+      expect(mocks.sendAsideMessage).not.toHaveBeenCalled();
+    });
+
+    it('a bare hand goes to the assistant: no pause, the composer opens, a local invitation', async () => {
+      withAssistant();
+      mocks.engineMode = 'playing';
+      await renderClassroom();
+      mocks.switchToTab.mockClear();
+
+      let raised = false;
+      act(() => {
+        raised = composerHand().onRaise();
+      });
+      expect(raised).toBe(true);
+      expect(mocks.raiseHand).not.toHaveBeenCalled();
+      expect(mocks.enginePause).not.toHaveBeenCalled();
+      expect(composerHand()).toMatchObject({ state: 'raised', assistant: true });
+      expect(mocks.openTextInput).toHaveBeenCalledOnce();
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+      expect(mocks.participantsProps?.userHandRaised).toBe(true);
+      expect(streamRow('stream-hand-raised')).not.toBeNull();
+      expect(streamRow('stream-assistant-prompt')?.textContent).toContain(
+        'stage.handRaise.assistantPrompt',
+      );
+      expect(streamRow('stream-assistant-prompt')?.textContent).toContain('AI助教');
+      // A local row: nothing is asked of the model yet
+      expect(mocks.sendAsideMessage).not.toHaveBeenCalled();
+
+      // Lowered: nothing else happens
+      let lowered = false;
+      act(() => {
+        lowered = composerHand().onLower();
+      });
+      expect(lowered).toBe(true);
+      expect(mocks.lowerHand).not.toHaveBeenCalled();
+      expect(composerHand().state).toBeNull();
+      expect(mocks.participantsProps?.userHandRaised).toBe(false);
+      expect(streamRow('stream-assistant-prompt')).toBeNull();
+
+      // Raised again, then the question goes to the assistant and the hand comes down
+      act(() => {
+        composerHand().onRaise();
+      });
+      send('Why are leaves green?');
+      expect(mocks.sendAsideMessage).toHaveBeenCalledExactlyOnceWith('Why are leaves green?', {
+        agentId: 'default-2',
+      });
+      expect(composerHand().state).toBeNull();
+      expect(streamRow('stream-assistant-prompt')).toBeNull();
+      expectLectureUntouched();
+    });
+
+    it("a teacher's discussion takes the assistant's hand down", async () => {
+      withAssistant();
+      mocks.engineMode = 'playing';
+      await renderClassroom();
+      act(() => {
+        composerHand().onRaise();
+      });
+      const options = mocks.engineOptions as unknown as {
+        onDiscussionConfirmed: (topic: string, prompt?: string, agentId?: string) => void;
+      };
+      act(() => options.onDiscussionConfirmed('Why green?', undefined, 'default-3'));
+      expect(composerHand().state).toBeNull();
+      expect(streamRow('stream-assistant-prompt')).toBeNull();
+    });
+
+    async function startLecturePlaying() {
+      mocks.engineMode = 'idle';
+      await renderClassroom();
+      await act(async () => {
+        await (mocks.canvasProps?.onPlayPause as () => Promise<void>)();
+      });
+      mocks.engineMode = 'playing';
+      act(() => mocks.engineOptions?.onModeChange?.('playing'));
+      mocks.enginePause.mockImplementation(() => {
+        mocks.engineMode = 'paused';
+      });
+    }
+
+    it('voice pauses the lecture only while recording, then resumes it once sent', async () => {
+      withAssistant();
+      await startLecturePlaying();
+      const onInputActivate = mocks.composerProps?.onInputActivate as (kind: 'voice') => void;
+
+      act(() => onInputActivate('voice'));
+      expect(mocks.enginePause).toHaveBeenCalledOnce();
+      expect(mocks.pauseBuffer).toHaveBeenCalledWith('lecture-1');
+
+      // The transcript goes to the assistant and the lecture plays on
+      send('Why are leaves green?');
+      expect(mocks.sendAsideMessage).toHaveBeenCalledExactlyOnceWith('Why are leaves green?', {
+        agentId: 'default-2',
+      });
+      expect(mocks.handleUserInterrupt).not.toHaveBeenCalled();
+      expect(mocks.engineResume).toHaveBeenCalledOnce();
+      expect(mocks.resumeBuffer).toHaveBeenCalledWith('lecture-1');
+      expect(mocks.ttsCleanup).not.toHaveBeenCalled();
+
+      // The voice input closing afterwards changes nothing more
+      act(() => (mocks.composerProps?.onVoiceEnd as () => void)());
+      expect(mocks.engineResume).toHaveBeenCalledOnce();
+    });
+
+    it('voice cancelled (or nothing heard) resumes the lecture it paused', async () => {
+      withAssistant();
+      await startLecturePlaying();
+      act(() => (mocks.composerProps?.onInputActivate as (kind: 'voice') => void)('voice'));
+      expect(mocks.enginePause).toHaveBeenCalledOnce();
+
+      act(() => (mocks.composerProps?.onVoiceEnd as () => void)());
+      expect(mocks.engineResume).toHaveBeenCalledOnce();
+      expect(mocks.resumeBuffer).toHaveBeenCalledWith('lecture-1');
+      expect(mocks.sendAsideMessage).not.toHaveBeenCalled();
+    });
+
+    it('with the setting off, voice pauses as before and a cancel does not resume', async () => {
+      withAssistant();
+      settingsState.assistantAnswersDuringLecture = false;
+      await startLecturePlaying();
+      act(() => (mocks.composerProps?.onInputActivate as (kind: 'voice') => void)('voice'));
+      expect(mocks.enginePause).toHaveBeenCalledOnce();
+      act(() => (mocks.composerProps?.onVoiceEnd as () => void)());
+      expect(mocks.engineResume).not.toHaveBeenCalled();
+    });
+
+    it('holds auto-play on the slide while the assistant is still answering', async () => {
+      vi.useFakeTimers();
+      settingsState.autoPlayLecture = true;
+      try {
+        withAssistant();
+        mocks.engineMode = 'playing';
+        await renderClassroom();
+        send('Why are leaves green?');
+        reportAside('aside-1', true);
+
+        mocks.engineMode = 'idle';
+        mocks.engineExhausted = true;
+        act(() => mocks.engineOptions?.onComplete?.());
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1500);
+        });
+        expect(stageState.setCurrentSceneId).not.toHaveBeenCalled();
+
+        // The answer is done: the slide moves on (the switch ends the aside)
+        reportAside('aside-1', false);
+        expect(stageState.setCurrentSceneId).toHaveBeenCalledWith(secondScene.id);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

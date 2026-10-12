@@ -18,6 +18,11 @@ export interface UseVoiceInputOptions {
   onSent: (text: string, result: MessageSendResult) => void;
   /** Voice is opening: the owner pauses narration (the mic would record it) */
   onOpen?: () => void;
+  /**
+   * Voice input is over — sent, cancelled, nothing heard, failed, or handed to
+   * the draft — so the owner can undo what onOpen did (resume narration)
+   */
+  onEnd?: () => void;
 }
 
 /**
@@ -31,6 +36,7 @@ export function useVoiceInput({
   onFallbackToDraft,
   onSent,
   onOpen,
+  onEnd,
 }: UseVoiceInputOptions) {
   const { t } = useI18n();
   const available = useASRAvailable();
@@ -42,16 +48,19 @@ export function useVoiceInput({
         if (!text.trim()) {
           toast.info(t('roundtable.noSpeechDetected'));
           setIsOpen(false);
+          onEnd?.();
           return;
         }
         // Block if in send cooldown (e.g. text was sent while voice was processing)
         if (isSendBlocked()) {
           setIsOpen(false);
+          onEnd?.();
           return;
         }
         if (canSendMessage?.() === false) {
           onFallbackToDraft(text);
           setIsOpen(false);
+          onEnd?.();
           return;
         }
         const result = onMessageSend?.(text);
@@ -59,14 +68,17 @@ export function useVoiceInput({
           // Another question is already waiting — keep this one editable
           onFallbackToDraft(text);
           setIsOpen(false);
+          onEnd?.();
           return;
         }
         onSent(text, result);
         setIsOpen(false);
+        onEnd?.();
       },
       onError: (error) => {
         toast.error(error);
         setIsOpen(false);
+        onEnd?.();
       },
     });
 
@@ -75,6 +87,9 @@ export function useVoiceInput({
     if (isOpen) {
       if (isRecording) {
         stopRecording();
+      } else if (!isProcessing) {
+        // Nothing to transcribe: voice ends here
+        onEnd?.();
       }
       setIsOpen(false);
     } else {
@@ -83,13 +98,24 @@ export function useVoiceInput({
       setIsOpen(true);
       startRecording();
     }
-  }, [isOpen, isProcessing, isRecording, isSendBlocked, onOpen, startRecording, stopRecording]);
+  }, [
+    isOpen,
+    isProcessing,
+    isRecording,
+    isSendBlocked,
+    onEnd,
+    onOpen,
+    startRecording,
+    stopRecording,
+  ]);
 
   /** Close the panel and drop any recording or transcription in flight. */
   const dismiss = useCallback(() => {
+    const wasActive = isOpen || isRecording || isProcessing;
     setIsOpen(false);
     if (isRecording || isProcessing) cancelRecording();
-  }, [cancelRecording, isProcessing, isRecording]);
+    if (wasActive) onEnd?.();
+  }, [cancelRecording, isOpen, isProcessing, isRecording, onEnd]);
 
   return {
     /** ASR is configured (otherwise the mic control is disabled) */

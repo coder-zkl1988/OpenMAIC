@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Hỏi đáp",
       "discussion": "Thảo luận",
-      "lecture": "GIẢNG"
+      "lecture": "GIẢNG",
+      "aside": "Hỏi trợ giảng"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "Giơ tay",
       "raiseHandHint": "Giơ tay: giáo viên sẽ mời bạn phát biểu khi hết câu này",
+      "raiseHandHintAssistant": "Giơ tay: trợ giảng trả lời trong bảng Tương tác, giáo viên vẫn tiếp tục giảng",
       "raiseHandInLiveSession": "Trong phần hỏi đáp bạn có thể nói ngay",
       "lowerHand": "Hạ tay",
       "lowerHandHint": "Hạ tay và rút lại câu hỏi",
@@ -390,6 +392,7 @@
       "cancelRecording": "Hủy ghi âm",
       "handRaised": "Đã giơ tay · đến lượt bạn khi hết câu này",
       "handRaisedStep": "Đã giơ tay · đến lượt bạn khi xong bước này",
+      "handRaisedAssistant": "Đã giơ tay · trợ giảng sẽ trả lời bạn trong bảng Tương tác",
       "raisedPlaceholder": "Bạn có thể viết câu hỏi trước...",
       "followUpPlaceholder": "Hỏi tiếp...",
       "referencePlaceholder": "{{type}}: bạn muốn hỏi gì về nội dung này?",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "Bạn đã giơ tay, phần thảo luận của {{name}} xếp sau bạn",
       "calledBy": "{{name}} mời bạn phát biểu",
       "pendingQuestion": "Đang chờ · sẽ trả lời khi hết câu này",
-      "pendingQuestionStep": "Đang chờ · sẽ trả lời khi xong bước này"
+      "pendingQuestionStep": "Đang chờ · sẽ trả lời khi xong bước này",
+      "assistantPrompt": "Hãy nói câu hỏi của bạn, mình sẽ giúp bạn.",
+      "assistantAnswering": "Trợ giảng đang trả lời…"
     },
     "participants": {
       "label": "Thành viên",
       "online": "{{count}} người trực tuyến",
       "speaking": "Đang nói",
+      "answering": "Đang trả lời",
       "wantsToSpeak": "Muốn phát biểu",
       "handRaised": "Đang giơ tay",
       "more": "Thêm {{count}} thành viên"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "Phím tắt",
     "generalSettings": "Chung",
     "systemSettings": "Hệ thống",
+    "classroomSection": "Lớp học",
+    "assistantAnswersDuringLecture": "Trợ giảng trả lời câu hỏi trong lúc giảng bài",
+    "assistantAnswersDuringLectureDesc": "Khi bật, câu hỏi trong lúc giảng bài không làm gián đoạn giáo viên: trợ giảng sẽ trả lời trong bảng Tương tác.",
     "importFromClipboard": "Nhập từ bộ nhớ tạm",
     "baseUrlRegion": {
       "china": "Trung Quốc",

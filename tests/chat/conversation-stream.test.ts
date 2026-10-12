@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AssistantAsideStreamStatus,
   ConversationStream,
   HandRaiseStreamStatus,
   buildConversationStream,
@@ -241,5 +242,80 @@ describe('HandRaiseStreamStatus', () => {
     const html = render({ cueSpeaker: { name: 'Ms. Li', avatar: '/avatars/teacher.png' } });
     expect(html).toContain('data-testid="stream-cue"');
     expect(html).toContain('stage.handRaise.calledBy:Ms. Li');
+  });
+});
+
+describe('the teaching assistant aside in the stream', () => {
+  const aside = (overrides: Partial<ChatSession> = {}) =>
+    session('aside', {
+      createdAt: 1,
+      sceneId: 'scene-a',
+      status: 'active',
+      config: { agentIds: ['default-2'], aside: true },
+      messages: [
+        {
+          id: 'ta-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Chlorophyll reflects green.' }],
+          metadata: { originalRole: 'agent', agentId: 'default-2', senderName: 'AI助教' },
+        },
+      ],
+      ...overrides,
+    });
+
+  it('labels the aside 助教答疑 and streams it on its own flag', () => {
+    const render = (props: { isStreaming: boolean; isAsideStreaming: boolean }) =>
+      renderToStaticMarkup(
+        createElement(ConversationStream, {
+          sessions: [aside()],
+          scenes,
+          asideSessionId: 'aside',
+          onEndSession: vi.fn(),
+          onContinueSession: vi.fn(),
+          ...props,
+        }),
+      );
+    const streaming = render({ isStreaming: false, isAsideStreaming: true });
+    expect(streaming).toContain('data-aside="true"');
+    expect(streaming).toContain('chat.badge.aside');
+    expect(streaming).not.toContain('chat.badge.qa');
+    expect(streaming).toContain('bg-success-soft');
+    expect(streaming).toContain('aria-busy="true"');
+    // The live dot on its last bubble follows the aside, not the Q&A flag
+    expect(streaming).toContain('animate-pulse');
+    expect(render({ isStreaming: true, isAsideStreaming: false })).not.toContain(
+      'animate-pulse ml-1',
+    );
+  });
+
+  it('keeps a plain Q&A badge for a session without the flag', () => {
+    const html = renderToStaticMarkup(
+      createElement(ConversationStream, {
+        sessions: [aside({ config: { agentIds: ['default-1'] } })],
+        scenes,
+        isStreaming: false,
+        onEndSession: vi.fn(),
+        onContinueSession: vi.fn(),
+      }),
+    );
+    expect(html).toContain('chat.badge.qa');
+    expect(html).not.toContain('data-aside');
+  });
+
+  it("shows the assistant's local invitation and its answering row", () => {
+    const assistant = { name: 'AI助教', avatar: '/avatars/assist.png' };
+    const prompt = renderToStaticMarkup(
+      createElement(AssistantAsideStreamStatus, { assistant, status: 'prompt' }),
+    );
+    expect(prompt).toContain('data-testid="stream-assistant-prompt"');
+    expect(prompt).toContain('AI助教');
+    expect(prompt).toContain('settings.agentRoles.assistant');
+    expect(prompt).toContain('stage.handRaise.assistantPrompt');
+
+    const answering = renderToStaticMarkup(
+      createElement(AssistantAsideStreamStatus, { assistant, status: 'answering' }),
+    );
+    expect(answering).toContain('data-testid="stream-assistant-answering"');
+    expect(answering).toContain('stage.handRaise.assistantAnswering');
   });
 });

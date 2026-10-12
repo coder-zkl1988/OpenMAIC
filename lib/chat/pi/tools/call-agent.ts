@@ -30,6 +30,7 @@ import {
   toHistoryMessages,
 } from '../prompts';
 import type { SendEvent } from '../types';
+import { isAsideToLecture } from '../config';
 import {
   buildChildActionTools,
   createPiWhiteboardRuntimeState,
@@ -790,11 +791,16 @@ export function buildCallAgentTool(opts: {
               availableToolNames,
               capturedScene,
             ),
-            prompt: buildNativeChildTurnPrompt(params.instruction, agent.role, {
-              scene: sceneEvidence?.content,
-              element: elementReferenceEvidence?.content,
-              spotlightElementIds,
-            }),
+            prompt: buildNativeChildTurnPrompt(
+              params.instruction,
+              agent.role,
+              {
+                scene: sceneEvidence?.content,
+                element: elementReferenceEvidence?.content,
+                spotlightElementIds,
+              },
+              { aside: isAsideToLecture(opts.body) },
+            ),
             tools: nativeTools,
             allowedToolNames: new Set(availableToolNames),
             history: toHistoryMessages(opts.body.messages),
@@ -919,10 +925,15 @@ export function buildCallAgentTool(opts: {
       let childErrored = false;
       try {
         await child.prompt(
-          buildChildTurnPrompt(params.instruction, agent.role, {
-            scene: sceneEvidence?.content,
-            element: elementReferenceEvidence?.content,
-          }),
+          buildChildTurnPrompt(
+            params.instruction,
+            agent.role,
+            {
+              scene: sceneEvidence?.content,
+              element: elementReferenceEvidence?.content,
+            },
+            { aside: isAsideToLecture(opts.body) },
+          ),
         );
         await child.waitForIdle();
       } catch (error) {

@@ -290,7 +290,8 @@
     "badge": {
       "qa": "P&R",
       "discussion": "Debate",
-      "lecture": "AULA"
+      "lecture": "AULA",
+      "aside": "P&R com o assistente"
     }
   },
   "actions": {
@@ -794,6 +795,7 @@
     "composer": {
       "raiseHand": "Levantar a mão",
       "raiseHandHint": "Levante a mão: o professor chama você ao fim desta frase",
+      "raiseHandHintAssistant": "Levante a mão: o assistente responde no painel Interação enquanto o professor continua a aula",
       "raiseHandInLiveSession": "Durante as perguntas você pode falar diretamente",
       "lowerHand": "Abaixar",
       "lowerHandHint": "Abaixar a mão e retirar a pergunta",
@@ -803,6 +805,7 @@
       "cancelRecording": "Cancelar gravação",
       "handRaised": "Mão levantada · sua vez ao fim desta frase",
       "handRaisedStep": "Mão levantada · sua vez ao fim desta etapa",
+      "handRaisedAssistant": "Mão levantada · o assistente responde você no painel Interação",
       "raisedPlaceholder": "Você pode escrever sua pergunta antes...",
       "followUpPlaceholder": "Faça uma pergunta de acompanhamento...",
       "referencePlaceholder": "{{type}}: o que você quer perguntar sobre isso?",
@@ -813,12 +816,15 @@
       "aheadOfDiscussion": "Você levantou a mão; a discussão de {{name}} vem depois de você",
       "calledBy": "{{name}} pede que você fale",
       "pendingQuestion": "Na fila · resposta ao fim desta frase",
-      "pendingQuestionStep": "Na fila · resposta ao fim desta etapa"
+      "pendingQuestionStep": "Na fila · resposta ao fim desta etapa",
+      "assistantPrompt": "Diga sua pergunta que eu te ajudo.",
+      "assistantAnswering": "O assistente está respondendo…"
     },
     "participants": {
       "label": "Participantes",
       "online": "{{count}} online",
       "speaking": "Falando",
+      "answering": "Respondendo",
       "wantsToSpeak": "Quer falar",
       "handRaised": "Mão levantada",
       "more": "Mais {{count}} participantes"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "Atalhos",
     "generalSettings": "Geral",
     "systemSettings": "Sistema",
+    "classroomSection": "Aula",
+    "assistantAnswersDuringLecture": "O assistente responde às perguntas durante a aula",
+    "assistantAnswersDuringLectureDesc": "Ativado, as perguntas feitas durante a aula não interrompem o professor: o assistente responde no painel Interação.",
     "importFromClipboard": "Importar da Área de Transferência",
     "baseUrlRegion": {
       "china": "China",

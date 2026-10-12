@@ -7,7 +7,10 @@ import { seedServerDocument, setCurrentScene, uniqueStageId } from '../fixtures/
  * The 举手 flow end to end (HandRaiseFlow.dc.html): raise a bare hand while
  * the teacher speaks, the line finishes and the learner is called (the
  * lecture pauses), ask by text, the answer soft-closes, and the lecture
- * resumes on the NEXT line (the finished one is not replayed).
+ * resumes on the NEXT line (the finished one is not replayed). That is the
+ * flow with 讲课时由助教回答提问 off; with it on (the default, and the
+ * classroom has the teaching assistant) the assistant answers in the panel
+ * while the teacher keeps lecturing (the last test).
  *
  * Timing comes from the engine's reading timer (no TTS in the test settings):
  * the first line is long enough to raise the hand while it plays. The chat
@@ -109,7 +112,8 @@ test('raise a hand, get called at the end of the line, ask, and resume on the ne
       localStorage.setItem('maic:account:settings-storage', settings);
       localStorage.setItem('locale', 'en-US');
     },
-    createSettingsStorage({ autoPlayLecture: false }),
+    // The teacher answers: the assistant does not take questions during the lecture
+    createSettingsStorage({ autoPlayLecture: false, assistantAnswersDuringLecture: false }),
   );
   const stageId = await seedStage(page);
   await page.goto(`/classroom/${stageId}`);
@@ -179,7 +183,7 @@ test('撤回 before the line ends withdraws the hand and the lecture plays on', 
       localStorage.setItem('maic:account:settings-storage', settings);
       localStorage.setItem('locale', 'en-US');
     },
-    createSettingsStorage({ autoPlayLecture: false }),
+    createSettingsStorage({ autoPlayLecture: false, assistantAnswersDuringLecture: false }),
   );
   const stageId = await seedStage(page);
   await page.goto(`/classroom/${stageId}`);
@@ -201,4 +205,106 @@ test('撤回 before the line ends withdraws the hand and the lecture plays on', 
   // No call: the lecture moves on to the next line by itself
   await expect(page.getByTestId('caption-text')).toContainText(SECOND_LINE, { timeout: 45_000 });
   await expect(composer.getByTestId('composer-cue')).toHaveCount(0);
+});
+
+const ASSISTANT_ANSWER = 'Chlorophyll absorbs red and blue light and reflects green.';
+
+/** The teaching assistant's aside answer: text only, then it waits for a follow-up */
+function assistantAnswerStream(): string {
+  const events = [
+    { type: 'thinking', data: { stage: 'director' } },
+    {
+      type: 'agent_start',
+      data: { messageId: 'aside-1', agentId: 'default-2', agentName: 'AI Assistant' },
+    },
+    { type: 'text_delta', data: { messageId: 'aside-1', content: ASSISTANT_ANSWER } },
+    { type: 'agent_end', data: { messageId: 'aside-1', agentId: 'default-2' } },
+    { type: 'cue_user', data: { fromAgentId: 'default-2' } },
+    {
+      type: 'done',
+      data: { totalActions: 0, totalAgents: 1, agentHadContent: true, cueUserReceived: true },
+    },
+  ];
+  return events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
+}
+
+test('with the assistant on, a raised hand and a question never stop the teacher', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const configs: Record<string, unknown>[] = [];
+  const answer = async (route: Route) => {
+    const body = route.request().postDataJSON() as { config?: Record<string, unknown> };
+    if (body?.config) configs.push(body.config);
+    await route.fulfill({
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+      body: assistantAnswerStream(),
+    });
+  };
+  await page.route('**/api/chat/pi', answer);
+  await page.route('**/api/chat', answer);
+  await page.addInitScript(
+    (settings) => {
+      localStorage.setItem('maic:account:settings-storage', settings);
+      localStorage.setItem('locale', 'en-US');
+    },
+    // The default: the classroom's teaching assistant answers during the lecture
+    createSettingsStorage({ autoPlayLecture: false }),
+  );
+  const stageId = await seedStage(page);
+  await page.goto(`/classroom/${stageId}`);
+  await expect(page.getByTestId('scene-title').first()).toBeAttached({ timeout: 30_000 });
+
+  const caption = page.getByTestId('caption-strip');
+  const captionText = page.getByTestId('caption-text');
+  const composer = page.getByTestId('classroom-composer');
+  const stream = page.getByTestId('conversation-stream');
+
+  await page.getByTestId('play-hint').click();
+  await expect(caption).toHaveAttribute('data-status', 'lecturing', { timeout: 15_000 });
+  await expect(captionText).toContainText('Photosynthesis happens');
+
+  // 1. 举手 goes to the assistant: the composer opens, the assistant invites
+  //    the question, and the teacher keeps lecturing
+  const raise = composer.getByTestId('composer-raise-hand');
+  await expect(raise).toHaveAttribute(
+    'title',
+    'Raise your hand: the teaching assistant answers in the Interaction panel while the teacher keeps teaching',
+  );
+  await raise.click();
+  const handRow = composer.getByTestId('composer-queued-question');
+  await expect(handRow).toContainText(
+    'Hand raised · the teaching assistant answers you in the Interaction panel',
+  );
+  await expect(page.getByTestId('stream-assistant-prompt')).toContainText(
+    "Tell me your question and I'll help you with it.",
+  );
+  await expect(page.getByTestId('participants')).toContainText('Hand raised');
+  const textarea = composer.getByPlaceholder('You can write your question first...', {
+    exact: true,
+  });
+  await expect(textarea).toBeFocused();
+  await expect(caption).toHaveAttribute('data-status', 'lecturing');
+
+  // 2. Ask: the assistant answers in the stream, text only, as an aside
+  await textarea.fill('Why are leaves green?');
+  await textarea.press('Enter');
+  await expect.poll(() => configs.length, { timeout: 15_000 }).toBeGreaterThan(0);
+  expect(configs[0]).toMatchObject({
+    agentIds: ['default-2'],
+    asideToLecture: true,
+    piEnableWhiteboardTools: false,
+  });
+  await expect(stream).toContainText(ASSISTANT_ANSWER, { timeout: 30_000 });
+  await expect(stream).toContainText('Assistant Q&A');
+  await expect(handRow).toHaveCount(0);
+  await expect(page.getByTestId('stream-assistant-prompt')).toHaveCount(0);
+
+  // 3. The teacher never paused: no call, no Q&A stop pill, and the lecture
+  //    moves on to the next line by itself
+  await expect(composer.getByTestId('composer-cue')).toHaveCount(0);
+  await expect(page.getByTestId('control-bar').getByText('Stop Q&A')).toHaveCount(0);
+  await expect(captionText).toContainText(SECOND_LINE, { timeout: 45_000 });
+  await expect(caption).toHaveAttribute('data-status', 'lecturing');
 });

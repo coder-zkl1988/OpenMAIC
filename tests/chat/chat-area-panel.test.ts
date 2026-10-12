@@ -11,17 +11,26 @@ vi.mock('@/lib/chat/lecture-notes', () => ({ buildLectureNotes: () => [] }));
 vi.mock('@/components/chat/lecture-notes-view', () => ({
   LectureNotesView: () => createElement('div', { 'data-testid': 'notes' }),
 }));
+const chat = vi.hoisted(() => ({
+  /** What useChatSessions returns (the panel tests need only the sessions) */
+  state: {} as Record<string, unknown>,
+  /** The stream's last props */
+  streamProps: {} as Record<string, unknown>,
+}));
 vi.mock('@/components/chat/conversation-stream', () => ({
-  ConversationStream: ({ trailing, density }: { trailing?: ReactNode; density?: string }) =>
-    createElement('div', { 'data-testid': 'stream', 'data-density': density }, trailing),
+  ConversationStream: (props: { trailing?: ReactNode; density?: string }) => {
+    chat.streamProps = props;
+    return createElement(
+      'div',
+      { 'data-testid': 'stream', 'data-density': props.density },
+      props.trailing,
+    );
+  },
 }));
 vi.mock('@/components/chat/use-chat-sessions', () => ({
   MANUAL_STOP_END_OPTIONS: { source: 'manual_stop' },
-  useChatSessions: () => ({
-    sessions: [],
-    activeSessionType: null,
-    isStreaming: false,
-  }),
+  isAsideSession: (session: { config?: { aside?: boolean } }) => session.config?.aside === true,
+  useChatSessions: () => chat.state,
 }));
 
 import { ChatArea, type ChatAreaRef } from '@/components/chat/chat-area';
@@ -33,6 +42,8 @@ describe('ChatArea panel: the 互动 tab behind 笔记 and a collapsed panel', (
 
   beforeEach(() => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    chat.state = { sessions: [], activeSessionType: null, isStreaming: false };
+    chat.streamProps = {};
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -193,6 +204,91 @@ describe('ChatArea panel: the 互动 tab behind 笔记 and a collapsed panel', (
     it('hides while presenting (collapsed)', () => {
       render({ layout: 'phone', scenes, collapsed: true });
       expect(section().className).toContain('hidden');
+    });
+  });
+
+  describe("the teaching assistant's aside", () => {
+    const qa = { id: 'qa-1', type: 'qa', status: 'active', config: { agentIds: ['default-1'] } };
+    const aside = {
+      id: 'aside-1',
+      type: 'qa',
+      status: 'active',
+      config: { agentIds: ['default-2'], aside: true },
+    };
+    let endSession: ReturnType<typeof vi.fn>;
+    let endAsideSession: ReturnType<typeof vi.fn>;
+    let sendAsideMessage: ReturnType<typeof vi.fn>;
+
+    function withSessions(sessions: unknown[], extra: Record<string, unknown> = {}) {
+      endSession = vi.fn().mockResolvedValue(undefined);
+      endAsideSession = vi.fn().mockResolvedValue(undefined);
+      sendAsideMessage = vi.fn().mockResolvedValue(undefined);
+      chat.state = {
+        sessions,
+        activeSessionType: 'lecture',
+        isStreaming: false,
+        asideSessionId: 'aside-1',
+        isAsideStreaming: true,
+        endSession,
+        endAsideSession,
+        sendAsideMessage,
+        ...extra,
+      };
+    }
+
+    it('keeps the stop pill on the Q&A and ends an aside on its own, without engine cleanup', async () => {
+      const onStopSession = vi.fn();
+      withSessions([aside, qa]);
+      render({ onStopSession });
+
+      await act(async () => {
+        await ref.current!.stopActiveSession();
+      });
+      expect(endSession).toHaveBeenCalledExactlyOnceWith('qa-1', { source: 'manual_stop' });
+      expect(onStopSession).toHaveBeenCalledExactlyOnceWith({
+        sessionId: 'qa-1',
+        source: 'manual_stop',
+      });
+
+      // The stream's end control on the aside: only the aside ends
+      await act(async () => {
+        await (chat.streamProps.onEndSession as (id: string) => Promise<void>)('aside-1');
+      });
+      expect(endAsideSession).toHaveBeenCalledOnce();
+      expect(onStopSession).toHaveBeenCalledOnce();
+    });
+
+    it('has nothing to stop with only an aside open', async () => {
+      const onStopSession = vi.fn();
+      withSessions([aside]);
+      render({ onStopSession });
+      await act(async () => {
+        await ref.current!.stopActiveSession();
+      });
+      expect(endSession).not.toHaveBeenCalled();
+      expect(endAsideSession).not.toHaveBeenCalled();
+      expect(onStopSession).not.toHaveBeenCalled();
+    });
+
+    it('reports its state, streams it on its own flag and exposes its send / end', () => {
+      const onAsideStateChange = vi.fn();
+      withSessions([aside]);
+      render({ onAsideStateChange });
+      expect(onAsideStateChange).toHaveBeenLastCalledWith({
+        sessionId: 'aside-1',
+        isStreaming: true,
+      });
+      expect(chat.streamProps).toMatchObject({ asideSessionId: 'aside-1', isAsideStreaming: true });
+      expect(ref.current!.sendAsideMessage).toBe(sendAsideMessage);
+      expect(ref.current!.endAsideSession).toBe(endAsideSession);
+
+      // Re-rendering with a new (inline) callback does not re-report
+      const next = vi.fn();
+      render({ onAsideStateChange: next });
+      expect(next).not.toHaveBeenCalled();
+      withSessions([aside], { asideSessionId: null, isAsideStreaming: false });
+      render({ onAsideStateChange: next });
+      expect(next).toHaveBeenCalledExactlyOnceWith({ sessionId: null, isStreaming: false });
     });
   });
 });

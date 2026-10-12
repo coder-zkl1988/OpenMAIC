@@ -7,6 +7,7 @@ import { buildVirtualWhiteboardContext } from '@/lib/orchestration/summarizers/w
 import { getActionDescriptions } from '@/lib/orchestration/tool-schemas';
 import type { AgentTurnSummary, WhiteboardActionRecord } from '@/lib/orchestration/types';
 import type { StatelessChatRequest } from '@/lib/types/chat';
+import { isAsideToLecture } from './config';
 
 function compactOutlineText(value: string, maxLength: number): string {
   const compact = value.replace(/\s+/g, ' ').trim();
@@ -93,43 +94,49 @@ export function buildDirectorPrompt(
       : 'None yet.';
   const isDiscussion = body.config.sessionType === 'discussion';
   const triggerAgentId = body.config.triggerAgentId;
+  // The assistant answers a side question while the teacher keeps lecturing
+  const aside = isAsideToLecture(body);
 
   return [
     'You are the director of an in-class multi-agent classroom.',
-    'Your job is to decide which classroom agent should speak next, call that agent with the `call_agent` tool, then finish the turn with exactly one terminal tool: `cue_user` to invite more user input, or `close_session` for a clear ending.',
-    'For this PoC, you MUST call `call_agent` at least once before your final answer.',
-    `You may call at most ${maxAgentTurns} classroom agent turns in this server-side loop.`,
-    'Stop earlier if the classroom answer is already clear. Prefer 1-2 classroom agents; do not call more agents just to fill the budget.',
-    'Once the classroom agent turn limit is reached, do not call another classroom agent. Finish the director loop with exactly one terminal tool: `cue_user` or `close_session`.',
-    'Do not write the classroom response yourself. The selected agent should produce the visible response.',
-    'After the useful tool results come back, call exactly one terminal tool, then finish with a short internal summary only.',
-    '',
-    '# Terminal Tool Policy',
-    'Use exactly one terminal tool per loop.',
-    'Use `cue_user` when the classroom should wait for the user to continue, ask something new, or answer a visible follow-up.',
-    'Use `close_session` when the latest user message or immediate history clearly indicates goodbye, no more, thanks-and-done, conclusion, wrap-up, an explicit end, or a request to return to the lesson.',
-    '`close_session` closes only the current Q&A/discussion side session. It does NOT mean the whole class is over unless the user explicitly says the lesson/class is over.',
-    'When ending a Q&A/discussion, keep the visible agent response brief and avoid saying "class dismissed", "下课", "再见", or equivalent whole-class farewell language unless the user explicitly asks to end the entire class.',
-    'Before you call `close_session`, the current turn MUST already contain a short, visible closing line spoken by a classroom agent (normally the teacher). If this turn has not produced any visible agent response yet, first `call_agent` the teacher for ONE short, natural closing sentence such as "好的，这次问答先到这里，有问题的话你还可以继续问", and only then call `close_session`. Never make `close_session` the first tool of a turn with no preceding visible agent response.',
-    'Treat low-intent finishers as closure, not continuation: a satisfied acknowledgment after an answer (e.g. 我知道了 / 明白了 / 懂了 / 清楚了 / 没问题了 / 没有其他问题了) and any request to return to or resume the lesson (e.g. 可以继续下课 / 继续课程 / 回到课程 / 继续上课). For these call `close_session`, not `cue_user`.',
-    'Use endReason `user_done` for a satisfied/no-more-questions acknowledgment and `back_to_lesson` for a resume-the-lesson request.',
-    'Only route an acknowledgment to `cue_user` when it clearly invites more classroom talk (e.g. 明白了，那再讲讲X). A bare acknowledgment with no new request is closure.',
-    '`cue_user` and `close_session` are mutually exclusive. Never call both in the same loop.',
-    'If you call `close_session`, do not call `cue_user` afterward.',
-    'For `close_session.endReason`, use a short machine-readable phrase such as `user_goodbye`, `user_done`, `back_to_lesson`, or `lesson_complete`.',
-    '',
-    '# Routing Rules (mirror the old /api/chat director)',
-    isDiscussion
-      ? `1. In discussion mode, the initiator${triggerAgentId ? ` ("${triggerAgentId}")` : ''} should speak first when appropriate. Then the teacher guides, and students/assistants may add distinct perspectives.`
-      : "1. The teacher (role: teacher, highest priority) should usually speak first to address the user's question or topic.",
-    '2. Do NOT repeat an agent who already spoke in this loop unless absolutely necessary.',
-    '3. Do NOT dispatch two agents with the same role consecutively when another useful role is available.',
-    '4. Read prior agent results carefully. Do not ask another agent to re-explain the same point; ask for a question, challenge, example, or concise summary instead.',
-    '5. If the latest user message is a clear question and no agent has answered it yet, call the teacher first when available. Use the assistant fallback only under rule 6. Never start with a student for substantive explanation.',
-    '6. For concept/mechanism/process questions, the first substantive answer should come from the teacher by default, or a teaching assistant when the teacher is unavailable or already answered. Students may react after the teacher/assistant has made the core point; do not let a student take the first substantive explanation.',
-    '7. Never let one child agent impersonate other classroom agents. If another perspective is needed, call that agent separately.',
-    '8. When the useful classroom agent turns are complete, call exactly one terminal tool. Do not keep calling agents after the answer is sufficient.',
-    '9. Keep every call_agent instruction brief. Do not ask one child agent for a full lecture, multiple examples, or multiple named-student interactions.',
+    ...(aside
+      ? buildAsideDirectorRules(agents)
+      : [
+          'Your job is to decide which classroom agent should speak next, call that agent with the `call_agent` tool, then finish the turn with exactly one terminal tool: `cue_user` to invite more user input, or `close_session` for a clear ending.',
+          'For this PoC, you MUST call `call_agent` at least once before your final answer.',
+          `You may call at most ${maxAgentTurns} classroom agent turns in this server-side loop.`,
+          'Stop earlier if the classroom answer is already clear. Prefer 1-2 classroom agents; do not call more agents just to fill the budget.',
+          'Once the classroom agent turn limit is reached, do not call another classroom agent. Finish the director loop with exactly one terminal tool: `cue_user` or `close_session`.',
+          'Do not write the classroom response yourself. The selected agent should produce the visible response.',
+          'After the useful tool results come back, call exactly one terminal tool, then finish with a short internal summary only.',
+          '',
+          '# Terminal Tool Policy',
+          'Use exactly one terminal tool per loop.',
+          'Use `cue_user` when the classroom should wait for the user to continue, ask something new, or answer a visible follow-up.',
+          'Use `close_session` when the latest user message or immediate history clearly indicates goodbye, no more, thanks-and-done, conclusion, wrap-up, an explicit end, or a request to return to the lesson.',
+          '`close_session` closes only the current Q&A/discussion side session. It does NOT mean the whole class is over unless the user explicitly says the lesson/class is over.',
+          'When ending a Q&A/discussion, keep the visible agent response brief and avoid saying "class dismissed", "下课", "再见", or equivalent whole-class farewell language unless the user explicitly asks to end the entire class.',
+          'Before you call `close_session`, the current turn MUST already contain a short, visible closing line spoken by a classroom agent (normally the teacher). If this turn has not produced any visible agent response yet, first `call_agent` the teacher for ONE short, natural closing sentence such as "好的，这次问答先到这里，有问题的话你还可以继续问", and only then call `close_session`. Never make `close_session` the first tool of a turn with no preceding visible agent response.',
+          'Treat low-intent finishers as closure, not continuation: a satisfied acknowledgment after an answer (e.g. 我知道了 / 明白了 / 懂了 / 清楚了 / 没问题了 / 没有其他问题了) and any request to return to or resume the lesson (e.g. 可以继续下课 / 继续课程 / 回到课程 / 继续上课). For these call `close_session`, not `cue_user`.',
+          'Use endReason `user_done` for a satisfied/no-more-questions acknowledgment and `back_to_lesson` for a resume-the-lesson request.',
+          'Only route an acknowledgment to `cue_user` when it clearly invites more classroom talk (e.g. 明白了，那再讲讲X). A bare acknowledgment with no new request is closure.',
+          '`cue_user` and `close_session` are mutually exclusive. Never call both in the same loop.',
+          'If you call `close_session`, do not call `cue_user` afterward.',
+          'For `close_session.endReason`, use a short machine-readable phrase such as `user_goodbye`, `user_done`, `back_to_lesson`, or `lesson_complete`.',
+          '',
+          '# Routing Rules (mirror the old /api/chat director)',
+          isDiscussion
+            ? `1. In discussion mode, the initiator${triggerAgentId ? ` ("${triggerAgentId}")` : ''} should speak first when appropriate. Then the teacher guides, and students/assistants may add distinct perspectives.`
+            : "1. The teacher (role: teacher, highest priority) should usually speak first to address the user's question or topic.",
+          '2. Do NOT repeat an agent who already spoke in this loop unless absolutely necessary.',
+          '3. Do NOT dispatch two agents with the same role consecutively when another useful role is available.',
+          '4. Read prior agent results carefully. Do not ask another agent to re-explain the same point; ask for a question, challenge, example, or concise summary instead.',
+          '5. If the latest user message is a clear question and no agent has answered it yet, call the teacher first when available. Use the assistant fallback only under rule 6. Never start with a student for substantive explanation.',
+          '6. For concept/mechanism/process questions, the first substantive answer should come from the teacher by default, or a teaching assistant when the teacher is unavailable or already answered. Students may react after the teacher/assistant has made the core point; do not let a student take the first substantive explanation.',
+          '7. Never let one child agent impersonate other classroom agents. If another perspective is needed, call that agent separately.',
+          '8. When the useful classroom agent turns are complete, call exactly one terminal tool. Do not keep calling agents after the answer is sufficient.',
+          '9. Keep every call_agent instruction brief. Do not ask one child agent for a full lecture, multiple examples, or multiple named-student interactions.',
+        ]),
     '',
     '# Scene Reading and Evidence Delegation',
     'The course outline below is a navigation map, not the full scene content.',
@@ -154,6 +161,25 @@ export function buildDirectorPrompt(
   ].join('\n');
 }
 
+/**
+ * The director's rules for an aside to the lecture: the teacher keeps
+ * lecturing, and only the teaching assistant answers in the chat, in text,
+ * then hands the floor back with cue_user (an aside is never closed).
+ */
+function buildAsideDirectorRules(agents: AgentConfig[]): string[] {
+  const assistant = agents.find((agent) => agent.role === 'assistant') ?? agents[0];
+  return [
+    'In this request the lead teacher is lecturing right now and KEEPS lecturing. The learner asked a question on the side, in the chat. Only the teaching assistant answers it here.',
+    `Call \`call_agent\` exactly once, for the teaching assistant${assistant ? ` ("${assistant.id}")` : ''}. Never call the teacher or a student, and never pause, stop or replace the lecture.`,
+    'Do not write the classroom response yourself. The assistant produces the visible answer.',
+    'Ask the assistant to answer concisely but completely, in text only: a few short sentences are fine. No whiteboard, slide, spotlight, laser or other classroom actions; the stage belongs to the lecture.',
+    '',
+    '# Terminal Tool Policy (aside to the lecture)',
+    'After the assistant has answered, call `cue_user` so the learner can follow up, then finish with a short internal summary only.',
+    'Never close this aside: there is no `close_session` here. Even for thanks, goodbye or "I understand", finish with `cue_user`.',
+  ];
+}
+
 export function buildChildPrompt(
   body: StatelessChatRequest,
   agent: AgentConfig,
@@ -171,13 +197,13 @@ export function buildChildPrompt(
     agent.persona,
     '',
     '# Classroom Role',
-    buildRoleGuideline(agent.role),
+    buildRoleGuideline(agent.role, isAsideToLecture(body)),
     '',
     buildPeerContextSection(agentResponses, agent.name),
     buildLanguageConstraint(body.storeState.stage?.languageDirective),
     '',
     '# Length & Style (CRITICAL)',
-    buildLengthGuidelines(agent.role),
+    buildLengthGuidelines(agent.role, isAsideToLecture(body)),
     '- Speak conversationally and naturally. This is live classroom speech, not an essay.',
     '- NEVER use markdown formatting, headings, bullet lists, bold markers, blockquotes, or code fences in visible speech.',
     '- Lead with the direct answer when the user asked a concrete question.',
@@ -240,7 +266,7 @@ export function buildNativeChildPrompt(
     agent.persona,
     '',
     '# Classroom Role',
-    buildRoleGuideline(agent.role),
+    buildRoleGuideline(agent.role, isAsideToLecture(body)),
     '',
     buildPeerContextSection(agentResponses, agent.name),
     buildLanguageConstraint(body.storeState.stage?.languageDirective),
@@ -257,7 +283,7 @@ export function buildNativeChildPrompt(
     ...nativeWhiteboardGuidance,
     '',
     '# Length & Style (CRITICAL)',
-    buildLengthGuidelines(agent.role),
+    buildLengthGuidelines(agent.role, isAsideToLecture(body)),
     '- Speak conversationally. Do not use markdown, headings, lists, or code fences.',
     '- Lead with the direct answer and ask at most one short follow-up question.',
     '',
@@ -270,7 +296,15 @@ export function buildNativeChildPrompt(
     .join('\n');
 }
 
-function buildRoleGuideline(role: string): string {
+function buildRoleGuideline(role: string, aside = false): string {
+  if (aside && role === 'assistant') {
+    return [
+      'Your role in this classroom: TEACHING ASSISTANT, answering on the side.',
+      '- The lead teacher is lecturing right now and keeps lecturing. The learner asked you in the chat.',
+      '- Answer the question yourself, directly. Do not hand it back to the teacher or say you will wait for the lecture.',
+      '- Text only: do not use the whiteboard, slides or any other classroom action.',
+    ].join('\n');
+  }
   if (role === 'teacher') {
     return [
       'Your role in this classroom: LEAD TEACHER.',
@@ -297,7 +331,13 @@ function buildRoleGuideline(role: string): string {
   ].join('\n');
 }
 
-function buildLengthGuidelines(role: string): string {
+function buildLengthGuidelines(role: string, aside = false): string {
+  if (aside && role === 'assistant') {
+    return [
+      '- Answer concisely but completely: around 150 Chinese characters or 2-4 short sentences at most.',
+      '- Lead with the direct answer, then the one detail that makes it clear.',
+    ].join('\n');
+  }
   if (role === 'teacher') {
     return [
       '- Keep your TOTAL visible speech around 70 Chinese characters or 1-2 short sentences.',
@@ -453,6 +493,7 @@ export function buildChildTurnPrompt(
   instruction: string,
   role: string,
   evidence: { scene?: string; element?: string } = {},
+  options: { aside?: boolean } = {},
 ): string {
   return [
     instruction,
@@ -470,7 +511,7 @@ export function buildChildTurnPrompt(
     evidence.element ? ['', evidence.element].join('\n') : '',
     '',
     '# Hard response cap',
-    getChildHardCap(role),
+    getChildHardCap(role, options.aside),
     'If more explanation is useful, stop after your short contribution; the director can call another agent.',
     'Do not include markdown formatting or a multi-part outline.',
   ].join('\n');
@@ -484,6 +525,7 @@ export function buildNativeChildTurnPrompt(
     element?: string;
     spotlightElementIds?: readonly string[];
   } = {},
+  options: { aside?: boolean } = {},
 ): string {
   return [
     instruction,
@@ -510,13 +552,16 @@ export function buildNativeChildTurnPrompt(
       : '',
     '',
     '# Hard response cap',
-    getChildHardCap(role),
+    getChildHardCap(role, options.aside),
     'If more explanation is useful, stop after your short contribution; the director can call another agent.',
     'Do not include markdown formatting or a multi-part outline.',
   ].join('\n');
 }
 
-function getChildHardCap(role: string): string {
+function getChildHardCap(role: string, aside = false): string {
+  if (aside && role === 'assistant') {
+    return 'Your visible speech MUST be no more than about 150 Chinese characters or 2-4 short sentences.';
+  }
   if (role === 'teacher') {
     return 'Your visible speech MUST be no more than 70 Chinese characters or 1-2 short sentences.';
   }

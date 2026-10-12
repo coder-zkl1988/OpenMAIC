@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Q&A",
       "discussion": "讨论",
-      "lecture": "授课"
+      "lecture": "授课",
+      "aside": "助教答疑"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "举手",
       "raiseHandHint": "举手提问：老师讲完当前这句后请你发言",
+      "raiseHandHintAssistant": "举手提问：助教会在互动面板里回答，老师继续讲课",
       "raiseHandInLiveSession": "问答中可直接发言",
       "lowerHand": "放下",
       "lowerHandHint": "放下手，撤回提问",
@@ -390,6 +392,7 @@
       "cancelRecording": "取消录音",
       "handRaised": "已举手 · 讲完这句就请你发言",
       "handRaisedStep": "已举手 · 这一步结束就请你发言",
+      "handRaisedAssistant": "已举手 · 助教会在互动面板里回答你",
       "raisedPlaceholder": "可以先写下问题...",
       "followUpPlaceholder": "继续追问...",
       "referencePlaceholder": "关于这个{{type}}，你想问什么？",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "你举手了，{{name}} 的讨论排在你之后",
       "calledBy": "{{name}} 请你发言",
       "pendingQuestion": "排队中 · 老师讲完这句就回答",
-      "pendingQuestionStep": "排队中 · 老师完成当前步骤就回答"
+      "pendingQuestionStep": "排队中 · 老师完成当前步骤就回答",
+      "assistantPrompt": "请说出你的问题，我来帮你解答",
+      "assistantAnswering": "助教正在回答…"
     },
     "participants": {
       "label": "课堂成员",
       "online": "{{count}} 人在线",
       "speaking": "讲解中",
+      "answering": "回答中",
       "wantsToSpeak": "想发言",
       "handRaised": "举手中",
       "more": "另外 {{count}} 位成员"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "键盘快捷键",
     "generalSettings": "常规设置",
     "systemSettings": "系统设置",
+    "classroomSection": "课堂",
+    "assistantAnswersDuringLecture": "讲课时由助教回答提问",
+    "assistantAnswersDuringLectureDesc": "开启后，讲课中提问不打断老师，由助教在互动面板里回答",
     "importFromClipboard": "从剪贴板导入",
     "baseUrlRegion": {
       "china": "国内站",

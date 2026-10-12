@@ -52,6 +52,11 @@ export interface ComposerHand {
   readonly onRaise: () => boolean;
   /** False when no hand was up */
   readonly onLower: () => boolean;
+  /**
+   * Raised to the teaching assistant: the lecture keeps playing and the
+   * assistant answers in the chat (the row says so; no line to wait for)
+   */
+  readonly assistant?: boolean;
 }
 
 /** The composer reference chip: 互动白板 · 公式 · summary */
@@ -70,6 +75,8 @@ export interface ComposerProps {
   readonly onMessageSend?: (message: string) => MessageSendResult;
   /** Which input became active: voice pauses narration (the mic would record it); text does not */
   readonly onInputActivate?: (kind: 'text' | 'voice') => void;
+  /** Voice input is over (sent, cancelled, nothing heard, failed, or back into the draft) */
+  readonly onVoiceEnd?: () => void;
   readonly onUserInputActivity?: (kind: InputActivityKind) => void;
   readonly elementReferencePill?: ComposerReferenceChip;
   readonly onClearElementReference?: () => void;
@@ -88,6 +95,11 @@ export interface ComposerProps {
   readonly isLiveSession?: boolean;
   /** The open session is the learner's Q&A: the box invites a follow-up */
   readonly isFollowUp?: boolean;
+  /**
+   * Questions go to the teaching assistant while the teacher keeps lecturing:
+   * 举手 says the assistant answers in the chat instead of after this line
+   */
+  readonly assistantAnswers?: boolean;
   /**
    * Composing — recording, or a focused box with a draft: the shell holds
    * auto-advance and treats Escape as closing the composer
@@ -165,6 +177,7 @@ export function Composer({
   canSendMessage,
   onMessageSend,
   onInputActivate,
+  onVoiceEnd,
   onUserInputActivity,
   elementReferencePill,
   onClearElementReference,
@@ -175,6 +188,7 @@ export function Composer({
   isCueUser,
   isLiveSession,
   isFollowUp,
+  assistantAnswers,
   onInteractionChange,
   onUserMessage,
   onSent,
@@ -212,6 +226,7 @@ export function Composer({
     onUserMessage,
     onSent,
     onInputActivate,
+    onVoiceEnd,
     onUserInputActivity,
     onClearElementReference,
     onTextInputOpened: () => {
@@ -270,6 +285,7 @@ export function Composer({
     focusTargetRef,
     handState: hand?.state,
     handWaitsFor: hand?.waitsFor,
+    handToAssistant: hand?.assistant,
     isCueUser,
     getSpeechProgress,
   });
@@ -596,7 +612,9 @@ export function Composer({
                     title={
                       isLiveSession
                         ? t('stage.composer.raiseHandInLiveSession')
-                        : t('stage.composer.raiseHandHint')
+                        : assistantAnswers
+                          ? t('stage.composer.raiseHandHintAssistant')
+                          : t('stage.composer.raiseHandHint')
                     }
                     onClick={raiseHand}
                     className={cn(

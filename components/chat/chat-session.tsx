@@ -37,10 +37,14 @@ const AVATARS = {
   user: '/avatars/user.png',
 };
 
-/** Session badge colours (Classroom.dc.html): Q&A on the accent, 讨论 on warning */
+/**
+ * Session badge colours (Classroom.dc.html): Q&A on the accent, 讨论 on
+ * warning, the assistant's aside (答疑 while the lecture plays) on success
+ */
 const SESSION_BADGE_STYLES: Record<string, string> = {
   qa: 'bg-accent-soft text-accent-text',
   discussion: 'bg-warning-soft text-warning',
+  aside: 'bg-success-soft text-success',
 };
 
 /** Role chip colours next to an agent's name */
@@ -202,6 +206,9 @@ export function ChatSessionComponent({
   const { t } = useI18n();
   const isDiscussion = session.type === 'discussion';
   const isQA = session.type === 'qa';
+  // The teaching assistant answered on the side while the lecture played
+  const isAside = isQA && session.config?.aside === true;
+  const badgeKind = isAside ? 'aside' : session.type;
   const isEnded = session.status === 'completed' && (isDiscussion || isQA);
   const isSoftClosing = session.status === 'soft-closing' && (isDiscussion || isQA);
   const remainingSoftCloseSeconds = useSoftCloseCountdown(session.softCloseDeadline);
@@ -250,6 +257,7 @@ export function ChatSessionComponent({
     <section
       data-testid="chat-session"
       data-session-type={session.type}
+      data-aside={isAside || undefined}
       data-status={session.status}
       className="flex flex-col gap-3"
     >
@@ -257,12 +265,13 @@ export function ChatSessionComponent({
       {(isQA || isDiscussion) && (
         <div className="flex justify-center">
           <span
+            data-testid="chat-session-badge"
             className={cn(
               'inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold',
-              SESSION_BADGE_STYLES[session.type],
+              SESSION_BADGE_STYLES[badgeKind],
             )}
           >
-            {t(`chat.badge.${session.type}`)}
+            {t(`chat.badge.${badgeKind}`)}
           </span>
         </div>
       )}

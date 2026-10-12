@@ -290,7 +290,8 @@
     "badge": {
       "qa": "Q&A",
       "discussion": "Discussion",
-      "lecture": "LEC"
+      "lecture": "LEC",
+      "aside": "Assistant Q&A"
     }
   },
   "actions": {
@@ -381,6 +382,7 @@
     "composer": {
       "raiseHand": "Raise hand",
       "raiseHandHint": "Raise your hand: the teacher calls on you after this sentence",
+      "raiseHandHintAssistant": "Raise your hand: the teaching assistant answers in the Interaction panel while the teacher keeps teaching",
       "raiseHandInLiveSession": "You can speak directly during Q&A",
       "lowerHand": "Lower",
       "lowerHandHint": "Lower your hand and take the question back",
@@ -390,6 +392,7 @@
       "cancelRecording": "Cancel recording",
       "handRaised": "Hand raised · you're up when this sentence ends",
       "handRaisedStep": "Hand raised · you're up when this step ends",
+      "handRaisedAssistant": "Hand raised · the teaching assistant answers you in the Interaction panel",
       "raisedPlaceholder": "You can write your question first...",
       "followUpPlaceholder": "Ask a follow-up...",
       "referencePlaceholder": "{{type}}: what would you like to ask about it?",
@@ -400,12 +403,15 @@
       "aheadOfDiscussion": "You raised your hand; {{name}}'s discussion comes after you",
       "calledBy": "{{name}} asks you to speak",
       "pendingQuestion": "Queued · answered when this sentence ends",
-      "pendingQuestionStep": "Queued · answered when this step ends"
+      "pendingQuestionStep": "Queued · answered when this step ends",
+      "assistantPrompt": "Tell me your question and I'll help you with it.",
+      "assistantAnswering": "The teaching assistant is answering…"
     },
     "participants": {
       "label": "Participants",
       "online": "{{count}} online",
       "speaking": "Speaking",
+      "answering": "Answering",
       "wantsToSpeak": "Wants to speak",
       "handRaised": "Hand raised",
       "more": "{{count}} more participants"
@@ -1459,6 +1465,9 @@
     "keyboardShortcuts": "Shortcuts",
     "generalSettings": "General",
     "systemSettings": "System",
+    "classroomSection": "Classroom",
+    "assistantAnswersDuringLecture": "Teaching assistant answers questions during the lecture",
+    "assistantAnswersDuringLectureDesc": "When on, questions asked during the lecture don't interrupt the teacher: the teaching assistant answers them in the Interaction panel.",
     "importFromClipboard": "Import from Clipboard",
     "baseUrlRegion": {
       "china": "China",

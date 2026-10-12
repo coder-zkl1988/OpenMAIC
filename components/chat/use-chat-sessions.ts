@@ -25,6 +25,7 @@ import { useCanvasStore } from '@/lib/store/canvas';
 import { useSettingsStore } from '@/lib/store/settings';
 import { useUserProfileStore } from '@/lib/store/user-profile';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
+import type { AgentConfig } from '@/lib/orchestration/registry/types';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { classroomChatUsable, loadModelCapabilities } from '@/lib/model-settings/capabilities';
 import { USER_AVATAR } from '@/lib/types/roundtable';
@@ -143,6 +144,14 @@ interface UseChatSessionsOptions {
   ) => void;
   /** When provided and returns true, StreamBuffer holds on the current text item after reveal. */
   shouldHoldAfterReveal?: () => { holding: boolean; segmentDone: number } | boolean;
+  /**
+   * The teaching assistant's aside (it answers in the chat while the lecture
+   * keeps playing) reports on its own channel: its live text and speaker, and
+   * its thinking. It never reaches the lecture-facing callbacks above (live
+   * speech, thinking, cue, active bubble, TTS, stop / error cleanup).
+   */
+  onAsideLiveSpeech?: (text: string | null, agentId?: string | null) => void;
+  onAsideThinking?: (state: { stage: string; agentId?: string } | null) => void;
 }
 
 export type ChatRequestTemplate = {
@@ -163,6 +172,109 @@ export type ChatRequestTemplate = {
 export interface ChatMessageSendOptions {
   elementReference?: ElementReference;
   onResponseAccepted?: (response: Response) => void;
+}
+
+/** A question for the teaching assistant's aside */
+export interface AsideMessageSendOptions extends ChatMessageSendOptions {
+  /** The assistant that answers (the only agent in the request) */
+  agentId: string;
+}
+
+/** The aside's request limits: the assistant alone, one turn, text only */
+export const ASIDE_PI_MAX_AGENT_TURNS = 1;
+
+/**
+ * A teaching-assistant aside: the assistant answered in the chat while the
+ * teacher kept lecturing. Still a 'qa' session, marked in its config.
+ */
+export function isAsideSession(session: Pick<ChatSession, 'config'>): boolean {
+  return session.config?.aside === true;
+}
+
+/**
+ * An open Q&A / discussion that is not an aside: the session the lecture-facing
+ * controls (stop, pause / resume, soft close) act on.
+ */
+export function isOpenMainLiveSession(
+  session: Pick<ChatSession, 'type' | 'status' | 'config'>,
+): boolean {
+  return isOpenLiveSession(session) && !isAsideSession(session);
+}
+
+/** The assistant as the server should run it in an aside: no classroom actions at all */
+export function toTextOnlyAgentConfig(
+  agent: AgentConfig | undefined,
+): Record<string, unknown> | undefined {
+  if (!agent) return undefined;
+  const { createdAt: _c, updatedAt: _u, isDefault: _d, ...rest } = agent;
+  return { ...rest, allowedActions: [] };
+}
+
+/**
+ * The aside's request: only the assistant (`agentIds: [assistant]`, its config
+ * sent with no actions so neither runtime can touch the stage), one agent
+ * turn, no whiteboard tools, and `asideToLecture` so the director has the
+ * assistant answer and cue the learner instead of closing.
+ */
+export function buildAsideRequestTemplate({
+  messages,
+  agentId,
+  agent,
+  userProfile,
+  directorState,
+  elementReference,
+}: {
+  messages: UIMessage<ChatMessageMetadata>[];
+  agentId: string;
+  agent?: AgentConfig;
+  userProfile?: { nickname?: string; bio?: string };
+  directorState?: DirectorState;
+  elementReference?: ElementReference;
+}): ChatRequestTemplate {
+  const agentConfig = toTextOnlyAgentConfig(agent);
+  return {
+    messages,
+    config: {
+      agentIds: [agentId],
+      sessionType: 'qa',
+      ...(agentConfig ? { agentConfigs: [agentConfig] } : {}),
+      piMaxAgentTurns: ASIDE_PI_MAX_AGENT_TURNS,
+      piEnableWhiteboardTools: false,
+      asideToLecture: true,
+    },
+    userProfile,
+    directorState,
+    ...(elementReference ? { elementReference } : {}),
+  };
+}
+
+/** A streamed answer cut short: its last text gets "..." and the interrupted mark */
+export function markLastAssistantInterrupted(
+  messages: UIMessage<ChatMessageMetadata>[],
+): UIMessage<ChatMessageMetadata>[] {
+  const next = [...messages];
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i].role !== 'assistant') continue;
+    const parts = [...next[i].parts];
+    let appended = false;
+    for (let j = parts.length - 1; j >= 0; j--) {
+      if (parts[j].type === 'text') {
+        const textPart = parts[j] as { type: 'text'; text: string };
+        parts[j] = {
+          type: 'text',
+          text: (textPart.text || '') + '...',
+        } as UIMessage<ChatMessageMetadata>['parts'][number];
+        appended = true;
+        break;
+      }
+    }
+    if (!appended) {
+      parts.push({ type: 'text', text: '...' } as UIMessage<ChatMessageMetadata>['parts'][number]);
+    }
+    next[i] = { ...next[i], parts, metadata: { ...next[i].metadata, interrupted: true } };
+    return next;
+  }
+  return messages;
 }
 
 /**
@@ -553,6 +665,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   const onStopSessionRef = useRef(options.onStopSession);
   const onSegmentSealedRef = useRef(options.onSegmentSealed);
   const shouldHoldAfterRevealRef = useRef(options.shouldHoldAfterReveal);
+  const onAsideLiveSpeechRef = useRef(options.onAsideLiveSpeech);
+  const onAsideThinkingRef = useRef(options.onAsideThinking);
   useEffect(() => {
     onLiveSpeechRef.current = options.onLiveSpeech;
     onSpeechProgressRef.current = options.onSpeechProgress;
@@ -564,6 +678,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     onStopSessionRef.current = options.onStopSession;
     onSegmentSealedRef.current = options.onSegmentSealed;
     shouldHoldAfterRevealRef.current = options.shouldHoldAfterReveal;
+    onAsideLiveSpeechRef.current = options.onAsideLiveSpeech;
+    onAsideThinkingRef.current = options.onAsideThinking;
   }, [
     options.onLiveSpeech,
     options.onSpeechProgress,
@@ -575,6 +691,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     options.onStopSession,
     options.onSegmentSealed,
     options.shouldHoldAfterReveal,
+    options.onAsideLiveSpeech,
+    options.onAsideThinking,
   ]);
   const { t } = useI18n();
 
@@ -598,6 +716,16 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     new Map(),
   );
   const sessionsRef = useRef<ChatSession[]>(sessions);
+  // The teaching assistant's aside: its own session, request and streaming
+  // flag, never the lecture's activeSessionId or the shared abort controller
+  const [asideSessionId, setAsideSessionIdState] = useState<string | null>(null);
+  const asideSessionIdRef = useRef<string | null>(null);
+  const setAsideSessionId = useCallback((sessionId: string | null) => {
+    asideSessionIdRef.current = sessionId;
+    setAsideSessionIdState(sessionId);
+  }, []);
+  const [isAsideStreaming, setIsAsideStreaming] = useState(false);
+  const asideAbortRef = useRef<AbortController | null>(null);
   const previousLiveSessionRef = useRef<PreviousLiveSessionContext | undefined>(undefined);
   const piSessionBoundariesRef = useRef<Map<string, PiSessionBoundaryContext>>(new Map());
   useEffect(() => {
@@ -613,6 +741,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     sessionClosed?: boolean;
     endReason?: string;
   } | null>(null);
+  // The aside's own iteration state (never shared with a Q&A / discussion turn)
+  const asideLoopDoneDataRef = useRef<typeof loopDoneDataRef.current>(null);
 
   // Reload sessions when stage changes (course switch)
   // This synchronous setState is intentional: it resets derived state from
@@ -627,9 +757,13 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     const stored = useStageStore.getState().chats;
     setSessions(normalizeStoredSessionsForRestore(stored));
     setActiveSessionId(null);
+    asideAbortRef.current?.abort();
+    asideAbortRef.current = null;
+    setAsideSessionId(null);
+    setIsAsideStreaming(false);
     previousLiveSessionRef.current = undefined;
     piSessionBoundariesRef.current.clear();
-  }, [stageId]);
+  }, [setAsideSessionId, stageId]);
 
   useEffect(() => {
     if (currentSceneId === currentSceneIdRef.current) return;
@@ -689,6 +823,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      asideAbortRef.current?.abort();
+      asideAbortRef.current = null;
       softCloseRegistrations.forEach(({ timer }) => clearTimeout(timer));
       softCloseRegistrations.clear();
       softCloseLifecycle.clear();
@@ -915,9 +1051,16 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   /**
    * Create a StreamBuffer for a session and wire its callbacks to React state.
    * Returns the buffer instance (also stored in buffersRef).
+   *
+   * The aside channel (the assistant answering while the lecture plays) only
+   * reveals text: no classroom actions, no TTS segments or holds, no paused
+   * intent inherited from the lecture-facing Q&A, and its live text, thinking
+   * and done data go to its own callbacks and ref.
    */
   const createBufferForSession = useCallback(
-    (sessionId: string, type?: SessionType): StreamBuffer => {
+    (sessionId: string, type?: SessionType, channel: 'main' | 'aside' = 'main'): StreamBuffer => {
+      const aside = channel === 'aside';
+      const doneDataRef = aside ? asideLoopDoneDataRef : loopDoneDataRef;
       // Dispose previous buffer if any
       // Shutdown (not dispose) — avoids stale onLiveSpeech(null,null) callback
       const prev = buffersRef.current.get(sessionId);
@@ -955,7 +1098,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
                   : s,
               ),
             );
-            onActiveBubbleRef.current?.(data.messageId);
+            // The active bubble is the lecture-facing highlight
+            if (!aside) onActiveBubbleRef.current?.(data.messageId);
           },
 
           onAgentEnd() {
@@ -1014,6 +1158,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           },
 
           async onActionReady(messageId: string, data: ActionItem, signal: AbortSignal) {
+            // An aside never touches the stage the lecture is using
+            if (aside) return;
             const actionPart = {
               type: `action-${data.actionName}`,
               actionId: data.actionId,
@@ -1059,27 +1205,39 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             // Lecture sessions: roundtable text is managed by PlaybackEngine → setLectureSpeech
             // in stage.tsx. Buffer only drives chat area pacing for lectures.
             if (type === 'lecture') return;
+            if (aside) {
+              onAsideLiveSpeechRef.current?.(text, agentId);
+              return;
+            }
             onLiveSpeechRef.current?.(text, agentId);
           },
 
           onSpeechProgress(ratio: number | null) {
+            if (aside) return;
             onSpeechProgressRef.current?.(ratio);
           },
 
           onThinking(data: { stage: string; agentId?: string } | null) {
+            if (aside) {
+              onAsideThinkingRef.current?.(data);
+              return;
+            }
             onThinkingRef.current?.(data);
           },
 
           onCueUser(fromAgentId?: string, prompt?: string) {
             // Track cue_user for agent loop
-            if (loopDoneDataRef.current) {
-              loopDoneDataRef.current.cueUserReceived = true;
+            if (doneDataRef.current) {
+              doneDataRef.current.cueUserReceived = true;
             } else {
-              loopDoneDataRef.current = {
+              doneDataRef.current = {
                 totalAgents: 0,
                 cueUserReceived: true,
               };
             }
+            // The learner's cue is lecture-facing (it reveals the composer as
+            // the floor): the aside just waits for a follow-up
+            if (aside) return;
             onCueUserRef.current?.(fromAgentId, prompt);
           },
 
@@ -1093,12 +1251,12 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             directorState?: DirectorState;
           }) {
             // Store done data for agent loop consumption
-            loopDoneDataRef.current = {
+            doneDataRef.current = {
               directorState: data.directorState,
               totalAgents: data.totalAgents,
               agentHadContent: data.agentHadContent ?? true,
               cueUserReceived:
-                data.cueUserReceived ?? loopDoneDataRef.current?.cueUserReceived ?? false,
+                data.cueUserReceived ?? doneDataRef.current?.cueUserReceived ?? false,
               sessionClosed: data.sessionClosed,
               endReason: data.endReason,
             };
@@ -1116,10 +1274,13 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             fullText: string,
             agentId: string | null,
           ) {
+            // Text only: an aside's answer is never spoken over the lecture
+            if (aside) return;
             onSegmentSealedRef.current?.(messageId, partId, fullText, agentId);
           },
 
           shouldHoldAfterReveal() {
+            if (aside) return false as const;
             return shouldHoldAfterRevealRef.current?.() ?? (false as const);
           },
         },
@@ -1131,7 +1292,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       // Inherit paused intent for discussion/QA sessions so new-turn buffers
       // don't start revealing text while the user has paused reading.
-      if (type !== 'lecture' && livePausedRef.current) {
+      if (type !== 'lecture' && !aside && livePausedRef.current) {
         buffer.pause();
       }
 
@@ -1141,17 +1302,27 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   );
 
   const createStatelessStreamConsumer = useCallback(
-    (sessionId: string, controller: AbortController, sessionType: SessionType) => {
+    (
+      sessionId: string,
+      controller: AbortController,
+      sessionType: SessionType,
+      channel: 'main' | 'aside' = 'main',
+    ) => {
+      const aside = channel === 'aside';
+      const doneDataRef = aside ? asideLoopDoneDataRef : loopDoneDataRef;
       let currentBuffer: StreamBuffer | null = null;
       let currentMessageId: string | null = null;
 
       const onEvent = (event: StatelessEvent) => {
         if (event.type === 'whiteboard') {
-          consumePiWhiteboardEvent(event.data, controller.signal);
+          // An aside leaves the board (and its visibility) to the lecture
+          if (!aside) consumePiWhiteboardEvent(event.data, controller.signal);
           return;
         }
+        // Text only: a stray classroom action is dropped, never shown or run
+        if (aside && event.type === 'action') return;
         if (!currentBuffer) {
-          currentBuffer = createBufferForSession(sessionId, sessionType);
+          currentBuffer = createBufferForSession(sessionId, sessionType, channel);
         }
 
         switch (event.type) {
@@ -1220,8 +1391,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
         currentBuffer = null;
 
-        const doneData = loopDoneDataRef.current;
-        loopDoneDataRef.current = null;
+        const doneData = doneDataRef.current;
+        doneDataRef.current = null;
 
         if (!doneData) return null;
         return {
@@ -1510,6 +1681,288 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     [activeSessionId, clearSoftCloseRegistration, retireActiveLiveRequest],
   );
 
+  /**
+   * The aside failed: its error shows in the session, which closes (status
+   * 'error'), and only the aside's own state resets. Never the lecture-facing
+   * error path (onLiveSessionError → the engine's discussion error handling).
+   */
+  const clearAsideAfterError = useCallback(
+    (sessionId: string, message: string) => {
+      const now = Date.now();
+      if (asideSessionIdRef.current === sessionId) {
+        const controller = asideAbortRef.current;
+        asideAbortRef.current = null;
+        void retireLiveRequestResources(controller, sessionId, buffersRef.current);
+        setAsideSessionId(null);
+        setIsAsideStreaming(false);
+      } else {
+        void retireLiveRequestResources(null, sessionId, buffersRef.current);
+      }
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sessionId
+            ? {
+                ...s,
+                status: 'error' as SessionStatus,
+                softCloseDeadline: undefined,
+                updatedAt: nextChatUpdatedAt(s, now),
+                messages: [
+                  ...s.messages,
+                  {
+                    id: `error-${now}`,
+                    role: 'assistant' as const,
+                    parts: [{ type: 'text', text: message }],
+                    metadata: {
+                      senderName: 'System',
+                      originalRole: 'agent' as const,
+                      createdAt: now,
+                    },
+                  },
+                ],
+              }
+            : s,
+        ),
+      );
+      onAsideThinkingRef.current?.(null);
+      onAsideLiveSpeechRef.current?.(null, null);
+    },
+    [setAsideSessionId],
+  );
+
+  /**
+   * End the aside (scene switch, leaving playback, a discussion or a Q&A with
+   * the teacher taking over): it is marked completed and keeps its messages;
+   * an answer still streaming keeps its text with "...". Only the aside's own
+   * request and buffer are retired — the lecture and any other session are
+   * left alone, and no stop / cleanup callback runs.
+   */
+  const endAsideSession = useCallback(async (): Promise<void> => {
+    const sessionId = asideSessionIdRef.current;
+    const controller = asideAbortRef.current;
+    asideAbortRef.current = null;
+    setAsideSessionId(null);
+    setIsAsideStreaming(false);
+    if (!sessionId) {
+      controller?.abort();
+      return;
+    }
+    log.info(`[ChatArea] Ending aside session: ${sessionId}`);
+    const wasStreaming = !!controller;
+    await retireLiveRequestResources(controller, sessionId, buffersRef.current);
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== sessionId || !isOpenLiveSession(s)) return s;
+        return {
+          ...withChatSessionStatus(s, 'completed'),
+          messages: wasStreaming ? markLastAssistantInterrupted(s.messages) : s.messages,
+          softCloseDeadline: undefined,
+        };
+      }),
+    );
+    onAsideThinkingRef.current?.(null);
+    onAsideLiveSpeechRef.current?.(null, null);
+  }, [setAsideSessionId]);
+
+  /**
+   * One aside turn: Pi's single request, or the classic agent loop. Its
+   * outcome only settles the aside — a cue, a completion or even a close
+   * keeps the session open for follow-ups; an error closes it — and never
+   * reaches the lecture-facing stop / cleanup callbacks.
+   */
+  const runAsideRequest = useCallback(
+    async (
+      sessionId: string,
+      requestTemplate: ChatRequestTemplate,
+      controller: AbortController,
+      onResponseAccepted?: (response: Response) => void,
+    ): Promise<void> => {
+      const createAsideConsumer: StatelessStreamConsumerFactory = (id, abort, type) =>
+        createStatelessStreamConsumer(id, abort, type, 'aside');
+      const keepOpen = (id: string, data?: { directorState?: DirectorState }) =>
+        storeDirectorState(id, data?.directorState);
+
+      if (isPiChatEnabled()) {
+        const storeState = await buildFreshAgentLoopStoreState();
+        await runPiSingleRequest(
+          sessionId,
+          { ...requestTemplate, storeState },
+          controller,
+          'qa',
+          createAsideConsumer,
+          clearAsideAfterError,
+          keepOpen,
+          keepOpen,
+          storeDirectorState,
+          // The aside settles on its own: nothing lecture-facing is told it stopped
+          { current: undefined },
+          t,
+          onResponseAccepted,
+        );
+        return;
+      }
+
+      const streamConsumer = createStatelessStreamConsumer(sessionId, controller, 'qa', 'aside');
+      const outcome = await runAgentLoop(
+        { config: requestTemplate.config, userProfile: requestTemplate.userProfile },
+        {
+          getStoreState: buildFreshAgentLoopStoreState,
+          getMessages: () =>
+            sessionsRef.current.find((s) => s.id === sessionId)?.messages ??
+            requestTemplate.messages,
+          fetchChat: (body, signal) => fetchStatelessChat(body, signal),
+          onEvent: streamConsumer.onEvent,
+          onIterationEnd: streamConsumer.onIterationEnd,
+        },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      if (outcome.reason === 'empty_turns') {
+        clearAsideAfterError(sessionId, t('chat.error.emptyAgentResponses'));
+      } else if (outcome.reason === 'no_done') {
+        clearAsideAfterError(sessionId, t('chat.error.streamInterrupted'));
+      } else {
+        keepOpen(sessionId, { directorState: outcome.directorState });
+      }
+    },
+    [clearAsideAfterError, createStatelessStreamConsumer, storeDirectorState, t],
+  );
+
+  /**
+   * Ask the teaching assistant on the side while the lecture keeps playing.
+   * The first question opens an aside session (a 'qa' session marked
+   * `config.aside`); follow-ups append to it until it ends. It has its own
+   * request controller and streaming flag: the lecture's session, the shared
+   * abort controller and any Q&A / discussion are never touched, and the
+   * answer is text only (no actions, no TTS).
+   */
+  const sendAsideMessage = useCallback(
+    async (content: string, options: AsideMessageSendOptions): Promise<void> => {
+      const { agentId } = options;
+      // A follow-up while the previous answer still streams interrupts it
+      const previous = asideAbortRef.current;
+      if (previous) {
+        asideAbortRef.current = null;
+        const interruptedId = asideSessionIdRef.current;
+        await retireLiveRequestResources(previous, interruptedId, buffersRef.current);
+        if (interruptedId) {
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === interruptedId
+                ? {
+                    ...s,
+                    messages: markLastAssistantInterrupted(s.messages),
+                    updatedAt: nextChatUpdatedAt(s),
+                  }
+                : s,
+            ),
+          );
+        }
+      }
+
+      const controller = new AbortController();
+      asideAbortRef.current = controller;
+      setIsAsideStreaming(true);
+
+      let sessionId: string | null = null;
+      try {
+        if (!classroomChatUsable(await loadModelCapabilities())) {
+          toast.error(t('settings.modelNotConfigured'));
+          return;
+        }
+        // Ended meanwhile (a scene switch, leaving playback)
+        if (controller.signal.aborted) return;
+
+        const now = Date.now();
+        const userMessage: UIMessage<ChatMessageMetadata> = {
+          id: `user-${now}`,
+          role: 'user',
+          parts: [{ type: 'text', text: content }],
+          metadata: {
+            senderName: t('common.you'),
+            senderAvatar: USER_AVATAR,
+            originalRole: 'user',
+            createdAt: now,
+          },
+        };
+
+        const existing = asideSessionIdRef.current
+          ? sessionsRef.current.find((s) => s.id === asideSessionIdRef.current)
+          : undefined;
+        let messages: UIMessage<ChatMessageMetadata>[];
+        let directorState: DirectorState | undefined;
+        if (existing && isOpenLiveSession(existing)) {
+          sessionId = existing.id;
+          messages = [...existing.messages, userMessage];
+          directorState = existing.directorState;
+          const followUpId = existing.id;
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === followUpId
+                ? {
+                    ...s,
+                    messages: [...s.messages, userMessage],
+                    updatedAt: nextChatUpdatedAt(s, now),
+                  }
+                : s,
+            ),
+          );
+        } else {
+          sessionId = `session-${now}-${Math.random().toString(36).slice(2)}`;
+          messages = [userMessage];
+          const newSession: ChatSession = {
+            id: sessionId,
+            type: 'qa',
+            title: 'Q&A',
+            status: 'active',
+            messages,
+            config: { agentIds: [agentId], defaultAgentId: agentId, aside: true },
+            toolCalls: [],
+            pendingToolCalls: [],
+            sceneId: currentSceneIdRef.current ?? undefined,
+            createdAt: now,
+            updatedAt: now,
+          };
+          setSessions((prev) => [...prev, newSession]);
+          setAsideSessionId(sessionId);
+          log.info(`[ChatArea] Created aside session: ${sessionId}`);
+        }
+
+        const userProfileState = useUserProfileStore.getState();
+        const requestTemplate = buildAsideRequestTemplate({
+          messages,
+          agentId,
+          agent: useAgentRegistry.getState().getAgent(agentId),
+          userProfile: {
+            nickname: userProfileState.nickname || undefined,
+            bio: userProfileState.bio || undefined,
+          },
+          directorState,
+          elementReference: options.elementReference,
+        });
+        await runAsideRequest(sessionId, requestTemplate, controller, options.onResponseAccepted);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          log.info('[ChatArea] Aside request aborted');
+          return;
+        }
+        if (controller.signal.aborted) return;
+        log.error('[ChatArea] Aside error:', error);
+        if (sessionId) {
+          clearAsideAfterError(
+            sessionId,
+            `Error: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } finally {
+        if (asideAbortRef.current === controller) {
+          asideAbortRef.current = null;
+          setIsAsideStreaming(false);
+        }
+      }
+    },
+    [clearAsideAfterError, runAsideRequest, setAsideSessionId, t],
+  );
+
   const continueSoftClosingSession = useCallback(
     (sessionId: string): boolean => {
       if (
@@ -1551,16 +2004,18 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   );
 
   /**
-   * End the currently active QA/Discussion session (if any).
+   * End the currently active QA/Discussion session (if any), and the
+   * assistant's aside (a scene switch or leaving playback ends both).
    */
   const endActiveSession = useCallback(
     async (options: EndSessionOptions = {}): Promise<void> => {
-      const active = sessionsRef.current.find(isOpenLiveSession);
-      if (active) {
-        await endSession(active.id, options);
-      }
+      const active = sessionsRef.current.find(isOpenMainLiveSession);
+      await Promise.all([
+        active ? endSession(active.id, options) : undefined,
+        asideSessionIdRef.current || asideAbortRef.current ? endAsideSession() : undefined,
+      ]);
     },
-    [endSession],
+    [endAsideSession, endSession],
   );
 
   /**
@@ -1642,7 +2097,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
    * Soft-pause the currently active QA/Discussion session (if any).
    */
   const softPauseActiveSession = useCallback(async (): Promise<void> => {
-    const active = sessionsRef.current.find(isOpenLiveSession);
+    const active = sessionsRef.current.find(isOpenMainLiveSession);
     if (active) {
       await softPauseSession(active.id);
     }
@@ -1716,7 +2171,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
    * Resume the currently active soft-paused session (if any).
    */
   const resumeActiveSession = useCallback(async (): Promise<void> => {
-    const active = sessionsRef.current.find(isOpenLiveSession);
+    const active = sessionsRef.current.find(isOpenMainLiveSession);
     if (active) {
       await resumeSession(active.id);
     }
@@ -1769,6 +2224,9 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       // Capture the next request only after that mutation has settled.
       await pendingRetirementRef.current;
 
+      // The teacher takes over: an open aside ends first (its messages stay)
+      if (asideSessionIdRef.current || asideAbortRef.current) await endAsideSession();
+
       // Validate model configuration before sending: chat resolves the
       // workspace's classroom slot (assigned there or inherited).
       if (!classroomChatUsable(await loadModelCapabilities())) {
@@ -1784,7 +2242,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       if (needNewSession) {
         // End all active QA/Discussion sessions before creating new one
-        const activeQAOrDiscussion = sessionsRef.current.filter(isOpenLiveSession);
+        const activeQAOrDiscussion = sessionsRef.current.filter(isOpenMainLiveSession);
         for (const session of activeQAOrDiscussion) {
           await endSession(session.id);
         }
@@ -1913,6 +2371,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       activeSessionId,
       clearLiveSessionAfterError,
       createSession,
+      endAsideSession,
       endSession,
       claimSoftCloseRegistration,
       retireActiveLiveRequest,
@@ -1938,8 +2397,11 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         return;
       }
 
+      // A teacher discussion takes over: an open aside ends first
+      if (asideSessionIdRef.current || asideAbortRef.current) await endAsideSession();
+
       // Auto-end previous active QA/Discussion sessions to ensure only one is active
-      const activeQAOrDiscussion = sessionsRef.current.filter(isOpenLiveSession);
+      const activeQAOrDiscussion = sessionsRef.current.filter(isOpenMainLiveSession);
       for (const session of activeQAOrDiscussion) {
         await endSession(session.id);
       }
@@ -2030,7 +2492,13 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable from i18n context
-    [clearLiveSessionAfterError, endSession, registerFirstPiRequest, runAgentLoopFn],
+    [
+      clearLiveSessionAfterError,
+      endAsideSession,
+      endSession,
+      registerFirstPiRequest,
+      runAgentLoopFn,
+    ],
   );
 
   /**
@@ -2201,7 +2669,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
   /** Pause the active live (QA/Discussion) buffer and set sticky intent. Returns true if paused. */
   const pauseActiveLiveBuffer = useCallback((): boolean => {
-    const active = sessionsRef.current.find(isOpenLiveSession);
+    const active = sessionsRef.current.find(isOpenMainLiveSession);
     if (!active) return false;
     const buf = buffersRef.current.get(active.id);
     if (!buf || buf.disposed) return false;
@@ -2213,7 +2681,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
   /** Resume the active live (QA/Discussion) buffer and clear sticky intent. */
   const resumeActiveLiveBuffer = useCallback(() => {
-    const active = sessionsRef.current.find(isOpenLiveSession);
+    const active = sessionsRef.current.find(isOpenMainLiveSession);
     if (!active) return;
     livePausedRef.current = false;
     const buf = buffersRef.current.get(active.id);
@@ -2226,6 +2694,10 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     activeSessionId,
     activeSessionType,
     isStreaming,
+    asideSessionId,
+    isAsideStreaming,
+    sendAsideMessage,
+    endAsideSession,
     createSession,
     endSession,
     endActiveSession,

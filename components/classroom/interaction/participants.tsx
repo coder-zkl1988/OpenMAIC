@@ -12,7 +12,7 @@ import type { PlaybackView } from '@/lib/playback';
 import type { Participant } from '@/lib/types/roundtable';
 
 /** What a participant's tile says under the name */
-export type ParticipantStatus = 'speaking' | 'wantsToSpeak' | 'handRaised' | 'role';
+export type ParticipantStatus = 'speaking' | 'answering' | 'wantsToSpeak' | 'handRaised' | 'role';
 
 /** The grid holds five tiles; past that the last agent slot becomes a "+N" tile */
 export const PARTICIPANT_GRID_COLUMNS = 5;
@@ -46,23 +46,27 @@ export function resolveSpeakingParticipantId({
 }
 
 /**
- * The status line of one tile: speaking wins, then the agent asking to start
- * a discussion (想发言), then the learner's raised hand (举手中); otherwise
- * the role label.
+ * The status line of one tile: speaking wins, then the teaching assistant
+ * answering on the side while the lecture plays (回答中), then the agent
+ * asking to start a discussion (想发言), then the learner's raised hand
+ * (举手中); otherwise the role label.
  */
 export function resolveParticipantStatus(
   participant: Pick<Participant, 'id' | 'role'>,
   {
     speakingId,
+    answeringAgentId,
     discussionAgentId,
     userHandRaised,
   }: {
     readonly speakingId?: string | null;
+    readonly answeringAgentId?: string | null;
     readonly discussionAgentId?: string | null;
     readonly userHandRaised?: boolean;
   },
 ): ParticipantStatus {
   if (speakingId && participant.id === speakingId) return 'speaking';
+  if (answeringAgentId && participant.id === answeringAgentId) return 'answering';
   if (discussionAgentId && participant.id === discussionAgentId) return 'wantsToSpeak';
   if (participant.role === 'user' && userHandRaised) return 'handRaised';
   return 'role';
@@ -91,6 +95,7 @@ export function layoutParticipantGrid(participants: readonly Participant[]): {
 
 const STATUS_LABEL_KEYS: Record<Exclude<ParticipantStatus, 'role'>, string> = {
   speaking: 'stage.participants.speaking',
+  answering: 'stage.participants.answering',
   wantsToSpeak: 'stage.participants.wantsToSpeak',
   handRaised: 'stage.participants.handRaised',
 };
@@ -118,6 +123,8 @@ interface ParticipantsProps {
   readonly isLivePaused?: boolean;
   /** The director is preparing this agent's turn (agent_loading spinner) */
   readonly thinkingState?: { stage: string; agentId?: string } | null;
+  /** The teaching assistant answering in the chat while the lecture plays (回答中) */
+  readonly answeringAgentId?: string | null;
   /** The agent offering a discussion (想发言) */
   readonly discussionAgentId?: string | null;
   /** The learner's question waits for the current line (举手中) */
@@ -158,6 +165,7 @@ export function Participants({
   speakingAgentId,
   isLivePaused,
   thinkingState,
+  answeringAgentId,
   discussionAgentId,
   userHandRaised,
   layout = 'panel',
@@ -182,6 +190,7 @@ export function Participants({
   const describe = (participant: Participant) => {
     const status = resolveParticipantStatus(participant, {
       speakingId,
+      answeringAgentId,
       discussionAgentId,
       userHandRaised,
     });
@@ -202,6 +211,7 @@ export function Participants({
       className={cn(
         'max-w-full truncate text-[11px]',
         status === 'speaking' && 'font-semibold text-accent-text',
+        status === 'answering' && 'font-semibold text-success',
         (status === 'wantsToSpeak' || status === 'handRaised') && 'font-semibold text-warning',
         status === 'role' && 'text-fg-tertiary',
       )}
@@ -221,9 +231,11 @@ export function Participants({
             avatarSize,
             status === 'speaking'
               ? 'ring-2 ring-primary'
-              : status === 'wantsToSpeak' || status === 'handRaised'
-                ? 'ring-2 ring-amber-500'
-                : 'ring-1 ring-line',
+              : status === 'answering'
+                ? 'ring-2 ring-success'
+                : status === 'wantsToSpeak' || status === 'handRaised'
+                  ? 'ring-2 ring-amber-500'
+                  : 'ring-1 ring-line',
           )}
         >
           <AvatarDisplay

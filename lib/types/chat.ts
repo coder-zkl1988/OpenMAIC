@@ -124,6 +124,11 @@ export interface SessionConfig {
   agentIds: string[];
   triggerAgentId?: string; // For discussion: first agent to speak
   defaultAgentId?: string; // For QA: the responding agent
+  /**
+   * A teaching-assistant aside: the assistant answered in the chat while the
+   * teacher kept lecturing (the session stays type 'qa')
+   */
+  aside?: boolean;
 }
 
 /**
@@ -404,6 +409,13 @@ export interface StatelessChatRequest {
     piMaxActionsPerAgent?: number;
     /** Pi PoC: opt in to whiteboard tools; defaults off to keep the first A/B pass comparable. */
     piEnableWhiteboardTools?: boolean;
+    /**
+     * The teaching assistant answers on the side while the teacher keeps
+     * lecturing: only the listed assistant speaks, text only (no classroom
+     * actions or whiteboard), one agent turn, ending with cue_user (never
+     * close_session).
+     */
+    asideToLecture?: boolean;
   };
   /** Accumulated director state from previous per-agent requests */
   directorState?: DirectorState;
