@@ -33,6 +33,7 @@ import { DEFAULT_LANGUAGE_DIRECTIVE } from './outline-generator.js';
 import { postProcessInteractiveHtml } from './interactive-post-processor.js';
 import { findInteractiveScriptSyntaxFailure } from './interactive-script-validator.js';
 import { parseActionsFromStructuredOutput } from './action-parser.js';
+import { normalizeLectureWhiteboard } from './lecture-whiteboard.js';
 import { parseJsonResponse } from './json-repair.js';
 import {
   buildCourseContext,
@@ -1754,7 +1755,10 @@ export async function generateSceneActions(
     }
 
     const response = await aiCall(prompts.system, prompts.user);
-    const actions = parseActionsFromStructuredOutput(response, outline.type, undefined, log);
+    const actions = normalizeLectureWhiteboard(
+      parseActionsFromStructuredOutput(response, outline.type, undefined, log),
+      log,
+    );
 
     if (actions.length > 0) {
       // Validate and fill in Action IDs

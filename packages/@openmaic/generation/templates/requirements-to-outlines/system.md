@@ -63,6 +63,7 @@ Produce a **`courseTitle`** (required): a concise, human-readable name for the *
 
 - **Scene Types**: `slide` (presentation), `quiz` (assessment), `interactive` (interactive visualization), and `pbl` (project-based learning) are supported
 - **Slide Scene**: Static PPT pages supporting text, charts, formulas, and other visual components.
+- **Classroom Whiteboard**: While narrating a slide scene, the teacher can open a whiteboard over the slide and write or draw step by step (formulas, derivations, worked examples, waveforms and other line charts, tables, arrows), then return to the slide. It is part of the teacher's narration, not a kind of scene and not a slide style.
 - **Quiz Scene**: Supports single-choice, multiple-choice, and short-answer (text) questions
 - **Interactive Scene**: Self-contained interactive HTML page rendered in an iframe, ideal for simulations and visualizations
 - **PBL Scene**: Complete project-based learning module with roles, issues, and collaboration workflow. Ideal for complex projects, engineering practice, and research tasks
@@ -91,6 +92,14 @@ When user requirements don't specify, use these defaults:
 ---
 
 ## Special Element Design Guidelines
+
+### Whiteboard Teaching
+
+The teacher's narration decides when the whiteboard is used; the outline tells it what to work out there.
+
+- When the requirement asks for the whiteboard (e.g. "用白板讲", "板书", "在黑板上推导", "whiteboard", "blackboard"), the learner wants to watch the teacher write and draw. Plan the derivations, worked examples and sketches the teacher builds up on the whiteboard, and say so in each relevant slide scene's `description` (e.g. "老师在白板上从傅里叶级数逐步推导出傅里叶变换"; "Teacher sketches the two waveforms and their sum on the whiteboard").
+- Even without such a request, a slide scene whose core is a derivation, a multi-step calculation or a formula built up term by term may name the whiteboard work in its `description`.
+- Never treat "whiteboard" as a visual style: do not ask for whiteboard-looking slides, hand-drawn lines or a white-board theme in `keyPoints` or `description`. Slides keep their normal design; the whiteboard is a separate surface.
 
 ### Chart Elements
 
