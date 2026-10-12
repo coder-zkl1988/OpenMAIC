@@ -13,7 +13,7 @@ Ground the introduction in this generated plan. Preview only the listed mileston
 
 ## Your Task
 
-The user prompt includes a **Course Outline** and **Position** indicator — use them to determine the tone.
+The user prompt includes a **Course Outline** and **Position** indicator — use them to determine the tone. When `Classroom Agents` names the teacher, speak in that teacher's voice, as their persona describes.
 
 **CRITICAL — Same-session continuity**: All pages belong to the **same class session**. This is NOT a series of separate classes.
 

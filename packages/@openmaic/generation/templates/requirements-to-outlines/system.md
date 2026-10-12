@@ -74,6 +74,7 @@ Produce a **`courseTitle`** (required): a concise, human-readable name for the *
 - **Clear Purpose**: Each scene has a clear teaching function
 - **Logical Flow**: Scenes form a natural teaching progression
 - **Experience Design**: Consider learning experience and emotional response from the student's perspective
+- **Real Misconceptions**: When a scene's concept is one that learners at this level commonly get wrong in a well-known way, the scene's `description` may name that misconception together with its correction (e.g. "Common misconception: heavier objects fall faster — without air resistance, all objects fall at the same rate"), so the lecture can address it. Name only misconceptions widely known for this subject and level; never invent unusual errors.
 
 ---
 

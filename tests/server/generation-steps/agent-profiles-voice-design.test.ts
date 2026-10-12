@@ -34,7 +34,7 @@ function llmAgents(extra: Record<string, unknown>) {
       {
         name: 'Prof. Lin',
         role: 'teacher',
-        persona: 'A patient mentor.',
+        persona: 'A patient mentor who builds every idea from what the class already knows.',
         avatar: '/a.png',
         color: '#111111',
         priority: 10,
@@ -43,7 +43,7 @@ function llmAgents(extra: Record<string, unknown>) {
       {
         name: 'Sam',
         role: 'student',
-        persona: 'Curious learner.',
+        persona: 'A curious learner who asks why as soon as something surprises him.',
         avatar: '/b.png',
         color: '#222222',
         priority: 5,
@@ -242,7 +242,7 @@ describe('agent profiles step — voiceDesign', () => {
           {
             name: 'Prof. Lin',
             role: 'teacher',
-            persona: 'A patient mentor.',
+            persona: 'A patient mentor who builds every idea from what the class already knows.',
             avatar: '/a.png',
             color: '#111111',
             priority: 10,
@@ -250,7 +250,7 @@ describe('agent profiles step — voiceDesign', () => {
           {
             name: 'Sam',
             role: 'student',
-            persona: 'Curious learner.',
+            persona: 'A curious learner who asks why as soon as something surprises him.',
             avatar: '/b.png',
             color: '#222222',
             priority: 5,

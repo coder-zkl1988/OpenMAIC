@@ -5,6 +5,7 @@ import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { CourseDocument, CourseStore } from '@/lib/server/agent-runtime/course-tools';
 import { buildDslCourseToolset } from '@/lib/server/agent-runtime/course-tools';
 import {
+  actionContext,
   buildGenerationTools,
   collectUnresolvedMediaPlaceholders,
   filterKnownActions,
@@ -596,5 +597,144 @@ describe('generation and deck tools', () => {
       expect(response).toMatchObject({ isError: true });
     }
     expect(foreign.get()).toBeNull();
+  });
+});
+
+describe('the class moments a workbench page is generated with', () => {
+  const roster = [
+    { id: 't', name: '王老师', role: 'teacher', persona: '' },
+    { id: 's', name: '小思', role: 'student', persona: '' },
+  ];
+  const withActions = (scene: Scene, actions: unknown[]) => ({ ...scene, actions }) as Scene;
+  const asQuiz = (scene: Scene) => ({ ...scene, type: 'quiz' }) as unknown as Scene;
+  const pages = [
+    withActions(slide('a', 1, 'A'), [
+      { id: 'say-a', type: 'speech', text: 'Say A' },
+      { id: 'd1', type: 'discussion', topic: '为什么会抵消？', agentId: 's' },
+    ]),
+    asQuiz(slide('b', 2, 'B')),
+    withActions(slide('c', 4, 'C'), [{ id: 'say-c', type: 'speech', text: 'Say C' }]),
+    withActions(slide('d', 7, 'D'), [{ id: 'd2', type: 'discussion', topic: '大家猜猜看？' }]),
+  ];
+
+  it('are those of the pages before it, by position, quiz pages included', () => {
+    const ctx = actionContext(pages, pages[2]!, roster);
+    expect(ctx).toEqual({
+      pageIndex: 3,
+      totalPages: 4,
+      allTitles: ['A', 'B', 'C', 'D'],
+      // What follows each page: a quiz or project settles nothing left open
+      allKinds: ['slide', 'quiz', 'slide', 'slide'],
+      previousSpeeches: [],
+      previousMoments: [
+        { page: 1, agentName: '小思', agentRole: 'student', topic: '为什么会抵消？' },
+        { page: 2, kind: 'quiz' },
+      ],
+    });
+    expect(actionContext(pages, pages[3]!, roster)).toMatchObject({
+      pageIndex: 4,
+      previousSpeeches: ['Say C'],
+      previousMoments: [{ page: 1 }, { page: 2 }],
+    });
+    expect(actionContext(pages, pages[0]!, undefined).previousMoments).toEqual([]);
+  });
+
+  it('carry what the pages before taught, from the outline the course planned', () => {
+    const outline = {
+      outlines: [
+        { id: 'a', order: 1, title: 'A', type: 'slide', keyPoints: ['Waves add up'] },
+        { id: 'o-c', order: 4, title: 'C', type: 'slide', keyPoints: ['Phase decides'] },
+      ],
+    };
+    const later = { ...pages[2]!, id: 'c-copy', outlineId: 'o-c', order: 5 } as Scene;
+    const ctx = actionContext([...pages, later], pages[3]!, roster, { outline });
+    // By outline id, else by order; a page the outline does not plan has none.
+    expect(ctx.allKeyPoints).toEqual([
+      ['Waves add up'],
+      [],
+      ['Phase decides'],
+      ['Phase decides'],
+      [],
+    ]);
+    expect(actionContext(pages, pages[2]!, roster)).not.toHaveProperty('allKeyPoints');
+  });
+
+  it('reach generate_actions', async () => {
+    const current = state({
+      ...document(pages),
+      stage: { ...document(pages).stage, generatedAgentConfigs: roster },
+    } as CourseDocument);
+    const generateActions = vi.fn(async () => [{ id: 'x', type: 'speech', text: 'New' }]);
+    const tool = find(
+      buildGenerationTools(deps(current.store, { generateActions })),
+      'generate_actions',
+    );
+    await tool.execute('call', {
+      stageId: 'stage-test',
+      sceneId: 'c',
+      synthesizeAudio: false,
+    } as never);
+    const options = (generateActions.mock.calls[0] as unknown[])[3] as { ctx: unknown };
+    expect(options.ctx).toMatchObject({
+      pageIndex: 3,
+      previousMoments: [
+        { page: 1, agentName: '小思' },
+        { page: 2, kind: 'quiz' },
+      ],
+    });
+    expect(options.ctx).not.toHaveProperty('openEnded');
+  });
+
+  it('reach generate_scene, which never takes the latest page for the closing one', async () => {
+    const quizAnswer = vi.fn(async () =>
+      JSON.stringify([{ id: 'q1', type: 'short_answer', question: 'Try it?' }]),
+    );
+    const run = async (order: number) => {
+      const current = state({
+        ...document(pages),
+        stage: { ...document(pages).stage, generatedAgentConfigs: roster },
+      } as CourseDocument);
+      const generateActions = vi.fn(async () => [{ id: 'x', type: 'speech', text: 'New' }]);
+      const tool = find(
+        buildGenerationTools(deps(current.store, { generateActions, aiCall: quizAnswer })),
+        'generate_scene',
+      );
+      await tool.execute('call', {
+        stageId: 'stage-test',
+        order,
+        title: 'New page',
+        type: 'quiz',
+        brief: 'Practice',
+      } as never);
+      return ((generateActions.mock.calls[0] as unknown[])[3] as { ctx: Record<string, unknown> })
+        .ctx;
+    };
+
+    // Appended after every page: the course may still grow.
+    expect(await run(9)).toMatchObject({
+      pageIndex: 5,
+      totalPages: 5,
+      openEnded: true,
+      previousMoments: [
+        { page: 1 },
+        { page: 2 },
+        { page: 4, agentName: '王老师', agentRole: 'teacher' },
+      ],
+    });
+    // Between pages: a middle page, with the moments before it only.
+    const middle = await run(3);
+    expect(middle).toMatchObject({
+      pageIndex: 3,
+      totalPages: 5,
+      allTitles: ['A', 'B', 'New page', 'C', 'D'],
+    });
+    expect(middle).not.toHaveProperty('openEnded');
+    expect(middle.previousMoments).toHaveLength(2);
+    // Replacing a page keeps its place.
+    expect(await run(2)).toMatchObject({
+      pageIndex: 2,
+      totalPages: 4,
+      allTitles: ['A', 'New page', 'C', 'D'],
+    });
   });
 });

@@ -97,27 +97,29 @@ Start playback of a video element on the slide. This is a synchronous action —
 
 {{snippet:slide-whiteboard-actions}}
 
-### discussion (Interactive Discussion)
+### discussion (A Class Moment)
 
-Initiate classroom discussion, suitable for segments requiring student reflection.
+The narration is the teacher's alone, but it is given in a real classroom, to the people in the `Classroom Agents` list and to the learner (the `Student:` line of the user prompt, when present). A discussion is the moment one of them speaks up and the class talks it through with the learner.
 
 ```json
 {
   "type": "action",
   "name": "discussion",
   "params": {
-    "topic": "Discussion topic",
-    "prompt": "Guiding prompt",
-    "agentId": "student_agent_id"
+    "topic": "What the opener says",
+    "prompt": "The teacher's private note",
+    "agentId": "opener_agent_id"
   }
 }
 ```
 
-- `topic`: Core question for discussion
-- `prompt`: Prompt to guide student thinking (optional)
-- `agentId`: ID of the student agent who initiates the discussion. Pick a student from the agent list whose personality best matches the discussion topic. If no student agents are available, omit this field.
+- `topic`: The words the opener says to open it, shown to the learner as that person's own words: the question, confusion, guess or tip they would really voice here, in their own voice and at their own level. Concrete and about this page — never "Any questions?". A student who has not learned something yet does not ask about it in expert terms. No speaker label or stage direction.
+- `prompt`: A private note for the teacher, never shown or read aloud: where the teacher wants the moment to go. When the moment voices a confusion or invites a guess, write it as a correction — the wrong idea (or the tempting wrong guess), why it is tempting at this level, and what is actually right.
+- `agentId`: The id (copied from `Classroom Agents`, not the name) of the person who opens it: a student, the teaching assistant, or the teacher. When the teacher calls on a student by name at the end of the speech (e.g. "小思，你先猜猜看……"), the teacher opens: `agentId` is the teacher's id and `topic` is the teacher's line, naming that student, who answers in the discussion. Omit it only when `Classroom Agents` is empty.
 - **IMPORTANT**: discussion MUST be the **last** action in the array. Do NOT place any text or action objects after a discussion. Wrap up your speech BEFORE the discussion action.
-- **FREQUENCY**: Do NOT add a discussion to every page. Only add one when the topic genuinely invites student reflection or debate. A typical course should have at most 1-2 discussions total. Prefer adding discussions on the last page or on pages with open-ended, thought-provoking content. Most pages should have NO discussion.
+- **WHETHER AND WHO — decide it as a real class would, not by schedule**: picture this page being taught to these people. Would one of them, being who their persona says (temperament, what they already know and do not know yet, what makes them speak up), genuinely speak up at the end of it? A curious student asks "why" or "what if" at a surprising result; a careful student voices the confusion this page invites at their level; the teaching assistant offers a hands-on tip or a quick check of understanding. A teacher whose persona involves the class may call on a student by name, or put a question to the whole class — a prediction, a guess or an estimate the learner can try too. A whole-class question is opened by the teacher (`agentId` = the teacher's id) and names no one: it is addressed to everybody ("大家", "everyone"). A moment never singles the learner out by name. If someone would naturally speak up, end the page with a discussion opened by that person. If nobody would, add none.
+- **ONLY REAL MISCONCEPTIONS**: a confusion or wrong guess voiced in a moment must be one that learners at this level commonly have about this subject — never an invented or unusual error, which would plant a misconception the learner did not have. The most valuable confusion to open with is one the learner, at their level (the `Student:` line), would likely have too. Every wrong idea voiced gets resolved: the teacher's note says how, the class clears it up in the discussion, and the next page can follow it up. When `Class moments so far` says the course ends after this page, or that a quiz or project page comes next, do not end this page on a confusion or a wrong guess: if the learner skips the moment, nothing would settle it. Prefer a whole-class question or a tip from the teaching assistant there.
+- **PACING**: real lessons have a few such moments, at the hard, surprising or pivotal points — not one on every page, and not a whole lesson in silence. Use `Class moments so far` in the user prompt to see how the class has been going: right after a moment, the class usually listens. A quiz, interactive or project page listed there is time the whole class spent working, not a stretch of silence. Who opens each moment follows from who they are: a talkative student may open several and a shy one none.
 
 ---
 
@@ -134,7 +136,9 @@ Generate natural teaching speech. The user prompt includes a **Course Outline** 
 - Insert parenthetical stage directions, emotion cues, or action cues. NEVER write things like `（好奇发出）`, `（笔记动作）`, `（抢答）`, `（插话）`, `（疑惑追问）`, `（画外音）`.
 - Script a simulated student question-and-answer exchange inside the speech.
 
-The `Classroom Agents` list in the user prompt is provided **only** so you can pick an `agentId` for a `discussion` action — those agents do **not** speak in your `text`. The teacher may ask the class an open rhetorical question (e.g. "What do you think happens next?"), but must never voice the answer or impersonate a student. If you want a specific student to respond, end the page with a `discussion` action instead of writing their reply yourself.
+The `Classroom Agents` list in the user prompt is provided **only** so you can pick an `agentId` for a `discussion` action — those agents do **not** speak in your `text`. The teacher may ask the class an open rhetorical question (e.g. "What do you think happens next?"), but must never voice the answer or impersonate a student. If you want a specific student, or the class, to respond, end the page with a `discussion` action instead of writing their reply yourself.
+
+The `Student:` line, when present, is the real learner taking this course. Pitch the explanations and the class moments to their level; never bring up their personal details.
 
 **Speech is where all verbal content belongs.** The slide itself only shows concise bullet points and keywords — all elaboration, explanation, encouragement, transitional phrases, and teacher's remarks must appear here in speech text. For example:
 
@@ -148,12 +152,16 @@ The `Classroom Agents` list in the user prompt is provided **only** so you can p
 - **First page**: Open with a greeting and course introduction. This is the ONLY page that should greet.
 - **Middle pages**: Continue naturally. Do NOT greet, re-introduce yourself, or say "welcome". Use phrases like "Next, let's look at..." / "Building on what we just covered..."
 - **Last page**: Summarize the course and provide a closing remark.
-- **Referencing earlier content**: Say "we just covered" or "as mentioned on page N". NEVER say "last class" or "previous session" — there is no previous session, everything is happening in this single class.
+- **Referencing earlier content**: Say "we just covered" or "as mentioned on page N". NEVER say "last class" or "previous session" — there is no previous session, everything is happening in this single class. When this page builds on an earlier idea, have the class recall it rather than only retelling it (see "Building on an earlier page").
+
+**Following up a class moment**: `Class moments so far` marks a moment that ended the page just before this one, or one left open because only a quiz or project came after it. If it left something open — a confusion, a guess, or a question put to the class — open this page by settling it in 1–2 sentences, in the teacher's own style and in line with the teacher's note (e.g. "刚才有同学问……其实……"). Word it so it stands on its own: the learner may have skipped that moment or never seen it, so restate the question briefly and never say how the discussion went. When this page answers a moment from the last three pages, the teacher may call back to it by the person's name. Do not otherwise retell earlier moments.
+
+**Building on an earlier page**: `Taught on earlier pages` in the user prompt lists what the class has already learned. When this page builds on one of those ideas — and only then — a real teacher has the class pull it back up before using it, in their own way of involving the class (as their persona describes): a short recall question to everyone (e.g. "还记得我们第 2 页说的……是什么吗？"), then the idea restated in a sentence as a reminder in the teacher's own voice (never as if someone had answered), then the new step that builds on it. The narration cannot wait for an answer, so the teacher always completes the recall right after asking it. When recalling the idea deserves real thinking time — it is pivotal here and easy to half-remember — it can be this page's class moment instead, if someone would naturally take it up: a student who would plausibly try recalls it, perhaps only half right as their level suggests, or the teacher puts the recall question to the whole class (a whole-class question, as above). Recall only what this page actually builds on: it is not a review of everything earlier.
 
 Structure:
 
-- **Opening/Transition**: Based on page position (see above)
-- **Body**: Explain points one by one, with spotlight, and with the whiteboard where a step-by-step derivation, worked example or sketch helps
+- **Opening/Transition**: Based on page position (see above), then settle a class moment left open just before, if any (see above)
+- **Body**: Explain points one by one, with spotlight, and with the whiteboard where a step-by-step derivation, worked example or sketch helps; where a point builds on an earlier page, have the class recall that idea first (see above)
 - **Summary**: Brief recap of this page's content
 
 {{snippet:speech-tts-readability}}

@@ -41,6 +41,12 @@ import {
 } from '@/lib/audio/voice-catalog';
 import { supportsVoiceRegistration } from '@/lib/audio/voice-registration';
 import { AGENT_COLOR_PALETTE, AGENT_DEFAULT_AVATARS } from '@/lib/constants/agent-defaults';
+import {
+  formatRosterIssues,
+  PERSONA_GUIDE,
+  validateRoster,
+  type RosterIssueCode,
+} from '@/lib/orchestration/persona-guide';
 import type { MediaConnection } from '@/lib/server/model-config/media';
 import type { CheckpointInfo } from './course-tools';
 import { COURSE_STAGE_ID_DESCRIPTION } from './course-stage';
@@ -161,11 +167,11 @@ const SET_ROSTER_AGENT_PARAMS = Type.Object({
   id: Type.Optional(
     Type.String({ description: 'Stable agent id; a `gen-<8-char>` id is minted when omitted.' }),
   ),
-  name: Type.String({ description: 'Display name, in the stage language.' }),
+  name: Type.String({ description: 'Display name, in the stage language; unique in the roster.' }),
   role: Type.String({ description: '"teacher" | "assistant" | "student"' }),
   persona: Type.String({
     description:
-      "2-3 concrete sentences naming the agent's personality and teaching/learning style, written in the stage language — not a role label. A teacher persona names how they teach (questioning, example-led, strict-but-fair); a student persona names how they learn (curious, hesitant, fast).",
+      'Who this person is, in 3-5 sentences of plain prose in the stage language, written as the set_roster description says (temperament, how they talk, what they know and do not know yet, what makes them speak up, and for the teacher how they teach) — a real person, not a role label or a script.',
   }),
   avatar: Type.Optional(
     Type.String({ description: 'Avatar path; cycled from the default pool when omitted.' }),
@@ -205,6 +211,11 @@ const SET_ROSTER_PARAMS = Type.Object({
   }),
 });
 
+/** `details.error` names as set_roster reported them before the shared checks; other codes pass through. */
+const ROSTER_ERRORS: Partial<Record<RosterIssueCode, string>> = {
+  'too-few-agents': 'at-least-2-agents',
+};
+
 // ── Tools ───────────────────────────────────────────────────────────────────
 
 /** Build the typed classroom-roster tools for the session runner. */
@@ -242,8 +253,8 @@ export function buildRosterTools(deps: RosterToolDeps): AgentTool<never, never>[
     name: 'set_roster',
     label: 'Set classroom roster',
     description:
-      'Write the classroom roster as you and the user settled it in chat: pass every agent (exactly ONE teacher, at least 2 agents total) with name/role/persona and optional avatar/color/priority/voiceDesign. ' +
-      'Personas are 2-3 concrete sentences naming personality and teaching/learning style, in the stage language. ' +
+      'Write the classroom roster as you and the user settled it in chat: pass every agent (exactly ONE teacher, at least 2 agents total, each with their own name) with name/role/persona and optional avatar/color/priority/voiceDesign. ' +
+      `Personas are written in the stage language. ${PERSONA_GUIDE} ` +
       'Bind `voice` as a `providerId::voiceId` pair from the list_voices result (or the exact pair register_voice returned for a cloned voice); never invent an id, and omit voice when no usable voice exists (narration then falls back to the provider default). ' +
       'Persists `stage.generatedAgentConfigs` and drives scene/discussion generation from then on; re-calling replaces the roster.',
     parameters: SET_ROSTER_PARAMS,
@@ -251,30 +262,25 @@ export function buildRosterTools(deps: RosterToolDeps): AgentTool<never, never>[
       if (signal?.aborted) throw new Error('aborted');
       const stageId = params.stageId;
       if (signal?.aborted) throw new Error('aborted');
-      if (!params.agents || params.agents.length < 2) {
+      // The same checks as a generated roster: known roles (老师/TA/学生
+      // count), one teacher, distinct names, a real persona for everyone.
+      const checked = validateRoster(params.agents ?? []);
+      if (!checked.ok) {
+        const first = checked.issues[0]!.code;
         return {
           content: [
             {
               type: 'text',
-              text: `set_roster needs at least 2 agents, got ${params.agents?.length ?? 0}.`,
+              text: `set_roster refused the roster; nothing was written. Fix these and call it again with the whole roster:\n${formatRosterIssues(checked.issues)}`,
             },
           ],
-          details: { error: 'at-least-2-agents' },
-          isError: true,
-        };
-      }
-      const teacherCount = params.agents.filter((agent) => agent.role === 'teacher').length;
-      if (teacherCount !== 1) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `set_roster needs exactly 1 teacher, got ${teacherCount}. Roles: ${params.agents
-                .map((agent) => `${agent.name}:${agent.role}`)
-                .join(', ')}.`,
-            },
-          ],
-          details: { error: 'teacher-count', teacherCount },
+          details: {
+            error: ROSTER_ERRORS[first] ?? first,
+            issues: checked.issues.map(({ code, agentIndex }) => ({
+              code,
+              ...(agentIndex !== undefined ? { agentIndex } : {}),
+            })),
+          },
           isError: true,
         };
       }
@@ -330,14 +336,14 @@ export function buildRosterTools(deps: RosterToolDeps): AgentTool<never, never>[
         };
       }
 
-      const roster: GeneratedAgentConfig[] = params.agents.map((agent, index) => {
+      const roster: GeneratedAgentConfig[] = checked.agents.map((agent, index) => {
         const voiceDesign = normalizeVoiceDesign(agent.voiceDesign);
         const voiceConfig = parseVoiceConfig(agent.voice);
         return {
           id: agent.id?.trim() || `gen-${nanoid(8)}`,
-          name: agent.name,
+          name: agent.name.trim(),
           role: agent.role,
-          persona: agent.persona,
+          persona: agent.persona.trim(),
           avatar: agent.avatar || AGENT_DEFAULT_AVATARS[index % AGENT_DEFAULT_AVATARS.length],
           color: agent.color || AGENT_COLOR_PALETTE[index % AGENT_COLOR_PALETTE.length],
           priority:
@@ -368,11 +374,14 @@ export function buildRosterTools(deps: RosterToolDeps): AgentTool<never, never>[
             }`,
         )
         .join(' | ');
+      // Students who read alike are kept (the check misjudges short texts),
+      // but the agent hears about it.
+      const alike = checked.warnings.map((warning) => warning.message).join(' ');
       return {
         content: [
           {
             type: 'text',
-            text: `Classroom roster set: ${roster.length} agents, teacher "${teacher?.name}". ${summary}.`,
+            text: `Classroom roster set: ${roster.length} agents, teacher "${teacher?.name}". ${summary}.${alike ? ` Note: ${alike}` : ''}`,
           },
         ],
         details: { roster },
@@ -390,7 +399,7 @@ export const ROSTER_TOOL_NAMES = ['list_voices', 'set_roster'] as const;
 
 /** Roster guidance layered into every runner prompt (the tools are always registered). */
 export const ROSTER_TOOLS_PROMPT = [
-  'The classroom roster is written with set_roster: pass every agent (exactly ONE teacher, at least 2 agents total) with name/role/persona and optional avatar/color/priority/voiceDesign. It persists stage.generatedAgentConfigs and drives scene/discussion generation; re-calling replaces the roster.',
+  'The classroom roster is written with set_roster: pass every agent (exactly ONE teacher, at least 2 agents total, each with their own name) with name/role/persona and optional avatar/color/priority/voiceDesign; each persona describes a real person in 3-5 sentences, as set_roster says. It persists stage.generatedAgentConfigs and drives scene/discussion generation; re-calling replaces the roster.',
   'To bind a roster voice, call list_voices first and use exactly one returned `providerId::voiceId` pair; never invent a voice id.',
   'A cloned voice registered this session with register_voice appears in list_voices and can be bound with the exact pair register_voice returned; a voice from an earlier session is not enumerable — re-register it, bind a catalog voice, or omit voice.',
   'Omit `voice` when no usable voice exists: narration falls back to the provider default.',

@@ -37,8 +37,12 @@ order:
    call). From here on, pass the returned stageId to every stage tool.
 3. **`set_roster`**, before any page is generated. Write the classroom the
    user settled: exactly one teacher, at least two agents in total, each with
-   a concrete persona (2-3 sentences on personality and teaching/learning
-   style, in the stage language) and a voice — call `list_voices` first and
+   a persona that describes a real person in 3-5 sentences, in the stage
+   language — temperament, how they talk, what they know and do not know yet
+   (a student's real level and a misconception common at that level), what
+   makes them speak up, and for the teacher how they teach — as `set_roster`'s
+   description says (it refuses personas under 40 characters, duplicate names
+   and unknown roles), and a voice — call `list_voices` first and
    bind one of the returned `providerId::voiceId` pairs, or the exact pair
    `register_voice` returned for a cloned voice; omit the binding when no
    usable voice exists. Every page's content

@@ -4,9 +4,11 @@ import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { isActionType } from '@openmaic/dsl';
 import {
   buildCompleteScene,
+  classMomentsFromScenes,
   generateSceneActions,
   generateSceneContent,
   PBLGenerationError,
+  type AgentInfo,
   type AICallFn,
   type ImageMapping,
   type PdfImage,
@@ -128,10 +130,18 @@ function result(text: string, details: Record<string, unknown>, isError = false)
   return { content: [{ type: 'text' as const, text }], details, ...(isError ? { isError } : {}) };
 }
 
-function outlineFromScene(scene: Scene, snapshot: unknown): SceneOutline {
-  const planned = (snapshot as AppDocumentOutline | undefined)?.outlines?.find(
+/** The outline the course planned for a page, matched by its outline id or its order. */
+function plannedOutlineOf(
+  scene: Pick<Scene, 'order' | 'outlineId'>,
+  snapshot: unknown,
+): SceneOutline | undefined {
+  return (snapshot as AppDocumentOutline | undefined)?.outlines?.find(
     (entry) => entry.id === scene.outlineId || entry.order === scene.order,
   );
+}
+
+function outlineFromScene(scene: Scene, snapshot: unknown): SceneOutline {
+  const planned = plannedOutlineOf(scene, snapshot);
   return {
     ...planned,
     id: scene.outlineId ?? scene.id,
@@ -231,19 +241,51 @@ export function collectUnresolvedMediaPlaceholders(scene: Scene): UnresolvedMedi
   return placeholders;
 }
 
-function actionContext(scenes: readonly Scene[], current: Scene): SceneGenerationContext {
-  const ordered = [...scenes].sort((a, b) => a.order - b.order);
-  const index = ordered.findIndex((scene) => scene.id === current.id);
+/** A page as the actions context reads it; the page being generated may have no actions yet. */
+type ContextPage = Pick<Scene, 'id' | 'order' | 'title' | 'type'> & {
+  outlineId?: string;
+  actions?: Action[];
+};
+
+/**
+ * The actions context of `current` among the course's pages: its place,
+ * the titles, the speeches of the page before, and the class moments of the
+ * pages before it (as the run engine threads them), so a page regenerated
+ * here paces its own moments and follows up the ones left open.
+ * `openEnded`: the course is still being built, so a page at the end is not
+ * taken for the closing one. `outline`: the course's outline snapshot, whose
+ * planned key points tell a page what the pages before it taught.
+ */
+export function actionContext(
+  scenes: readonly ContextPage[],
+  current: ContextPage,
+  agents: readonly AgentInfo[] | undefined,
+  options: { openEnded?: boolean; outline?: unknown } = {},
+): SceneGenerationContext {
+  const ordered = [...scenes.filter((scene) => scene.id !== current.id), current].sort(
+    (a, b) => a.order - b.order,
+  );
+  const index = ordered.indexOf(current);
   const previous = index > 0 ? ordered[index - 1] : undefined;
   return {
-    pageIndex: Math.max(0, index) + 1,
+    pageIndex: index + 1,
     totalPages: ordered.length,
     allTitles: ordered.map((scene) => scene.title),
+    allKinds: ordered.map((scene) => scene.type),
+    ...(options.outline
+      ? {
+          allKeyPoints: ordered.map(
+            (scene) => plannedOutlineOf(scene, options.outline)?.keyPoints ?? [],
+          ),
+        }
+      : {}),
     previousSpeeches: (previous?.actions ?? [])
       .filter((action) => action.type === 'speech')
       .map((action) => action.text)
       .filter(Boolean)
       .slice(-3),
+    previousMoments: classMomentsFromScenes(ordered, agents ?? [], index + 1),
+    ...(options.openEnded ? { openEnded: true } : {}),
   };
 }
 
@@ -475,14 +517,26 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
           true,
         );
       }
+      const sceneId = existing?.id ?? sceneIdFor(doc.scenes, params.order);
+      // The page's place in the course and the class moments before it. The
+      // course is built page by page here, so a page landing at the end is
+      // not taken for the closing one.
+      const page: ContextPage = { id: sceneId, order: params.order, title, type: params.type };
+      const ctx = actionContext(doc.scenes, page, agents, {
+        openEnded: !doc.scenes.some(
+          (scene) => scene.id !== existing?.id && scene.order > params.order,
+        ),
+        outline: doc.outline,
+      });
       const actions = filterKnownActions(
         await actionGenerator(outline, content, aiCallFor('scene-actions'), {
+          ctx,
           agents,
           languageDirective: doc.stage.languageDirective ?? '',
         }),
       );
       const built = buildCompleteScene(outline, content, actions, params.stageId, {
-        sceneId: existing?.id ?? sceneIdFor(doc.scenes, params.order),
+        sceneId,
       });
       if (!built) return result('Page assembly failed; nothing was written.', {}, true);
       const scene = built as Scene;
@@ -562,7 +616,9 @@ export function buildGenerationTools(deps: GenerationToolDeps): AgentTool<never,
           toGenerationContent(scene.content),
           aiCallFor('scene-actions'),
           {
-            ctx: actionContext(doc.scenes, scene),
+            ctx: actionContext(doc.scenes, scene, doc.stage.generatedAgentConfigs, {
+              outline: doc.outline,
+            }),
             agents: doc.stage.generatedAgentConfigs,
             languageDirective: doc.stage.languageDirective ?? '',
             userProfile: params.styleDirective,

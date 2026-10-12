@@ -4,7 +4,13 @@ export type {
   GeneratedSlideData,
   GenerationResult,
   SceneGenerationContext,
+  ClassActivity,
+  ClassActivityKind,
+  ClassDiscussionMoment,
+  ClassMoment,
 } from './pipeline-types.js';
+export { classMomentOf, classMomentsFromScenes, summarizeClassMoments } from './class-moments.js';
+export type { ClassMomentScene, ClassMomentsSummary } from './class-moments.js';
 
 export {
   extractInteractiveElements,
@@ -94,13 +100,16 @@ export type { JsonParsingOptions } from './json-repair.js';
 export { noopGenerationLogger } from './logger.js';
 export type { GenerationLogger } from './logger.js';
 export {
+  buildClassMoments,
   buildCourseContext,
+  buildEarlierKeyPoints,
   buildLanguageText,
   buildVisionUserContent,
   formatAgentsForPrompt,
   formatImageDescription,
   formatImagePlaceholder,
   formatTeacherPersonaForPrompt,
+  formatTeacherVoiceForPrompt,
 } from './prompt-formatters.js';
 export type {
   ImageMapping,

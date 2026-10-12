@@ -12,6 +12,7 @@ import {
   buildVisionUserContent,
   type SceneGenerationContext,
   type AgentInfo,
+  type ClassMoment,
 } from '@openmaic/generation';
 import type {
   SceneOutline,
@@ -40,6 +41,8 @@ export interface SceneActionsInput {
   agents?: AgentInfo[];
   /** What the scenes before this one said, for continuity. */
   previousSpeeches?: string[];
+  /** The class moments (discussions) of the scenes before this one, for pacing. */
+  previousMoments?: ClassMoment[];
   userProfile?: string;
   languageDirective?: string;
   /** The scene-actions stage's model. */
@@ -126,7 +129,12 @@ export async function generateSceneActions(
     pageIndex: (pageIndex >= 0 ? pageIndex : 0) + 1,
     totalPages: allOutlines.length,
     allTitles,
+    // What each page set out to teach, so a later page can have the class recall it.
+    allKeyPoints: allOutlines.map((o) => o.keyPoints ?? []),
+    // What kind of page follows: a quiz or project settles nothing left open
+    allKinds: allOutlines.map((o) => o.type),
     previousSpeeches: input.previousSpeeches ?? [],
+    ...(input.previousMoments ? { previousMoments: input.previousMoments } : {}),
   };
 
   // ── Generate actions ──

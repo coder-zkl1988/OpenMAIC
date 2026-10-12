@@ -427,10 +427,12 @@ describe.skipIf(!contractUrl)('generation runs on PostgreSQL', () => {
     const stageId = stored.stageId!;
     expect(stageId).toMatch(/^stage-/);
 
-    // Agents: generated from the course title and outlines, the slot's voices advertised.
+    // Agents: generated from the course title, requirement and outlines, pitched at the
+    // learner's level; the slot's voices advertised.
     expect(calls.agentProfiles).toHaveLength(1);
     expect(calls.agentProfiles[0]).toMatchObject({
-      stageInfo: { name: 'Plants', description: '' },
+      stageInfo: { name: 'Plants', description: 'Teach photosynthesis' },
+      learnerLevel: 'Grade 8',
       sceneOutlines: OUTLINES.map((o) => ({ title: o.title, description: o.description })),
       languageDirective: 'Use English.',
     });
@@ -472,6 +474,8 @@ describe.skipIf(!contractUrl)('generation runs on PostgreSQL', () => {
       ['Say Intro'],
       ['Say Body'],
     ]);
+    // No scene opened a discussion: no class moment to pace by yet.
+    expect(calls.sceneActions.map((call) => call.previousMoments)).toEqual([[], [], []]);
     for (const [index, call] of calls.sceneActions.entries()) {
       expect(call).toMatchObject({
         outline: { ...OUTLINES[index], description: `${OUTLINES[index]!.description}!` },
@@ -1784,6 +1788,14 @@ describe.skipIf(!contractUrl)('generation runs on PostgreSQL', () => {
     expect(
       (calls.sceneContent[0]!.agents as Array<{ id: string }>).map((agent) => agent.id),
     ).toEqual(['default-1', 'default-2', 'default-3']);
+    // The fallback is reported, with why, ahead of the agents it fell back to.
+    const events = await readGenerationRunEvents(run.id, 0);
+    const fallback = events.findIndex((event) => event.type === 'agents_fallback');
+    expect(events[fallback]!.data).toEqual({
+      reason: 'error',
+      agentIds: ['default-1', 'default-2', 'default-3'],
+    });
+    expect(events[fallback + 1]!.type).toBe('agents');
   });
 
   it('a scene of a type no content path supports fails at its content step, as in the browser', async () => {

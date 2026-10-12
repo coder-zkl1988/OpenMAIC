@@ -7,6 +7,12 @@ import { capBodyStream } from '@/lib/server/capped-stream';
 import { normalizeSceneOutlines } from '@/lib/server/generation/outline-schema';
 import { MAX_CLASSROOM_MATERIALS } from '@/lib/server/classroom-materials';
 import { isMaterialId } from '@/lib/server/materials/material-id';
+import {
+  AUTO_AGENT_COUNT_MAX,
+  AUTO_AGENT_COUNT_MIN,
+  CLASS_ATMOSPHERES,
+  isClassAtmosphere,
+} from '@/lib/orchestration/persona-guide';
 import type { SceneOutline } from '@/lib/types/generation';
 
 import type { GenerationRunInput } from './types';
@@ -130,11 +136,38 @@ export function parseRunInput(raw: unknown): Parsed<GenerationRunInput> {
   if (body.agents !== undefined) {
     const value = record(body.agents);
     if (value?.mode === 'auto') {
+      let presetAgentIds: string[] | undefined;
       if (value.presetAgentIds !== undefined) {
         const ids = agentIdList(value.presetAgentIds, 'agents.presetAgentIds', 0);
         if (!ids.ok) return ids;
-        agents = { mode: 'auto', presetAgentIds: ids.value };
+        presetAgentIds = ids.value;
       }
+      const count = value.count;
+      if (
+        count !== undefined &&
+        (typeof count !== 'number' ||
+          !Number.isInteger(count) ||
+          count < AUTO_AGENT_COUNT_MIN ||
+          count > AUTO_AGENT_COUNT_MAX)
+      ) {
+        return {
+          ok: false,
+          message: `agents.count must be an integer from ${AUTO_AGENT_COUNT_MIN} to ${AUTO_AGENT_COUNT_MAX} (the class size, teacher included)`,
+        };
+      }
+      const atmosphere = value.atmosphere;
+      if (atmosphere !== undefined && !isClassAtmosphere(atmosphere)) {
+        return {
+          ok: false,
+          message: `agents.atmosphere must be one of ${CLASS_ATMOSPHERES.map((kind) => `"${kind}"`).join(', ')}`,
+        };
+      }
+      agents = {
+        mode: 'auto',
+        ...(presetAgentIds ? { presetAgentIds } : {}),
+        ...(count !== undefined ? { count } : {}),
+        ...(atmosphere !== undefined ? { atmosphere } : {}),
+      };
     } else if (value?.mode === 'preset') {
       const ids = agentIdList(value.agentIds, 'agents.agentIds', 0);
       if (!ids.ok) return ids;
@@ -143,7 +176,7 @@ export function parseRunInput(raw: unknown): Parsed<GenerationRunInput> {
       return {
         ok: false,
         message:
-          'agents must be { "mode": "auto", "presetAgentIds"?: [...] } or { "mode": "preset", "agentIds": [...] }',
+          'agents must be { "mode": "auto", "presetAgentIds"?: [...], "count"?: n, "atmosphere"?: "..." } or { "mode": "preset", "agentIds": [...] }',
       };
     }
   }

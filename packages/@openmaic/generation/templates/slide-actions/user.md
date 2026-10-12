@@ -3,6 +3,8 @@ Title: {{title}}
 Key Points: {{keyPoints}}
 Description: {{description}}
 {{courseContext}}
+{{earlierKeyPoints}}
+{{classMoments}}
 {{agents}}
 {{userProfile}}
 

@@ -83,8 +83,43 @@ describe('run input', () => {
     });
   });
 
+  it('keeps the class size and kind a learner chose for generated agents', () => {
+    expect(
+      parseRunInput({
+        requirement: 'x',
+        agents: { mode: 'auto', presetAgentIds: ['default-1'], count: 5, atmosphere: 'lively' },
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        agents: { mode: 'auto', presetAgentIds: ['default-1'], count: 5, atmosphere: 'lively' },
+      },
+    });
+    expect(parseRunInput({ requirement: 'x', agents: { mode: 'auto', count: 2 } })).toEqual(
+      expect.objectContaining({
+        ok: true,
+        value: expect.objectContaining({ agents: { mode: 'auto', count: 2 } }),
+      }),
+    );
+    // A preset class has no size or kind to choose.
+    expect(
+      parseRunInput({ requirement: 'x', agents: { mode: 'preset', agentIds: [], count: 5 } }),
+    ).toMatchObject({ ok: true, value: { agents: { mode: 'preset', agentIds: [] } } });
+  });
+
   it.each([
     [{}, /requirement/],
+    [
+      { requirement: 'x', agents: { mode: 'auto', count: 1 } },
+      /agents.count must be an integer from 2 to 8/,
+    ],
+    [{ requirement: 'x', agents: { mode: 'auto', count: 9 } }, /agents.count/],
+    [{ requirement: 'x', agents: { mode: 'auto', count: 3.5 } }, /agents.count/],
+    [{ requirement: 'x', agents: { mode: 'auto', count: '4' } }, /agents.count/],
+    [
+      { requirement: 'x', agents: { mode: 'auto', atmosphere: 'noisy' } },
+      /agents.atmosphere must be one of "focused", "conversational", "lively"/,
+    ],
     [{ requirement: '  ' }, /requirement/],
     [{ requirement: 'x', materialIds: ['nope'] }, /materialIds/],
     [{ requirement: 'x', agents: { mode: 'preset', agentIds: [''] } }, /agentIds/],
