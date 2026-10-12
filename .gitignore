@@ -81,6 +81,8 @@ eval/outline-language/results/
 eval/orchestration/results/
 eval/orchestration/results-answering/
 eval/orchestration/results-answer-content/
+eval/pi-casting/results/
+eval/persona-fidelity/results/
 
 # e2e screenshot artifacts
 e2e/screenshots/

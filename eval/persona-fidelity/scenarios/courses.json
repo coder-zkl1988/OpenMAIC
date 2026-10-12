@@ -1,0 +1,554 @@
+{
+  "calibration": {
+    "courseId": "waves-zh",
+    "personas": [
+      {
+        "key": "plain",
+        "name": "陈雨桐",
+        "role": "student",
+        "persona": "陈雨桐是班里很普通的一个女生，成绩中等，物理靠多做题撑着。上课认真记笔记，但很少主动举手，被点到时会先小声说“我不太确定”，然后讲出自己的想法。她会把相位和振幅搞混，以为两列波叠加后各自的振幅也变了。讲到和生活有关的例子时，她听得最进去。"
+      },
+      {
+        "key": "caricature",
+        "name": "王大炮",
+        "role": "student",
+        "persona": "王大炮是全班最疯狂的学霸兼搞笑担当！！他每说一句话都要加上夸张的感叹，动不动就跳上桌子大喊“物理是宇宙的真理！”，同时又是个超级吃货，三句话不离炸鸡。他什么都懂，什么题都秒杀，从来不出错，被大家称为“行走的百科全书”。"
+      },
+      {
+        "key": "script",
+        "name": "李明",
+        "role": "student",
+        "persona": "李明负责在第3页提出关于波长的问题，在第7页配合老师演示干涉实验。每节课至少发言3次，在老师讲完每个知识点后进行总结，并在课程结束时带领大家复习本章要点。"
+      }
+    ]
+  },
+  "courses": [
+    {
+      "id": "waves-zh",
+      "name": "机械波",
+      "description": "高一物理：机械波的形成与描述、叠加与干涉、驻波和多普勒效应",
+      "languageDirective": "Write all names and personas in Simplified Chinese (zh-CN).",
+      "expectScript": "han",
+      "learnerLevel": "高一学生，数学还可以，物理上学期期末刚及格，周末常在杭州打篮球，想把波这一章弄懂。",
+      "privateTerms": ["杭州", "篮球"],
+      "agentCount": 4,
+      "sceneOutlines": [
+        {
+          "title": "什么是机械波",
+          "description": "振动在介质中传播；介质本身不随波迁移"
+        },
+        {
+          "title": "横波与纵波",
+          "description": "振动方向与传播方向垂直是横波；平行是纵波"
+        },
+        {
+          "title": "波长、频率与波速",
+          "description": "v = λf；波速由介质决定"
+        },
+        {
+          "title": "波的图像",
+          "description": "位移-位置图像；某一时刻各点的位移"
+        },
+        {
+          "title": "波的叠加",
+          "description": "相遇处位移直接相加；分开后各自保持原样"
+        },
+        {
+          "title": "相位",
+          "description": "同相与反相；相位差"
+        },
+        {
+          "title": "干涉",
+          "description": "振动加强与减弱；加强减弱的条件取决于相位差"
+        },
+        {
+          "title": "衍射",
+          "description": "波绕过障碍物；缝宽与波长相近时明显"
+        },
+        {
+          "title": "驻波",
+          "description": "两列反向传播的相同波叠加；波节与波腹"
+        },
+        {
+          "title": "共鸣与乐器",
+          "description": "弦和管的固有频率"
+        },
+        {
+          "title": "多普勒效应",
+          "description": "波源与观察者相对运动时频率变化"
+        },
+        {
+          "title": "复习",
+          "description": "本章小结与易错点"
+        }
+      ],
+      "classroom": {
+        "roster": [
+          {
+            "id": "t1",
+            "name": "林老师",
+            "role": "teacher",
+            "persona": "林老师教了十多年高中物理，说话慢条斯理，声音不大但很清楚。她习惯先抛一个问题让大家猜，再一步步揭晓，讲到难点会停下来问“大家跟上了吗”。学生答错时，她先肯定想对的那一半，再追问“你为什么这么想”。她偶尔点名，但更愿意等有人主动开口。"
+          },
+          {
+            "id": "ta1",
+            "name": "小禾",
+            "role": "assistant",
+            "persona": "小禾是物理系研二的助教，热心，语速偏快，爱用生活里的小例子解释抽象概念。看到有人卡住，她会凑过来给个提示或者一个能动手试的小实验，但从不抢林老师的话，也不会提前讲后面的内容。她说话一般一两句，常以“你可以试试……”开头。"
+          },
+          {
+            "id": "s1",
+            "name": "小思",
+            "role": "student",
+            "persona": "小思是班里比较安静的女生，物理成绩中等偏下，刚接触波动，常把相位和振幅弄混，以为两列波叠加后各自的振幅也变了。她只有在真的想不通时才小声发问，被点到时会先说“我不太确定”。刚开过口后她通常会安静一阵，说话很短。"
+          },
+          {
+            "id": "s2",
+            "name": "阿杰",
+            "role": "student",
+            "persona": "阿杰话多，反应快，爱抢答，物理成绩不错但常常想当然，比如以为两列波相遇时会像两个小球一样撞开。听到能联系到游戏或音乐的东西就特别来劲，口头禅是“这不就是……嘛”。被纠正时他不太服气，会再追问一句。"
+          }
+        ],
+        "pages": [
+          {
+            "id": "p1",
+            "title": "什么是机械波",
+            "keyPoints": ["振动在介质中传播", "介质本身不随波迁移"],
+            "speech": [
+              "把绳子一头上下抖动，振动就沿着绳子传出去，这就是机械波。",
+              "注意，绳子上的每一点只是在原地上下振动，并没有跟着波跑。"
+            ]
+          },
+          {
+            "id": "p2",
+            "title": "横波与纵波",
+            "keyPoints": ["振动方向与传播方向垂直是横波", "平行是纵波"],
+            "speech": ["绳子上的波是横波；弹簧来回压缩拉伸传出去的是纵波，声波也是纵波。"]
+          },
+          {
+            "id": "p3",
+            "title": "波长、频率与波速",
+            "keyPoints": ["v = λf", "波速由介质决定"],
+            "speech": ["相邻两个波峰之间的距离叫波长，波速等于波长乘以频率。"]
+          },
+          {
+            "id": "p4",
+            "title": "波的图像",
+            "keyPoints": ["位移-位置图像", "某一时刻各点的位移"],
+            "speech": ["波的图像像一张快照，横轴是位置，纵轴是这一刻各点的位移。"]
+          },
+          {
+            "id": "p5",
+            "title": "波的叠加",
+            "keyPoints": ["相遇处位移直接相加", "分开后各自保持原样"],
+            "speech": [
+              "两列波相遇时，同一点的位移等于两列波各自位移之和。",
+              "分开以后，两列波还是原来的样子，好像没遇到过一样。"
+            ]
+          },
+          {
+            "id": "p6",
+            "title": "相位",
+            "keyPoints": ["同相与反相", "相位差"],
+            "speech": ["两列波的“步调”差多少，叫相位差；步调一致是同相，正好错开半个周期是反相。"]
+          },
+          {
+            "id": "p7",
+            "title": "干涉",
+            "keyPoints": ["振动加强与减弱", "加强减弱的条件取决于相位差"],
+            "speech": [
+              "两列频率相同的波相遇，有的地方振动始终加强，有的地方始终减弱。",
+              "在同相相遇的地方加强，在反相相遇的地方减弱，甚至完全抵消。"
+            ]
+          },
+          {
+            "id": "p8",
+            "title": "衍射",
+            "keyPoints": ["波绕过障碍物", "缝宽与波长相近时明显"]
+          },
+          {
+            "id": "p9",
+            "title": "驻波",
+            "keyPoints": ["两列反向传播的相同波叠加", "波节与波腹"]
+          },
+          {
+            "id": "p10",
+            "title": "共鸣与乐器",
+            "keyPoints": ["弦和管的固有频率"]
+          },
+          {
+            "id": "p11",
+            "title": "多普勒效应",
+            "keyPoints": ["波源与观察者相对运动时频率变化"]
+          },
+          {
+            "id": "p12",
+            "title": "复习",
+            "keyPoints": ["本章小结与易错点"]
+          }
+        ],
+        "currentPageId": "p7",
+        "lectureProgress": {
+          "pageId": "p7",
+          "actionIndex": 1
+        },
+        "upcomingTerms": ["衍射", "驻波", "波节", "波腹", "多普勒", "共鸣", "固有频率"],
+        "prompts": [
+          {
+            "id": "why-cancel",
+            "messages": [
+              {
+                "role": "user",
+                "text": "为什么两列波相遇，有的地方振动会减弱，甚至抵消？"
+              }
+            ]
+          },
+          {
+            "id": "ask-student",
+            "messages": [
+              {
+                "role": "user",
+                "text": "{student1}，你觉得为什么有的地方会抵消？"
+              }
+            ],
+            "config": {
+              "addressedAgentIds": ["{student1}"]
+            }
+          },
+          {
+            "id": "whole-class",
+            "messages": [
+              {
+                "role": "user",
+                "text": "大家觉得，两列波相遇以后，还能按原来的样子继续往前走吗？"
+              }
+            ]
+          },
+          {
+            "id": "ahead",
+            "messages": [
+              {
+                "role": "user",
+                "text": "那吉他弦上为什么有的点一直不动？"
+              }
+            ]
+          },
+          {
+            "id": "confused-follow-up",
+            "messages": [
+              {
+                "role": "user",
+                "text": "相位差是什么？"
+              },
+              {
+                "role": "assistant",
+                "agentId": "{teacher}",
+                "text": "相位差就是两列波“步调”差了多少，差半个周期就叫反相。"
+              },
+              {
+                "role": "user",
+                "text": "还是没懂……能不能举个例子？"
+              }
+            ]
+          },
+          {
+            "id": "student-opens-moment",
+            "messages": [],
+            "config": {
+              "sessionType": "discussion",
+              "momentKind": "lecture",
+              "triggerAgentId": "{student2}",
+              "discussionTopic": "那降噪耳机是不是就是故意造一列波，把噪音抵消掉？"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "python-en",
+      "name": "Intro to Python: lists and loops",
+      "description": "A first programming course for adult beginners: variables, lists, indexing and loops.",
+      "languageDirective": "Write all names and personas in English.",
+      "expectScript": "latin",
+      "learnerLevel": "A 35-year-old nurse from Leeds who has never programmed but is comfortable with spreadsheets.",
+      "privateTerms": ["Leeds", "nurse"],
+      "sceneOutlines": [
+        {
+          "title": "Variables and values",
+          "description": "A name points to a value; Numbers and strings"
+        },
+        {
+          "title": "Lists",
+          "description": "Several values in order; Square brackets"
+        },
+        {
+          "title": "Indexing",
+          "description": "Positions start at 0; scores[-1] is the last item"
+        },
+        {
+          "title": "for loops",
+          "description": "for x in scores: runs once per item; x holds the item itself"
+        },
+        {
+          "title": "Counting with range",
+          "description": "range(start, stop); stop is not included"
+        },
+        {
+          "title": "while loops",
+          "description": "Repeat while a condition is true; Beware of loops that never stop"
+        },
+        {
+          "title": "List comprehensions",
+          "description": "[x * 2 for x in scores]"
+        },
+        {
+          "title": "Functions",
+          "description": "def name(parameters):; Give a value back to the caller"
+        }
+      ],
+      "classroom": {
+        "roster": [
+          {
+            "id": "t",
+            "name": "Ms. Rivera",
+            "role": "teacher",
+            "persona": "Ms. Rivera has taught evening programming classes for adults for eight years. She is calm and plain-spoken, writes tiny examples on the board, and likes to ask what Python will print before running anything. When someone is wrong she points to the part that was right, then asks them to trace the code line by line. She rarely calls on people by name and would rather wait a moment for someone to volunteer."
+          },
+          {
+            "id": "a",
+            "name": "Sam",
+            "role": "assistant",
+            "persona": "Sam is a software developer who volunteers as the course's teaching assistant. Friendly and brief, he answers in a sentence or two and loves practical tips like printing a variable inside the loop to see what it holds. He steps in when someone is stuck on an error message, but leaves new topics to Ms. Rivera and never jumps ahead of the lesson."
+          },
+          {
+            "id": "s1",
+            "name": "Priya",
+            "role": "student",
+            "persona": "Priya works in accounts and signed up to automate her monthly reports. She is careful and a little anxious, and asks only after she has tried something herself, usually starting with \"Sorry, this might be silly, but\". Counting positions from zero still trips her up, and she often expects the first item to be number one. She speaks briefly and is relieved when someone else shares her doubt."
+          },
+          {
+            "id": "s2",
+            "name": "Leo",
+            "role": "student",
+            "persona": "Leo is a confident university student who has copied some Python from tutorials and likes to answer first. He talks fast and casually, is often right about syntax but sloppy about details, and tends to assume a for loop hands you each item's position rather than the item itself. He takes corrections with a shrug and a quick \"fair enough\"."
+          }
+        ],
+        "pages": [
+          {
+            "id": "p1",
+            "title": "Variables and values",
+            "keyPoints": ["A name points to a value", "Numbers and strings"],
+            "speech": ["A variable is a name for a value, like price = 3."]
+          },
+          {
+            "id": "p2",
+            "title": "Lists",
+            "keyPoints": ["Several values in order", "Square brackets"],
+            "speech": ["A list keeps several values in order: scores = [70, 85, 92]."]
+          },
+          {
+            "id": "p3",
+            "title": "Indexing",
+            "keyPoints": ["Positions start at 0", "scores[-1] is the last item"],
+            "speech": [
+              "The first item is scores[0], not scores[1], and scores[-1] is the last one."
+            ]
+          },
+          {
+            "id": "p4",
+            "title": "for loops",
+            "keyPoints": ["for x in scores: runs once per item", "x holds the item itself"],
+            "speech": [
+              "A for loop runs its body once for every item of a list.",
+              "Each time round, x holds the item itself, not its position."
+            ]
+          },
+          {
+            "id": "p5",
+            "title": "Counting with range",
+            "keyPoints": ["range(start, stop)", "stop is not included"]
+          },
+          {
+            "id": "p6",
+            "title": "while loops",
+            "keyPoints": ["Repeat while a condition is true", "Beware of loops that never stop"]
+          },
+          {
+            "id": "p7",
+            "title": "List comprehensions",
+            "keyPoints": ["[x * 2 for x in scores]"]
+          },
+          {
+            "id": "p8",
+            "title": "Functions",
+            "keyPoints": ["def name(parameters):", "Give a value back to the caller"]
+          }
+        ],
+        "currentPageId": "p4",
+        "lectureProgress": {
+          "pageId": "p4",
+          "actionIndex": 1
+        },
+        "upcomingTerms": ["range(", "while loop", "comprehension", "def"],
+        "prompts": [
+          {
+            "id": "item-not-position",
+            "messages": [
+              {
+                "role": "user",
+                "text": "Why does `for x in scores:` give me 70, 85, 92 and not the positions 0, 1, 2?"
+              }
+            ]
+          },
+          {
+            "id": "ask-student",
+            "messages": [
+              {
+                "role": "user",
+                "text": "{student2}, how would you add up all the numbers in a list?"
+              }
+            ],
+            "config": {
+              "addressedAgentIds": ["{student2}"]
+            }
+          },
+          {
+            "id": "whole-class",
+            "messages": [
+              {
+                "role": "user",
+                "text": "Does everyone else find counting from zero weird?"
+              }
+            ]
+          },
+          {
+            "id": "ahead",
+            "messages": [
+              {
+                "role": "user",
+                "text": "Can I make Python keep asking for input until I type quit?"
+              }
+            ]
+          },
+          {
+            "id": "confused-follow-up",
+            "messages": [
+              {
+                "role": "user",
+                "text": "What is scores[-1]?"
+              },
+              {
+                "role": "assistant",
+                "agentId": "{teacher}",
+                "text": "It's the last item of the list: negative positions count from the end."
+              },
+              {
+                "role": "user",
+                "text": "I still don't get why the first one is 0 and not 1..."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "ww2-causes-zh",
+      "name": "第二次世界大战的起因",
+      "description": "初中历史：一战后的国际秩序、经济大危机、法西斯的崛起与绥靖政策",
+      "languageDirective": "Write all names and personas in Simplified Chinese (zh-CN).",
+      "expectScript": "han",
+      "learnerLevel": "初二学生，喜欢看抗战题材的电视剧，住在成都，历史考试总在背时间点上丢分。",
+      "privateTerms": ["成都"],
+      "sceneOutlines": [
+        {
+          "title": "凡尔赛—华盛顿体系",
+          "description": "一战后的国际秩序及其矛盾"
+        },
+        {
+          "title": "1929年经济大危机",
+          "description": "危机的爆发与蔓延"
+        },
+        {
+          "title": "法西斯的崛起",
+          "description": "德国、意大利、日本走上侵略道路"
+        },
+        {
+          "title": "绥靖政策",
+          "description": "慕尼黑阶段与对侵略的纵容"
+        },
+        {
+          "title": "战争的爆发",
+          "description": "从局部战争到全面战争"
+        },
+        {
+          "title": "小结",
+          "description": "多种原因如何共同作用"
+        }
+      ]
+    },
+    {
+      "id": "fractions-zh",
+      "name": "分数的初步认识",
+      "description": "小学三年级数学：几分之一、几分之几、简单的分数大小比较",
+      "languageDirective": "Write all names and personas in Simplified Chinese (zh-CN).",
+      "expectScript": "han",
+      "learnerLevel": "小学三年级学生，乘法口诀背得很熟，喜欢画画，对“平均分”还不太有把握。",
+      "privateTerms": ["画画"],
+      "agentCount": 5,
+      "classAtmosphere": "lively",
+      "sceneOutlines": [
+        {
+          "title": "平均分",
+          "description": "把一个东西平均分成几份"
+        },
+        {
+          "title": "几分之一",
+          "description": "认识二分之一、四分之一"
+        },
+        {
+          "title": "几分之几",
+          "description": "取出其中的几份"
+        },
+        {
+          "title": "比较分数大小",
+          "description": "分子相同或分母相同时比较"
+        },
+        {
+          "title": "生活中的分数",
+          "description": "分披萨、分蛋糕"
+        }
+      ]
+    },
+    {
+      "id": "photosynthesis-en",
+      "name": "Photosynthesis",
+      "description": "Middle-school biology: how plants make food from light, water and carbon dioxide.",
+      "languageDirective": "Write all names and personas in English.",
+      "expectScript": "latin",
+      "learnerLevel": "A 13-year-old in Toronto who loves gardening with her grandmother and finds chemistry words hard to remember.",
+      "privateTerms": ["Toronto", "grandmother", "gardening"],
+      "sceneOutlines": [
+        {
+          "title": "What plants need",
+          "description": "Light, water and carbon dioxide"
+        },
+        {
+          "title": "Inside the leaf",
+          "description": "Chloroplasts and chlorophyll"
+        },
+        {
+          "title": "The word equation",
+          "description": "Carbon dioxide + water -> glucose + oxygen"
+        },
+        {
+          "title": "Where the mass of a tree comes from",
+          "description": "Mostly from the air, not the soil"
+        },
+        {
+          "title": "Limiting factors",
+          "description": "Light, temperature and carbon dioxide"
+        }
+      ]
+    }
+  ]
+}
