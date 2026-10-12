@@ -7,6 +7,7 @@ vi.mock('@/lib/hooks/use-i18n', () => ({ useI18n: () => ({ t: (key: string) => k
 
 import { ProactiveCard } from '@/components/chat/proactive-card';
 import { DISCUSSION_AUTO_SKIP_MS } from '@/lib/choreography';
+import { ProactiveCardInViewContext } from '@/components/chat/use-proactive-countdown';
 import type { DiscussionAction } from '@/lib/types/action';
 
 const action: DiscussionAction = {
@@ -85,6 +86,118 @@ describe('ProactiveCard inline variant (the 发起讨论 card in the stream)', (
     expect(onSkip).toHaveBeenCalledOnce();
   });
 
+  it("words the teacher's moment as their question to think along with", () => {
+    act(() =>
+      root.render(
+        createElement(ProactiveCard, {
+          variant: 'inline',
+          action: { ...action, topic: 'Mia, what do you predict?', agentId: 'teacher-1' },
+          mode: 'playback',
+          agentName: 'Ms. Lin',
+          openedByTeacher: true,
+          onSkip,
+          onListen,
+        }),
+      ),
+    );
+    expect(card()?.getAttribute('aria-label')).toBe('proactiveCard.teacherOfferLabel');
+    expect(card()?.textContent).toContain('proactiveCard.question');
+    expect(card()?.textContent).not.toContain('proactiveCard.discussion');
+    expect(card()?.textContent).toContain('Mia, what do you predict?');
+    act(() => buttonByText('proactiveCard.joinTeacher').click());
+    expect(onListen).toHaveBeenCalledOnce();
+  });
+
+  it("puts the teacher's whole-class question to the learner: 我来答, 先听听大家 or 跳过, no countdown", () => {
+    const onAnswer = vi.fn<() => void>();
+    const onAutoSkip = vi.fn<() => void>();
+    act(() =>
+      root.render(
+        createElement(ProactiveCard, {
+          variant: 'inline',
+          action: { ...action, topic: 'What do you predict?', agentId: 'teacher-1' },
+          mode: 'playback',
+          agentName: 'Ms. Lin',
+          openedByTeacher: true,
+          offer: 'ask-learner',
+          autoSkip: false,
+          onSkip,
+          onAutoSkip,
+          onListen,
+          onAnswer,
+        }),
+      ),
+    );
+    expect(card()?.getAttribute('aria-label')).toBe('proactiveCard.teacherOfferLabel');
+    expect(card()?.textContent).toContain('proactiveCard.question');
+    // Waiting for the learner: no bar, no seconds, no time limit
+    expect(container.querySelector('[data-testid="proactive-card-progress"]')).toBeNull();
+    expect(card()?.textContent).not.toContain(`${DISCUSSION_AUTO_SKIP_MS / 1000}s`);
+    expect(card()?.querySelector('.sr-only')).toBeNull();
+    expect([...container.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      'proactiveCard.answerFirst',
+      'proactiveCard.listenFirst',
+      'proactiveCard.skip',
+    ]);
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS * 3));
+    expect(onAutoSkip).not.toHaveBeenCalled();
+    expect(onSkip).not.toHaveBeenCalled();
+
+    act(() => buttonByText('proactiveCard.answerFirst').click());
+    expect(onAnswer).toHaveBeenCalledOnce();
+    act(() => buttonByText('proactiveCard.listenFirst').click());
+    expect(onListen).toHaveBeenCalledOnce();
+    // The learner may always decline: the lecture goes on (a user skip, never an auto one)
+    act(() => buttonByText('proactiveCard.skip').click());
+    expect(onSkip).toHaveBeenCalledOnce();
+    expect(onAutoSkip).not.toHaveBeenCalled();
+  });
+
+  it('keeps the countdown on a whole-class question when auto-skip stays on (unattended)', () => {
+    const onAutoSkip = vi.fn<() => void>();
+    act(() =>
+      root.render(
+        createElement(ProactiveCard, {
+          variant: 'inline',
+          action,
+          mode: 'playback',
+          offer: 'ask-learner',
+          onSkip,
+          onAutoSkip,
+          onListen,
+        }),
+      ),
+    );
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS + 500));
+    expect(onAutoSkip).toHaveBeenCalledOnce();
+  });
+
+  it('offers a quiz review with no opener: 一起复盘 or 跳过, never skipping itself', () => {
+    act(() =>
+      root.render(
+        createElement(ProactiveCard, {
+          variant: 'inline',
+          action: { type: 'discussion', id: 'quiz-review-1', topic: 'Q2 and Q4' },
+          mode: 'playback',
+          offer: 'quiz-review',
+          autoSkip: false,
+          onSkip,
+          onListen,
+        }),
+      ),
+    );
+    expect(card()?.getAttribute('aria-label')).toBe('proactiveCard.reviewOfferLabel');
+    expect(card()?.textContent).toContain('proactiveCard.review');
+    expect(card()?.textContent).toContain('Q2 and Q4');
+    expect(container.querySelector('[data-testid="proactive-card-progress"]')).toBeNull();
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS * 3));
+    expect(onSkip).not.toHaveBeenCalled();
+    act(() => buttonByText('proactiveCard.joinReview').click());
+    expect(onListen).toHaveBeenCalledOnce();
+    act(() => buttonByText('proactiveCard.skip').click());
+    expect(onSkip).toHaveBeenCalledOnce();
+  });
+
   it('auto-skips exactly once when the countdown runs out', () => {
     render('playback');
     act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS + 500));
@@ -108,6 +221,131 @@ describe('ProactiveCard inline variant (the 发起讨论 card in the stream)', (
     render('playback');
     act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS));
     expect(onSkip).toHaveBeenCalledOnce();
+  });
+});
+
+describe('ProactiveCard countdown: it only runs while the card is seen and nothing holds it', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  let onSkip: ReturnType<typeof vi.fn<() => void>>;
+  let onAutoSkip: ReturnType<typeof vi.fn<() => void>>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    onSkip = vi.fn<() => void>();
+    onAutoSkip = vi.fn<() => void>();
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  function render(props: { countdownHeld?: boolean; inView?: boolean } = {}) {
+    const card = createElement(ProactiveCard, {
+      variant: 'inline',
+      action,
+      mode: 'playback',
+      agentName: '显眼包',
+      countdownHeld: props.countdownHeld,
+      onSkip,
+      onAutoSkip,
+      onListen: vi.fn(),
+    });
+    act(() =>
+      root.render(
+        createElement(ProactiveCardInViewContext.Provider, { value: props.inView ?? true }, card),
+      ),
+    );
+  }
+  const bar = () =>
+    container.querySelector('[data-testid="proactive-card-progress"]') as HTMLElement;
+
+  it('runs out through onAutoSkip (an auto skip), never the click handler', () => {
+    render();
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS + 500));
+    expect(onAutoSkip).toHaveBeenCalledOnce();
+    expect(onSkip).not.toHaveBeenCalled();
+  });
+
+  it('waits while its opener reads it out, then counts the full time', () => {
+    render({ countdownHeld: true });
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS * 2));
+    expect(onAutoSkip).not.toHaveBeenCalled();
+    expect(bar().style.width).toBe('100%');
+    expect(bar().className).toContain('bg-line-strong');
+
+    render({ countdownHeld: false });
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS - 500));
+    expect(onAutoSkip).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(onAutoSkip).toHaveBeenCalledOnce();
+  });
+
+  it('freezes while its panel is out of view, and while the page is hidden', () => {
+    render({ inView: false });
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS * 2));
+    expect(onAutoSkip).not.toHaveBeenCalled();
+
+    render({ inView: true });
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS / 2));
+    const width = bar().style.width;
+
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS * 2));
+    expect(onAutoSkip).not.toHaveBeenCalled();
+    expect(bar().style.width).toBe(width);
+
+    visibility.mockReturnValue('visible');
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS));
+    expect(onAutoSkip).toHaveBeenCalledOnce();
+    visibility.mockRestore();
+  });
+
+  it('stops for good when keyboard focus lands on the card', () => {
+    render();
+    const skip = [...container.querySelectorAll('button')][1];
+    vi.spyOn(skip, 'matches').mockImplementation((selector) => selector === ':focus-visible');
+    act(() => skip.focus());
+    act(() => skip.blur());
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS * 3));
+    expect(onAutoSkip).not.toHaveBeenCalled();
+  });
+
+  it('stops for good once the learner navigates by keyboard (Tab), so they choose themselves', () => {
+    render();
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS / 2));
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' }));
+    });
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS * 3));
+    expect(onAutoSkip).not.toHaveBeenCalled();
+    // A screen reader hears that the countdown stopped, not the time limit
+    expect(container.querySelector('.sr-only')?.textContent).toBe('proactiveCard.countdownPaused');
+  });
+
+  it('holds while focus from a click is inside the card, and goes on when it leaves', () => {
+    render();
+    const join = [...container.querySelectorAll('button')][0];
+    // A pointer's focus: not :focus-visible (jsdom matches it on any focus)
+    vi.spyOn(join, 'matches').mockReturnValue(false);
+    act(() => join.focus());
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS * 2));
+    expect(onAutoSkip).not.toHaveBeenCalled();
+    act(() => join.blur());
+    act(() => vi.advanceTimersByTime(DISCUSSION_AUTO_SKIP_MS + 500));
+    expect(onAutoSkip).toHaveBeenCalledOnce();
   });
 });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Hand, MessageSquare } from 'lucide-react';
 import type { ChatSession } from '@/lib/types/chat';
 import type { Scene } from '@/lib/types/stage';
@@ -246,23 +246,95 @@ interface HandRaiseStreamStatusProps {
   readonly deferredDiscussionAgentName?: string;
   /** Who handed the floor to the learner (a called hand, or the director's cue) */
   readonly cueSpeaker?: { readonly name: string; readonly avatar: string } | null;
+  /**
+   * The floor came from the director, not a called hand: its question to the
+   * learner (`prompt`, as the speaker put it) or, without one, a plain
+   * hand-back. Absent: a called hand ('X 请你发言').
+   */
+  readonly directorCue?: { readonly prompt?: string } | null;
+  /**
+   * Light replies to the director's question, sent as the learner's message
+   * (shown only with a prompt)
+   */
+  readonly quickReplies?: readonly string[];
+  readonly onQuickReply?: (text: string) => void;
+  /**
+   * The "let me think" chip, shown first: it sends nothing. The learner gets
+   * the composer and their time, the chips go away and the question stays
+   * open (sending "我想想…" would set the class talking again at once).
+   */
+  readonly thinkReply?: string;
+  readonly onThink?: () => void;
 }
+
+/**
+ * Who handed the floor to the learner, for the stream's cue row: a called
+ * hand is the teacher's call; the director's cue names its last speaker —
+ * a classmate asking the learner too (I31), found among the participants
+ * or, failing that, in the registry — and only then falls back to the
+ * teacher. Null without a cue.
+ */
+export function resolveCueSpeaker({
+  cued,
+  handCalled,
+  cueAgentId,
+  participants,
+  getAgent,
+  fallback,
+}: {
+  readonly cued: boolean;
+  readonly handCalled: boolean;
+  readonly cueAgentId?: string | null;
+  readonly participants: ReadonlyArray<{ id: string; name: string; avatar?: string; role: string }>;
+  readonly getAgent?: (id: string) => { name?: string; avatar?: string } | undefined;
+  readonly fallback: { readonly name: string; readonly avatar: string };
+}): { name: string; avatar: string } | null {
+  if (!cued) return null;
+  if (!handCalled && cueAgentId) {
+    const speaker = participants.find((p) => p.id === cueAgentId) ?? getAgent?.(cueAgentId);
+    if (speaker?.name) {
+      return { name: speaker.name, avatar: speaker.avatar || fallback.avatar };
+    }
+  }
+  const teacher = participants.find((p) => p.role === 'teacher');
+  return {
+    name: teacher?.name || fallback.name,
+    avatar: teacher?.avatar || fallback.avatar,
+  };
+}
+
+const cueReplyClass =
+  'h-7 rounded-full border border-line bg-background px-2.5 text-xs font-medium text-fg-secondary transition-colors hover:bg-subtle hover:text-fg cursor-pointer';
 
 /**
  * The stream's hand-raise rows (HandRaiseFlow.dc.html, Classroom.dc.html),
  * after the latest session: '你举手了' (or '你举手了，X 的讨论排在你之后'
  * when the hand jumped ahead of a discussion), the dashed pending bubble of a
  * queued question ('排队中 · 老师讲完这句就回答') and the call
- * ('AI教师 请你发言'). Visual only: the composer's live region announces the
- * same transitions.
+ * ('AI教师 请你发言'). The director's cue reads as what it is: its question
+ * ('小思 问你：…', with a few quick replies) or a neutral hand-back. Visual
+ * only: the composer's live region announces the same transitions (the quick
+ * replies are buttons).
  */
 export function HandRaiseStreamStatus({
   handState,
   pendingQuestion,
   deferredDiscussionAgentName,
   cueSpeaker,
+  directorCue,
+  quickReplies = [],
+  onQuickReply,
+  thinkReply,
+  onThink,
 }: HandRaiseStreamStatusProps) {
   const { t } = useI18n();
+  const cuePrompt = directorCue?.prompt?.trim();
+  // The question the learner chose to think about: its chips stay hidden (a
+  // new question brings them back)
+  const [thinkingAbout, setThinkingAbout] = useState<string | null>(null);
+  const showReplies = !!cuePrompt && thinkingAbout !== cuePrompt;
+  const showThink = showReplies && !!thinkReply && !!onThink;
+  const showQuickReplies = showReplies && !!onQuickReply && quickReplies.length > 0;
   return (
     <>
       {handState && (
@@ -290,16 +362,67 @@ export function HandRaiseStreamStatus({
           </span>
         </div>
       )}
-      {cueSpeaker && (
+      {cueSpeaker && cuePrompt ? (
         <div
           data-testid="stream-cue"
-          className="flex items-center justify-center gap-1.5 text-xs font-semibold text-fg-secondary"
+          data-cue="asked"
+          className="flex flex-col items-start gap-1.5"
         >
-          <span className="relative size-[18px] shrink-0 overflow-hidden rounded-full">
-            <AvatarDisplay src={cueSpeaker.avatar} alt="" />
-          </span>
-          {t('stage.handRaise.calledBy', { name: cueSpeaker.name })}
+          <div className="flex min-w-0 items-start gap-1.5 text-xs font-semibold text-fg-secondary">
+            <span className="relative mt-px size-[18px] shrink-0 overflow-hidden rounded-full">
+              <AvatarDisplay src={cueSpeaker.avatar} alt="" />
+            </span>
+            <span className="min-w-0 whitespace-pre-wrap break-words">
+              {cueSpeaker.name
+                ? t('stage.handRaise.askedBy', { name: cueSpeaker.name, prompt: cuePrompt })
+                : cuePrompt}
+            </span>
+          </div>
+          {(showThink || showQuickReplies) && (
+            <div className="flex flex-wrap gap-1.5 pl-6">
+              {showThink && (
+                <button
+                  type="button"
+                  data-testid="stream-cue-think"
+                  onClick={() => {
+                    setThinkingAbout(cuePrompt ?? null);
+                    onThink?.();
+                  }}
+                  className={cueReplyClass}
+                >
+                  {thinkReply}
+                </button>
+              )}
+              {showQuickReplies &&
+                quickReplies.map((reply) => (
+                  <button
+                    key={reply}
+                    type="button"
+                    data-testid="stream-cue-reply"
+                    onClick={() => onQuickReply?.(reply)}
+                    className={cueReplyClass}
+                  >
+                    {reply}
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
+      ) : (
+        cueSpeaker && (
+          <div
+            data-testid="stream-cue"
+            data-cue={directorCue ? 'hand-back' : 'called'}
+            className="flex items-center justify-center gap-1.5 text-xs font-semibold text-fg-secondary"
+          >
+            <span className="relative size-[18px] shrink-0 overflow-hidden rounded-full">
+              <AvatarDisplay src={cueSpeaker.avatar} alt="" />
+            </span>
+            {t(directorCue ? 'stage.handRaise.handBack' : 'stage.handRaise.calledBy', {
+              name: cueSpeaker.name,
+            })}
+          </div>
+        )
       )}
     </>
   );

@@ -88,6 +88,12 @@ export interface UseQueuedQuestionEffectsOptions {
   handToAssistant?: boolean;
   /** The learner holds the floor (a called hand, or the director's cue): announced */
   isCueUser?: boolean;
+  /**
+   * What the cue says, when it is the director's rather than a called hand's
+   * (a question put to the learner, or a plain hand-back): announced instead
+   * of 轮到你发言了 · 课堂已暂停
+   */
+  cueStatusText?: string;
   /** Engine getSpeechProgress: polled for the "hand raised" progress while something waits */
   getSpeechProgress?: () => number | null;
 }
@@ -109,6 +115,7 @@ export function useQueuedQuestionEffects({
   handWaitsFor,
   handToAssistant,
   isCueUser,
+  cueStatusText,
   getSpeechProgress,
 }: UseQueuedQuestionEffectsOptions) {
   const { t } = useI18n();
@@ -222,7 +229,7 @@ export function useQueuedQuestionEffects({
     : isHandRaised
       ? handLabel
       : isHandCalled || isCueUser
-        ? t('stage.composer.cueStatus')
+        ? (!isHandCalled && cueStatusText) || t('stage.composer.cueStatus')
         : deliveredShown
           ? t('roundtable.handRaisedDelivered')
           : handLowered === 'shown'

@@ -7,7 +7,7 @@
 import { ttsSelection } from '@/lib/audio/tts-selection';
 import type { ModelCapabilities } from '@/lib/model-settings/capabilities';
 import { useAgentRegistry, whenAgentRegistryLoaded } from '@/lib/orchestration/registry/store';
-import { useSettingsStore } from '@/lib/store/settings';
+import { autoClassRequest, useSettingsStore } from '@/lib/store/settings';
 import { useUserProfileStore } from '@/lib/store/user-profile';
 
 import { RunApiError, startGenerationRun, type StartRunInput } from './api';
@@ -46,8 +46,9 @@ export async function selectedRunAgents(): Promise<StartRunInput['agents']> {
     return !!agent && !agent.isGenerated;
   });
   // An empty preset selection is the default presets (the run resolves them).
+  // Auto: the class size and atmosphere the learner chose, if any (I28).
   return settings.agentMode === 'auto'
-    ? { mode: 'auto', presetAgentIds: presetIds }
+    ? { mode: 'auto', presetAgentIds: presetIds, ...autoClassRequest(settings) }
     : { mode: 'preset', agentIds: presetIds };
 }
 

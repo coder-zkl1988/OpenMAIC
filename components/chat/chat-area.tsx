@@ -10,15 +10,22 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
-import type { SessionType } from '@/lib/types/chat';
-import type { DiscussionRequest } from '@/lib/types/roundtable';
-import type { Action } from '@/lib/types/action';
+import type { LectureProgress, SessionType } from '@/lib/types/chat';
+import type { Action, DiscussionAction } from '@/lib/types/action';
+import type { DiscussionOutcome } from '@/lib/playback/types';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { useStageStore } from '@/lib/store';
-import { buildLectureNotes } from '@/lib/chat/lecture-notes';
+import {
+  buildLectureNoteMoments,
+  buildLectureNotes,
+  type LectureNoteMoment,
+} from '@/lib/chat/lecture-notes';
+import { collectLectureMoments } from '@/lib/chat/class-presence';
 import { PanelRightClose, BookOpen, Users } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { AvatarDisplay } from '@/components/ui/avatar-display';
+import { ProactiveCardInViewContext } from './use-proactive-countdown';
 import {
   useChatSessions,
   isAsideSession,
@@ -27,6 +34,7 @@ import {
   type EndSessionOptions,
   type SessionCleanupPayload,
   type ChatMessageSendOptions,
+  type ClassMomentRequest,
 } from './use-chat-sessions';
 import { ConversationStream } from './conversation-stream';
 import { LectureNotesView } from './lecture-notes-view';
@@ -63,6 +71,8 @@ interface ChatAreaProps {
   onAsideLiveSpeech?: (text: string | null, agentId?: string | null) => void;
   onAsideThinking?: (state: { stage: string; agentId?: string } | null) => void;
   onAsideStateChange?: (state: { sessionId: string | null; isStreaming: boolean }) => void;
+  /** Where the lecture stands on the current scene, read as each Pi request leaves (I14) */
+  getLectureProgress?: () => LectureProgress | null | undefined;
   currentSceneId?: string | null;
   currentActionIndex?: number | null;
   canJumpToAction?: (sceneId: string, actionIndex: number) => boolean;
@@ -78,7 +88,8 @@ interface ChatAreaProps {
   footer?: ReactNode;
   /**
    * After the stream's latest item (the inline 发起讨论 card). The 互动 tab
-   * stays mounted on 笔记 so the offer's auto-skip countdown keeps running.
+   * stays mounted on 笔记 so the offer keeps where its countdown stood; the
+   * countdown itself only runs while 互动 is in front and the panel is open.
    */
   streamTrailing?: ReactNode;
   /**
@@ -103,6 +114,18 @@ interface ChatAreaProps {
   scenes?: ReactNode;
   /** Who is online, shown on the stacked layouts' 互动 tab */
   onlineCount?: number;
+  /**
+   * A class moment's card waits in the stream (`streamTrailing`), opened by
+   * this agent. While 笔记 / 场景 is in front, the 互动 tab shows their
+   * avatar (not just the dot), and the card's countdown waits until it is seen.
+   */
+  pendingOffer?: { name?: string; avatar?: string; label: string } | null;
+  /** Who an agent is, for the notes' class moments (no id: the teacher) */
+  describeAgent?: (agentId?: string) => { name: string; avatar?: string } | undefined;
+  /** 现在聊聊 on a class moment the learner let pass (the notes) */
+  onDiscussMoment?: (moment: LectureNoteMoment) => void;
+  /** Whether such a moment can be opened now (nothing else is live) */
+  canDiscussMoment?: boolean;
 }
 
 /**
@@ -131,9 +154,15 @@ export interface ChatAreaRef {
   softPauseActiveSession: () => Promise<void>;
   resumeActiveSession: () => Promise<void>;
   sendMessage: (content: string, options?: ChatMessageSendOptions) => Promise<void>;
-  startDiscussion: (request: DiscussionRequest) => Promise<void>;
+  startDiscussion: (request: ClassMomentRequest) => Promise<void>;
   startLecture: (sceneId: string) => Promise<string>;
   addLectureMessage: (sessionId: string, action: Action, actionIndex: number) => void;
+  /** How a lecture moment ended, as a badge on its page's lecture bubble (I06) */
+  recordLectureMoment: (
+    sceneId: string,
+    action: DiscussionAction,
+    moment: { agentId?: string; outcome: DiscussionOutcome },
+  ) => void;
   getIsStreaming: () => boolean;
   getActiveSessionType: () => string | null;
   getLectureMessageId: (sessionId: string) => string | null;
@@ -175,6 +204,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       onAsideLiveSpeech,
       onAsideThinking,
       onAsideStateChange,
+      getLectureProgress,
       currentSceneId,
       currentActionIndex,
       canJumpToAction,
@@ -188,6 +218,10 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       layout = 'panel',
       scenes: scenesTab,
       onlineCount,
+      pendingOffer,
+      describeAgent,
+      onDiscussMoment,
+      canDiscussMoment,
     },
     ref,
   ) => {
@@ -211,6 +245,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       startDiscussion,
       startLecture,
       addLectureMessage,
+      recordLectureMoment,
       getLectureMessageId,
       pauseBuffer,
       resumeBuffer,
@@ -233,6 +268,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       shouldHoldAfterReveal,
       onAsideLiveSpeech,
       onAsideThinking,
+      getLectureProgress,
     });
 
     // The aside's open / streaming state, reported on the way out (the
@@ -258,6 +294,12 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
 
     // Derive lecture notes directly from scenes — updates reactively as scenes stream in.
     const lectureNotes = useMemo(() => buildLectureNotes(scenes), [scenes]);
+    // The class moments, with how each ended (the lecture bubbles' badges)
+    const lectureSessions = useMemo(() => sessions.filter((s) => s.type === 'lecture'), [sessions]);
+    const noteMoments = useMemo(
+      () => buildLectureNoteMoments(scenes, collectLectureMoments(lectureSessions)),
+      [lectureSessions, scenes],
+    );
 
     // Lecture narration stays in 笔记; the stream shows Q&A / discussion only
     const chatSessions = useMemo(() => sessions.filter((s) => s.type !== 'lecture'), [sessions]);
@@ -332,6 +374,8 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
 
     // Only on the way out of sight, not on every render while hidden
     const isFooterHidden = collapsed || activeTab !== 'interaction';
+    // The stream's trailing card (a class moment's offer) can be seen
+    const isTrailingInView = !isFooterHidden;
     const onFooterHiddenRef = useRef(onFooterHidden);
     useEffect(() => {
       onFooterHiddenRef.current = onFooterHidden;
@@ -366,6 +410,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
       startDiscussion,
       startLecture,
       addLectureMessage,
+      recordLectureMoment,
       getIsStreaming: () => isStreaming,
       getActiveSessionType: () => activeSessionType,
       getLectureMessageId,
@@ -412,15 +457,38 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
 
     const displayWidth = collapsed ? 0 : width;
 
+    // A class moment's card waits out of sight: the 互动 tab shows its opener
+    // (the card's countdown waits until 互动 is back in front)
+    const offerHint = pendingOffer && activeTab !== 'interaction' && (
+      <span data-testid="interaction-offer-hint" className="absolute -top-1.5 -right-2 flex size-4">
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 animate-ping rounded-full bg-amber-400 opacity-60"
+        />
+        <span
+          aria-hidden="true"
+          className="relative size-4 overflow-hidden rounded-full bg-background ring-2 ring-amber-500"
+        >
+          {pendingOffer.avatar ? (
+            <AvatarDisplay src={pendingOffer.avatar} alt="" />
+          ) : (
+            <span className="block size-full bg-amber-500" />
+          )}
+        </span>
+        <span className="sr-only">{pendingOffer.label}</span>
+      </span>
+    );
+
     // Amber pulse dot while a session is live or a discussion offer waits, and
     // another tab is in front
-    const interactionDot = (hasActiveChatSession || hasPendingOffer) &&
-      activeTab !== 'interaction' && (
+    const interactionDot =
+      offerHint ||
+      ((hasActiveChatSession || hasPendingOffer) && activeTab !== 'interaction' && (
         <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
         </span>
-      );
+      ));
 
     // Tab header row: 互动 / 笔记 + collapse. The selected trigger
     // (data-state="active") takes the panel's weight, colour and primary
@@ -548,7 +616,7 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
 
         {/* 互动: participants and the flat conversation stream. Hidden, not
             unmounted, on 笔记 / 场景 (as when collapsed): a pending 发起讨论
-            card keeps counting down to its auto-skip */}
+            card keeps its place, its countdown frozen until it is seen */}
         <TabsContent
           value="interaction"
           forceMount
@@ -558,18 +626,21 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
           )}
         >
           {header}
-          <ConversationStream
-            sessions={chatSessions}
-            scenes={scenes}
-            isStreaming={isStreaming}
-            asideSessionId={asideSessionId}
-            isAsideStreaming={isAsideStreaming}
-            activeBubbleId={activeBubbleId}
-            onEndSession={handleEndSession}
-            onContinueSession={handleContinueSession}
-            trailing={streamTrailing}
-            density={layout}
-          />
+          {/* A pending card counts down only while it can be seen */}
+          <ProactiveCardInViewContext.Provider value={isTrailingInView}>
+            <ConversationStream
+              sessions={chatSessions}
+              scenes={scenes}
+              isStreaming={isStreaming}
+              asideSessionId={asideSessionId}
+              isAsideStreaming={isAsideStreaming}
+              activeBubbleId={activeBubbleId}
+              onEndSession={handleEndSession}
+              onContinueSession={handleContinueSession}
+              trailing={streamTrailing}
+              density={layout}
+            />
+          </ProactiveCardInViewContext.Provider>
         </TabsContent>
 
         {/* 笔记: lecture notes with jump-to-line */}
@@ -586,6 +657,10 @@ export const ChatArea = forwardRef<ChatAreaRef, ChatAreaProps>(
             currentActionIndex={currentActionIndex}
             canJumpToAction={canJumpToAction}
             onJumpToAction={onJumpToAction}
+            moments={noteMoments}
+            describeAgent={describeAgent}
+            onDiscussMoment={onDiscussMoment}
+            canDiscussMoment={canDiscussMoment}
           />
         </TabsContent>
 

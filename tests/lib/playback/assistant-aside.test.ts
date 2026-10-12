@@ -80,6 +80,21 @@ describe('shouldAssistantAnswer', () => {
     }
   });
 
+  it('gives a question naming someone else (@) to the teacher, even with an aside open', () => {
+    expect(shouldAssistantAnswer({ ...playing, addressesOthers: true })).toBe(false);
+    expect(shouldAssistantAnswer({ ...playing, addressesOthers: true, asideOpen: true })).toBe(
+      false,
+    );
+    // Naming only the assistant keeps the aside
+    expect(shouldAssistantAnswer({ ...playing, addressesOthers: false })).toBe(true);
+  });
+
+  it('leaves fullscreen questions to the teacher: the aside could not be seen there', () => {
+    expect(shouldAssistantAnswer({ ...playing, presenting: true })).toBe(false);
+    expect(shouldAssistantAnswer({ ...playing, presenting: true, asideOpen: true })).toBe(false);
+    expect(shouldAssistantAnswer({ ...playing, presenting: false })).toBe(true);
+  });
+
   it('treats a lecture paused only for a voice question to the assistant as playing', () => {
     expect(shouldAssistantAnswer({ ...playing, engineMode: 'paused', pausedForVoice: true })).toBe(
       true,

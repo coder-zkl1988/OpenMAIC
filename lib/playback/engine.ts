@@ -42,6 +42,7 @@ import type {
   TriggerEvent,
   Effect,
   HandState,
+  DiscussionOutcome,
 } from './types';
 import type { AudioPlayer } from '@/lib/utils/audio-player';
 import type { LegacySpeechAction } from '@/lib/types/action';
@@ -73,6 +74,17 @@ type QueuedInterrupt = { kind: 'question'; text: string } | { kind: 'hand' };
  * replays, as for any interrupt from pause), 'idle' with no lecture running.
  */
 type HandCallPosition = 'boundary' | 'paused' | 'idle';
+
+/** How an interactive classroom tunes the engine (unattended paths keep the defaults) */
+export interface PlaybackEngineOptions {
+  /**
+   * The pause before a class moment's card shows, per moment. Defaults to
+   * DISCUSSION_TRIGGER_DELAY_MS. A classroom that voices the card (its opener
+   * reads the topic out) shortens it, so the reading takes the place of the
+   * pause instead of adding to it.
+   */
+  discussionTriggerDelayMs?: (trigger: TriggerEvent) => number;
+}
 
 export class PlaybackEngine {
   private scenes: Scene[] = [];
@@ -129,17 +141,21 @@ export class PlaybackEngine {
   // again is the same trigger (and agent) onHandCalled announced.
   private deferredTrigger: TriggerEvent | null = null;
 
+  private options: PlaybackEngineOptions;
+
   constructor(
     scenes: Scene[],
     actionEngine: ActionEngine,
     audioPlayer: AudioPlayer,
     callbacks: PlaybackEngineCallbacks = {},
+    options: PlaybackEngineOptions = {},
   ) {
     this.scenes = scenes;
     this.sceneId = scenes[0]?.id;
     this.actionEngine = actionEngine;
     this.audioPlayer = audioPlayer;
     this.callbacks = callbacks;
+    this.options = options;
   }
 
   // ==================== Public API ====================
@@ -596,6 +612,16 @@ export class PlaybackEngine {
     this.callbacks.onProgress?.(this.getSnapshot());
   }
 
+  /**
+   * Consume a class moment and say how it ended for the learner. The outcome
+   * is reported once per moment and playthrough, right after it is consumed
+   * (and before the card hides or the discussion starts).
+   */
+  private consumeDiscussion(trigger: TriggerEvent, outcome: DiscussionOutcome): void {
+    this.markDiscussionConsumed(trigger.id);
+    this.callbacks.onDiscussionOutcome?.(trigger, outcome);
+  }
+
   /** User clicks "Join" on ProactiveCard → save cursor → live */
   confirmDiscussion(): void {
     if (!this.currentTrigger) {
@@ -605,7 +631,7 @@ export class PlaybackEngine {
     this.invalidatePlaybackGeneration();
 
     // Mark consumed so it won't re-trigger on replay
-    this.markDiscussionConsumed(this.currentTrigger.id);
+    this.consumeDiscussion(this.currentTrigger, 'joined');
 
     // Save lecture state — keep actionIndex as-is (past the discussion).
     // Discussions are placed after all speech actions, so the preceding
@@ -627,11 +653,16 @@ export class PlaybackEngine {
     this.currentTrigger = null;
   }
 
-  /** User clicks "Skip" on ProactiveCard → consumed → processNext */
-  skipDiscussion(): void {
+  /**
+   * User clicks "Skip" on ProactiveCard → consumed → processNext. The card's
+   * countdown running out skips with `{ auto: true }` (reported as
+   * 'auto_skipped' rather than 'skipped').
+   */
+  skipDiscussion(options: { auto?: boolean } = {}): void {
     if (this.currentTrigger) {
-      this.markDiscussionConsumed(this.currentTrigger.id);
+      const trigger = this.currentTrigger;
       this.currentTrigger = null;
+      this.consumeDiscussion(trigger, options.auto ? 'auto_skipped' : 'skipped');
     }
     const generation = this.invalidatePlaybackGeneration();
     this.callbacks.onProactiveHide?.();
@@ -684,6 +715,26 @@ export class PlaybackEngine {
 
   /** User sends a message during playback → interrupt → live mode */
   handleUserInterrupt(text: string): void {
+    this.interruptToLive();
+    this.callbacks.onUserInterrupt?.(text);
+  }
+
+  /**
+   * The learner opens a discussion of their own (a class moment they missed,
+   * from the notes): the lecture is interrupted exactly as by a question —
+   * its position saved, the cut line replayed afterwards — and the engine
+   * goes live, without a message (the caller starts the discussion). False in
+   * a live session, where the learner talks directly.
+   */
+  beginLearnerDiscussion(): boolean {
+    if (this.mode === 'live') return false;
+    if (this.mode === 'paused' && this.currentTopicState === 'pending') return false;
+    this.interruptToLive();
+    return true;
+  }
+
+  /** The bookkeeping of an interrupt: save the lecture's position, then go live */
+  private interruptToLive(): void {
     this.invalidatePlaybackGeneration();
     // A direct message supersedes a raised hand still waiting for its boundary
     this.queued = null;
@@ -730,7 +781,6 @@ export class PlaybackEngine {
     this.setMode('live');
     this.audioPlayer.stop();
     this.cancelBrowserTTS();
-    this.callbacks.onUserInterrupt?.(text);
   }
 
   /** Whether all remaining actions have been consumed (no speech left to play) */
@@ -920,6 +970,14 @@ export class PlaybackEngine {
     };
   }
 
+  /** The pause before this moment's card; a bad value falls back to the default */
+  private discussionTriggerDelay(trigger: TriggerEvent): number {
+    const delay = this.options.discussionTriggerDelayMs?.(trigger);
+    return typeof delay === 'number' && Number.isFinite(delay) && delay >= 0
+      ? delay
+      : DISCUSSION_TRIGGER_DELAY_MS;
+  }
+
   /**
    * Get the current action, or null if playback is complete.
    * Advances sceneIndex automatically when a scene's actions are exhausted.
@@ -1104,12 +1162,13 @@ export class PlaybackEngine {
           this.callbacks.isAgentSelected &&
           !this.callbacks.isAgentSelected(discussionAction.agentId)
         ) {
-          this.markDiscussionConsumed(discussionAction.id);
+          this.consumeDiscussion(this.toTrigger(discussionAction), 'not_shown');
           this.processNext(generation);
           return;
         }
 
-        // 3s delay before showing ProactiveCard (allows previous speech to finish naturally).
+        // A short delay before showing ProactiveCard (allows previous speech to
+        // finish naturally); 3s unless the classroom voices the card.
         // A discussion a raised hand deferred comes back as the same trigger.
         const deferred = this.deferredTrigger;
         this.deferredTrigger = null;
@@ -1123,7 +1182,7 @@ export class PlaybackEngine {
           this.currentTrigger = trigger;
           this.callbacks.onProactiveShow?.(trigger);
           // Engine pauses here — user calls confirmDiscussion() or skipDiscussion()
-        }, DISCUSSION_TRIGGER_DELAY_MS);
+        }, this.discussionTriggerDelay(trigger));
         break;
       }
 

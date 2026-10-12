@@ -41,6 +41,16 @@ export interface AssistantRouteInput {
   readonly teacherHandPending: boolean;
   /** The lecture is paused only while the learner records a question for the assistant */
   readonly pausedForVoice: boolean;
+  /**
+   * The question names (@) someone other than the assistant (I23): the
+   * teacher pauses the lecture and hosts it, whoever was addressed
+   */
+  readonly addressesOthers?: boolean;
+  /**
+   * Fullscreen: the chat that shows an aside is hidden, so an answer there
+   * would never be seen. The teacher answers instead, over the dock.
+   */
+  readonly presenting?: boolean;
 }
 
 /**
@@ -48,7 +58,10 @@ export interface AssistantRouteInput {
  * to the teaching assistant instead of the teacher:
  *
  * - never with the setting off or no assistant in the classroom (today's
- *   flow: the teacher pauses at the end of the line);
+ *   flow: the teacher pauses at the end of the line), nor for a question
+ *   that names someone else (@ a classmate or the teacher): the lecture
+ *   pauses and the teacher hosts it, nor in fullscreen, where the aside
+ *   could not be seen (the teacher's answer shows over the dock);
  * - always while an aside is open (follow-ups stay with the assistant, even
  *   if the lecture has paused since);
  * - otherwise only while the lecture plays (or is paused just for a voice
@@ -56,7 +69,9 @@ export interface AssistantRouteInput {
  *   is open. Paused, idle or live: the teacher answers, as today.
  */
 export function shouldAssistantAnswer(input: AssistantRouteInput): boolean {
-  if (!input.enabled || !input.assistantAgentId) return false;
+  if (!input.enabled || !input.assistantAgentId || input.addressesOthers || input.presenting) {
+    return false;
+  }
   if (input.asideOpen) return true;
   if (input.liveSessionOpen || input.teacherHandPending) return false;
   if (input.engineMode === 'playing') return true;

@@ -285,7 +285,15 @@
       "pageLabel": "第 {{n}} 页",
       "currentPage": "当前页",
       "jumpToLine": "Jump to this line",
-      "jumpUnavailable": "Jump unavailable for this line"
+      "jumpUnavailable": "Jump unavailable for this line",
+      "discussNow": "现在聊聊",
+      "discussNowBusy": "先结束当前的对话",
+      "momentOutcome": {
+        "joined": "已加入",
+        "skipped": "已跳过",
+        "autoSkipped": "错过了",
+        "notShown": "未出场"
+      }
     },
     "badge": {
       "qa": "Q&A",
@@ -337,7 +345,22 @@
     "join": "加入讨论",
     "skip": "跳过",
     "offerLabel": "{{name}} 发起讨论",
-    "autoSkipHint": "{{seconds}} 秒后自动跳过"
+    "autoSkipHint": "{{seconds}} 秒后自动跳过",
+    "countdownPaused": "倒计时已暂停，准备好再选择",
+    "question": "提问",
+    "joinTeacher": "一起想想",
+    "teacherOfferLabel": "{{name}} 提了一个问题",
+    "review": "复盘",
+    "joinReview": "一起复盘",
+    "reviewOfferLabel": "测验复盘",
+    "answerFirst": "我来答",
+    "listenFirst": "先听听大家"
+  },
+  "quizReview": {
+    "topic": "一起看看没做对的题：{{questions}}",
+    "question": "第 {{n}} 题「{{text}}」",
+    "separator": "、",
+    "more": "，还有 {{count}} 题"
   },
   "voice": {
     "startListening": "语音输入",
@@ -387,7 +410,10 @@
       "lowerHand": "放下",
       "lowerHandHint": "放下手，撤回提问",
       "cuePlaceholder": "说出或输入你的问题",
+      "answerPlaceholder": "说出或输入你的回答",
       "cueStatus": "轮到你发言了 · 课堂已暂停",
+      "cueAsked": "{{name}} 在等你的回答",
+      "cueHandBack": "轮到你了 · 想到什么都可以说",
       "send": "发送",
       "cancelRecording": "取消录音",
       "handRaised": "已举手 · 讲完这句就请你发言",
@@ -396,6 +422,8 @@
       "raisedPlaceholder": "可以先写下问题...",
       "followUpPlaceholder": "继续追问...",
       "referencePlaceholder": "关于这个{{type}}，你想问什么？",
+      "mentionMenu": "点名问谁",
+      "mentionPlaceholder": "输入你的问题，或用 @ 点名问某个人",
       "handLowered": "已放下手"
     },
     "handRaise": {
@@ -405,7 +433,14 @@
       "pendingQuestion": "排队中 · 老师讲完这句就回答",
       "pendingQuestionStep": "排队中 · 老师完成当前步骤就回答",
       "assistantPrompt": "请说出你的问题，我来帮你解答",
-      "assistantAnswering": "助教正在回答…"
+      "assistantAnswering": "助教正在回答…",
+      "askedBy": "{{name}} 问你：{{prompt}}",
+      "handBack": "{{name}} 把话交给了你",
+      "cueReplies": {
+        "think": "我想想…",
+        "unsure": "我不太确定",
+        "hint": "给我一点提示吧"
+      }
     },
     "participants": {
       "label": "课堂成员",
@@ -414,7 +449,9 @@
       "answering": "回答中",
       "wantsToSpeak": "想发言",
       "handRaised": "举手中",
-      "more": "另外 {{count}} 位成员"
+      "more": "另外 {{count}} 位成员",
+      "cardLabel": "{{name}}，{{status}}",
+      "askThem": "问问 {{name}}"
     },
     "generating": "生成中...",
     "paused": "已暂停",
@@ -428,7 +465,12 @@
     "exitFullscreen": "退出全屏",
     "editCourse": "编辑课程",
     "doneEditing": "完成编辑",
-    "proModeDisabledHint": "本页不支持编辑——打开任意课程页即可使用 Pro 模式编辑。"
+    "proModeDisabledHint": "本页不支持编辑——打开任意课程页即可使用 Pro 模式编辑。",
+    "ownClassmates": {
+      "title": "这节课由本课自己的同学出场",
+      "description": "你在首页选的预设同学会保留，用于新课程和没有自带同学的课程。",
+      "alwaysPreset": "始终使用我的预设同学"
+    }
   },
   "edit": {
     "proMode": "专业模式",
@@ -821,7 +863,7 @@
       "count": "{{count}} 位",
       "editHint": "点击一位展开编辑",
       "personaLabel": "人设描述",
-      "personaPlaceholder": "描述角色的性格、教学风格与任务…",
+      "personaPlaceholder": "描述这个人：性格、说话方式、已经懂什么和还不懂什么、什么时候会开口。",
       "noPersona": "暂无人设",
       "unnamed": "未命名",
       "teacherBadge": "主讲",
@@ -830,7 +872,29 @@
       "removeFromClass": "移出课堂",
       "aiClassmates": "AI 同学 · {{count}}",
       "addRole": "添加角色",
-      "shortTitle": "阵容"
+      "upgrade": {
+        "action": "把同学写成真实的人",
+        "actionHint": "把每个人设改写成可信的人：性格、说话方式、懂什么。每处改动都先预览再应用。",
+        "loading": "正在改写人设…",
+        "previewTitle": "预览新的人设",
+        "previewHint": "只改人设，名字、头像和声音不变；应用后可以撤销。",
+        "now": "现在",
+        "rewritten": "改写后",
+        "apply": "应用",
+        "failed": "人设改写失败，请重试。",
+        "invalid": "这份名单无法改写，请检查每个人都有名字和角色。"
+      },
+      "shortTitle": "阵容",
+      "impact": {
+        "title": "课程脚本里对此成员的引用",
+        "moments": "由{{name}}开场的课堂时刻：{{count}} 个",
+        "mentions": "提到{{name}}的旁白或开场白：{{count}} 句。已生成的旁白和配音不会跟着改。",
+        "handToTeacher": "改由老师开场",
+        "dropMoments": "连同这些时刻一起删除",
+        "removeAnyway": "仍然移出",
+        "renameMentions": "仍在使用“{{name}}”的旁白或开场白：{{count}} 句。已生成的旁白和配音会保留旧名字。",
+        "renameAnyway": "仍然改名"
+      }
     },
     "elementRef": {
       "remove": "移除引用 {{label}}",
@@ -1394,6 +1458,14 @@
     "agentModeAutoDesc": "AI 将根据课程内容自动生成适合的课堂角色",
     "autoAgentCount": "生成数量",
     "autoAgentCountDesc": "自动生成的角色数量（包含教师）",
+    "autoAgentCountAuto": "由 AI 决定",
+    "classAtmosphere": "班风",
+    "classAtmosphereDesc": "生成什么样的同学",
+    "classAtmosphereOptions": {
+      "focused": "安静专注",
+      "conversational": "有来有往",
+      "lively": "热闹"
+    },
     "atLeastOneAgent": "请至少选择1个智能体",
     "singleAgentMode": "单智能体模式",
     "directAnswer": "直接回答",
@@ -1420,12 +1492,12 @@
       "student": "学生"
     },
     "agentDescriptions": {
-      "default-1": "主讲教师，清晰有条理地讲解知识",
-      "default-2": "辅助讲解，帮助同学理解重点",
-      "default-3": "活跃气氛，用幽默让课堂更有趣",
-      "default-4": "充满好奇心，总爱追问为什么",
-      "default-5": "认真记录，整理课堂重点笔记",
-      "default-6": "深入思考，喜欢探讨问题本质"
+      "default-1": "沉稳温和的老师，一步步讲，常让大家先猜一猜",
+      "default-2": "热心的助教，你卡住时递上一个提示",
+      "default-3": "活泼爱逗乐，常抢先说出第一个想法",
+      "default-4": "好奇心强，总爱问为什么",
+      "default-5": "细心的笔记员，每一步都要核对清楚",
+      "default-6": "安静的思考者，常问“如果……会怎样”"
     },
     "close": "关闭",
     "providerNames": {
@@ -1468,6 +1540,10 @@
     "classroomSection": "课堂",
     "assistantAnswersDuringLecture": "讲课时由助教回答提问",
     "assistantAnswersDuringLectureDesc": "开启后，讲课中提问不打断老师，由助教在互动面板里回答",
+    "teacherMayCallOnLearner": "允许老师点我的名",
+    "teacherMayCallOnLearnerDesc": "开启后，老师可能会像点同学一样直接点你回答。关闭时，老师只向全班提问，不会单独点你。",
+    "presetAgentsInGeneratedCourses": "始终使用我的预设同学",
+    "presetAgentsInGeneratedCoursesDesc": "开启后，自带同学的课程也换成你在首页选的预设同学；关闭时，这类课程由本课自己的同学出场。",
     "importFromClipboard": "从剪贴板导入",
     "baseUrlRegion": {
       "china": "国内站",

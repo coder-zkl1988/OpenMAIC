@@ -1,6 +1,7 @@
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
 import type { AgentConfig } from '@/lib/orchestration/registry/types';
 import type { StatelessChatRequest } from '@/lib/types/chat';
+import { withLocalizedBuiltInName, withPromptName } from './agent-names';
 
 const DEFAULT_PI_MAX_AGENT_TURNS = 6;
 const MAX_PI_MAX_AGENT_TURNS = 6;
@@ -31,12 +32,66 @@ export function resolveAgentConfigs(body: StatelessChatRequest): AgentConfig[] {
   const registry = useAgentRegistry.getState();
   const agents = body.config.agentIds
     .map((id) => overrides.get(id) ?? registry.getAgent(id))
-    .filter((agent): agent is AgentConfig => Boolean(agent));
+    .filter((agent): agent is AgentConfig => Boolean(agent))
+    // Built-in agents go by the name the learner sees on screen, and every
+    // name is shown to the prompts as a plain one-line name
+    .map((agent) => withPromptName(withLocalizedBuiltInName(agent, body.uiLocale)));
   // An aside must not touch the stage the lecture is using: no slide,
   // whiteboard or media actions, whatever the agent may do otherwise
   return isAsideToLecture(body)
     ? agents.map((agent) => ({ ...agent, allowedActions: [] }))
     : agents;
+}
+
+/** One person of the class as the prompts introduce them to each other */
+export type ClassRosterMember = Pick<AgentConfig, 'id' | 'name' | 'role' | 'persona'>;
+
+/**
+ * Everyone in this class, for the agents to know each other by name. The
+ * request's agents are the class, except in an aside, which sends only the
+ * assistant: there the rest comes from the stage roster (a generated
+ * classroom's `generatedAgentConfigs`, else a preset classroom's `agentIds`
+ * from the registry). Request agents keep their place and their config.
+ */
+export function resolveClassRoster(
+  body: StatelessChatRequest,
+  agents: readonly ClassRosterMember[],
+): ClassRosterMember[] {
+  const roster: ClassRosterMember[] = agents.map(({ id, name, role, persona }) => ({
+    id,
+    name,
+    role,
+    persona,
+  }));
+  if (!isAsideToLecture(body)) return roster;
+
+  const stage = body.storeState?.stage;
+  const known = new Set(roster.map((member) => member.id));
+  const add = (member: ClassRosterMember | undefined) => {
+    if (!member || typeof member.id !== 'string' || known.has(member.id)) return;
+    if (typeof member.name !== 'string' || !member.name.trim()) return;
+    known.add(member.id);
+    const named = withPromptName({
+      ...withLocalizedBuiltInName(member, body.uiLocale),
+      role: typeof member.role === 'string' ? member.role : '',
+    });
+    roster.push({
+      id: named.id,
+      name: named.name,
+      role: named.role,
+      persona: typeof named.persona === 'string' ? named.persona : '',
+    });
+  };
+  const generated = Array.isArray(stage?.generatedAgentConfigs) ? stage.generatedAgentConfigs : [];
+  if (generated.length > 0) {
+    for (const member of generated) add(member);
+  } else if (Array.isArray(stage?.agentIds)) {
+    const registry = useAgentRegistry.getState();
+    for (const id of stage.agentIds) {
+      if (typeof id === 'string') add(registry.getAgent(id));
+    }
+  }
+  return roster;
 }
 
 export function getPiMaxAgentTurns(body: StatelessChatRequest): number {

@@ -285,7 +285,15 @@
       "pageLabel": "Page {{n}}",
       "currentPage": "Current",
       "jumpToLine": "Jump to this line",
-      "jumpUnavailable": "Jump unavailable for this line"
+      "jumpUnavailable": "Jump unavailable for this line",
+      "discussNow": "Talk it over now",
+      "discussNowBusy": "Finish the open conversation first",
+      "momentOutcome": {
+        "joined": "Joined",
+        "skipped": "Skipped",
+        "autoSkipped": "Missed",
+        "notShown": "Not in this class"
+      }
     },
     "badge": {
       "qa": "Q&A",
@@ -337,7 +345,22 @@
     "join": "Join",
     "skip": "Skip",
     "offerLabel": "{{name}} wants to start a discussion",
-    "autoSkipHint": "Skips automatically in {{seconds}} seconds"
+    "autoSkipHint": "Skips automatically in {{seconds}} seconds",
+    "countdownPaused": "Countdown paused: choose when you are ready",
+    "question": "Question",
+    "joinTeacher": "Think along",
+    "teacherOfferLabel": "{{name}} asks a question",
+    "review": "Review",
+    "joinReview": "Go over it",
+    "reviewOfferLabel": "Quiz review",
+    "answerFirst": "I'll answer",
+    "listenFirst": "Hear the class first"
+  },
+  "quizReview": {
+    "topic": "Let's go over the ones you missed: {{questions}}",
+    "question": "Q{{n}} “{{text}}”",
+    "separator": "; ",
+    "more": " and {{count}} more"
   },
   "voice": {
     "startListening": "Voice input",
@@ -387,7 +410,10 @@
       "lowerHand": "Lower",
       "lowerHandHint": "Lower your hand and take the question back",
       "cuePlaceholder": "Say or type your question",
+      "answerPlaceholder": "Say or type your answer",
       "cueStatus": "Your turn to speak · class is paused",
+      "cueAsked": "{{name}} is waiting for your answer",
+      "cueHandBack": "Your turn · say whatever is on your mind",
       "send": "Send",
       "cancelRecording": "Cancel recording",
       "handRaised": "Hand raised · you're up when this sentence ends",
@@ -396,6 +422,8 @@
       "raisedPlaceholder": "You can write your question first...",
       "followUpPlaceholder": "Ask a follow-up...",
       "referencePlaceholder": "{{type}}: what would you like to ask about it?",
+      "mentionMenu": "Who to ask",
+      "mentionPlaceholder": "Type a question, or @ someone to ask them",
       "handLowered": "Hand lowered"
     },
     "handRaise": {
@@ -405,7 +433,14 @@
       "pendingQuestion": "Queued · answered when this sentence ends",
       "pendingQuestionStep": "Queued · answered when this step ends",
       "assistantPrompt": "Tell me your question and I'll help you with it.",
-      "assistantAnswering": "The teaching assistant is answering…"
+      "assistantAnswering": "The teaching assistant is answering…",
+      "askedBy": "{{name}} asks you: {{prompt}}",
+      "handBack": "{{name}} passes it to you",
+      "cueReplies": {
+        "think": "Let me think…",
+        "unsure": "I'm not sure",
+        "hint": "Give me a hint"
+      }
     },
     "participants": {
       "label": "Participants",
@@ -414,7 +449,9 @@
       "answering": "Answering",
       "wantsToSpeak": "Wants to speak",
       "handRaised": "Hand raised",
-      "more": "{{count}} more participants"
+      "more": "{{count}} more participants",
+      "cardLabel": "{{name}}, {{status}}",
+      "askThem": "Ask {{name}}"
     },
     "generating": "Generating...",
     "paused": "Paused",
@@ -428,7 +465,12 @@
     "exitFullscreen": "Exit Fullscreen",
     "editCourse": "Edit course",
     "doneEditing": "Done editing",
-    "proModeDisabledHint": "Editing isn't available on this page — open a course slide to edit with Pro mode."
+    "proModeDisabledHint": "Editing isn't available on this page — open a course slide to edit with Pro mode.",
+    "ownClassmates": {
+      "title": "This course brings its own classmates",
+      "description": "Your preset classmates are kept for new courses and for courses without classmates of their own.",
+      "alwaysPreset": "Always use my preset classmates"
+    }
   },
   "edit": {
     "proMode": "Pro",
@@ -821,7 +863,7 @@
       "count": "{{count}} members",
       "editHint": "Click a member to edit",
       "personaLabel": "Persona",
-      "personaPlaceholder": "Describe the role personality, teaching style, and tasks...",
+      "personaPlaceholder": "Describe this person: temperament, how they talk, what they already know and don't know yet, when they speak up.",
       "noPersona": "No persona yet",
       "unnamed": "Untitled",
       "teacherBadge": "Lead",
@@ -830,7 +872,29 @@
       "removeFromClass": "Remove from class",
       "aiClassmates": "AI classmates · {{count}}",
       "addRole": "Add role",
-      "shortTitle": "Roster"
+      "upgrade": {
+        "action": "Rewrite as real people",
+        "actionHint": "Rewrite each persona as a believable person: temperament, way of talking, what they know. You preview every change before it applies.",
+        "loading": "Rewriting the personas…",
+        "previewTitle": "Preview the new personas",
+        "previewHint": "Only personas change; names, avatars and voices stay. You can undo after applying.",
+        "now": "Now",
+        "rewritten": "Rewritten",
+        "apply": "Apply",
+        "failed": "Couldn't rewrite the personas. Please try again.",
+        "invalid": "This roster can't be rewritten. Check that everyone has a name and a role."
+      },
+      "shortTitle": "Roster",
+      "impact": {
+        "title": "Where the course script uses this member",
+        "moments": "Class moments {{name}} opens: {{count}}",
+        "mentions": "Lines that mention {{name}}: {{count}}. Generated narration and voice won't change.",
+        "handToTeacher": "Let the teacher open them",
+        "dropMoments": "Remove those moments too",
+        "removeAnyway": "Remove anyway",
+        "renameMentions": "Lines that still say “{{name}}”: {{count}}. Generated narration and voice keep the old name.",
+        "renameAnyway": "Rename anyway"
+      }
     },
     "elementRef": {
       "remove": "Remove reference {{label}}",
@@ -1394,6 +1458,14 @@
     "agentModeAutoDesc": "AI will automatically generate appropriate roles",
     "autoAgentCount": "Agent Count",
     "autoAgentCountDesc": "Number of agents to auto-generate (including teacher)",
+    "autoAgentCountAuto": "Let AI decide",
+    "classAtmosphere": "Class atmosphere",
+    "classAtmosphereDesc": "What kind of classmates are generated",
+    "classAtmosphereOptions": {
+      "focused": "Quiet & focused",
+      "conversational": "Give-and-take",
+      "lively": "Lively"
+    },
     "atLeastOneAgent": "Please select at least 1 agent",
     "singleAgentMode": "Single Agent Mode",
     "directAnswer": "Direct Answer",
@@ -1420,12 +1492,12 @@
       "student": "Student"
     },
     "agentDescriptions": {
-      "default-1": "Lead teacher with clear and structured explanations",
-      "default-2": "Supports learning and helps clarify key points",
-      "default-3": "Brings humor and energy to the classroom",
-      "default-4": "Always curious, loves asking why and how",
-      "default-5": "Diligently records and organizes class notes",
-      "default-6": "Thinks deeply and explores the essence of topics"
+      "default-1": "Calm, warm teacher who explains step by step and gets the class guessing",
+      "default-2": "Friendly TA who steps in with a hint when you are stuck",
+      "default-3": "Lively joker who blurts out her first guess",
+      "default-4": "Eager student who always asks why",
+      "default-5": "Careful note-taker who double-checks every step",
+      "default-6": "Quiet thinker who asks \"but what if…?\""
     },
     "close": "Close",
     "providerNames": {
@@ -1468,6 +1540,10 @@
     "classroomSection": "Classroom",
     "assistantAnswersDuringLecture": "Teaching assistant answers questions during the lecture",
     "assistantAnswersDuringLectureDesc": "When on, questions asked during the lecture don't interrupt the teacher: the teaching assistant answers them in the Interaction panel.",
+    "teacherMayCallOnLearner": "Let the teacher call on me",
+    "teacherMayCallOnLearnerDesc": "When on, the teacher may put a question to you by name, as with your classmates. When off, the teacher asks the whole class and never singles you out.",
+    "presetAgentsInGeneratedCourses": "Always use my preset classmates",
+    "presetAgentsInGeneratedCoursesDesc": "When on, courses generated with their own classmates also use the classmates you picked on the home page. When off, those courses are taught by their own classmates.",
     "importFromClipboard": "Import from Clipboard",
     "baseUrlRegion": {
       "china": "China",

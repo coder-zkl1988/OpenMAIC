@@ -24,6 +24,12 @@ export function buildCloseSessionTool(opts: {
   closeSession: (data: { endReason?: string }) => Promise<boolean>;
   canCloseSession?: () => boolean;
   isUserCued?: () => boolean;
+  /**
+   * A one-time reminder when a student had the last word of the turn (their
+   * line may be wrong or open). Returns the reminder text the first time it
+   * applies, undefined otherwise; the call after a reminder goes through.
+   */
+  takeLastWordNudge?: () => string | undefined;
 }): AgentTool<typeof CloseSessionParams> {
   return {
     name: 'close_session',
@@ -54,6 +60,14 @@ export function buildCloseSessionTool(opts: {
             },
           ],
           details: { emitted: false, skipped: true, reason: 'no_visible_agent_turn' },
+        };
+      }
+
+      const nudge = opts.takeLastWordNudge?.();
+      if (nudge) {
+        return {
+          content: [{ type: 'text', text: nudge }],
+          details: { emitted: false, skipped: true, reason: 'student_last_word' },
         };
       }
 

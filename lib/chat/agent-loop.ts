@@ -11,7 +11,7 @@
  * indicate something is wrong.
  */
 
-import type { StatelessEvent, DirectorState } from '@/lib/types/chat';
+import type { StatelessEvent, DirectorState, LectureProgress } from '@/lib/types/chat';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('AgentLoop');
@@ -43,6 +43,11 @@ export interface AgentLoopStoreState {
       aiComment?: string;
     }>;
   };
+  /**
+   * How far the lecture has got on the current scene (Pi only): the teacher
+   * and assistant hear what was just said there. Absent when not known.
+   */
+  lectureProgress?: LectureProgress;
 }
 
 /** Request template — fields that stay constant across loop iterations */

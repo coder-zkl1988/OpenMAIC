@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type FocusEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { Play } from 'lucide-react';
@@ -16,8 +16,76 @@ interface ProactiveCardCommonProps {
   mode: 'playback' | 'paused' | 'autonomous';
   agentName?: string;
   agentAvatar?: string;
+  /**
+   * The teacher opened the moment (a question to the class, or calling on a
+   * classmate): the card words it as the teacher's question, not a classmate
+   * starting a discussion
+   */
+  openedByTeacher?: boolean;
+  /**
+   * A moment of its own kind:
+   * - 'ask-learner': the teacher's question to the whole class (I10). The
+   *   learner answers first (我来答, `onAnswer`) or hears the class first
+   *   (先听听大家, `onListen`); a quiet 跳过 (`onSkip`) lets the lecture go on.
+   * - 'quiz-review': going over the quiz's wrong answers (I11), named by the
+   *   card itself (no opener): 一起复盘 (`onListen`) or 跳过.
+   */
+  offer?: 'ask-learner' | 'quiz-review';
+  /**
+   * The card skips itself when its countdown runs out (the default). Off: no
+   * countdown at all — the card waits for the learner (a question put to a
+   * learner who is watching, a quiz review).
+   */
+  autoSkip?: boolean;
+  /**
+   * The countdown waits: the opener is still reading the card out. It starts
+   * (or goes on) once this is false.
+   */
+  countdownHeld?: boolean;
   onSkip: () => void;
+  /** The countdown ran out (defaults to onSkip) */
+  onAutoSkip?: () => void;
+  /** Join the moment (an 'ask-learner' card: hear the class first) */
   onListen: () => void;
+  /** An 'ask-learner' card: the learner answers first */
+  onAnswer?: () => void;
+}
+
+/**
+ * The learner is on the card with the keyboard (or a screen reader moving
+ * focus): its countdown stops, for good once the keyboard was used — they
+ * choose join or skip themselves. Focus from a click only holds it while it
+ * stays inside.
+ */
+function useCardEngagement() {
+  const [focused, setFocused] = useState(false);
+  const [byKeyboard, setByKeyboard] = useState(false);
+
+  // Tabbing through the page while a card waits: the learner is navigating by
+  // keyboard and may be on their way to it
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') setByKeyboard(true);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
+  const handlers = {
+    onFocus: (event: FocusEvent<HTMLElement>) => {
+      setFocused(true);
+      const target = event.target as HTMLElement;
+      if (typeof target.matches === 'function' && target.matches(':focus-visible')) {
+        setByKeyboard(true);
+      }
+    },
+    onBlur: (event: FocusEvent<HTMLElement>) => {
+      const next = event.relatedTarget as Node | null;
+      if (!next || !event.currentTarget.contains(next)) setFocused(false);
+    },
+    onKeyDown: () => setByKeyboard(true),
+  };
+  return { engaged: focused || byKeyboard, handlers };
 }
 
 /** The card floating over an anchor (the fullscreen dock), outside the stream */
@@ -51,9 +119,13 @@ const cardSurface =
  *
  * `variant="inline"` renders the 发起讨论 card inside the interaction stream
  * (Classroom.dc.html); the default portal variant floats the same card over
- * an anchor in fullscreen. Both auto-skip once the countdown runs out and
- * freeze while playback is paused; the control bar's play / pause is the only
- * pause control, so neither has a toggle of its own.
+ * an anchor in fullscreen. Both auto-skip once the countdown runs out
+ * (unless `autoSkip` is off: then the card waits for the learner). The
+ * countdown only runs while the card can be seen (its panel in view, the page
+ * shown) and nothing holds it: it freezes while playback is paused, while the
+ * opener still reads the card out (`countdownHeld`), and for a learner on the
+ * card with the keyboard. The control bar's play / pause is the only pause
+ * control, so neither variant has a toggle of its own.
  */
 export const ProactiveCard = (props: ProactiveCardProps) =>
   props.variant === 'inline' ? (
@@ -62,31 +134,64 @@ export const ProactiveCard = (props: ProactiveCardProps) =>
     <PortalProactiveCard {...props} />
   );
 
+const primaryButton =
+  'flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-primary text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.98] cursor-pointer';
+const secondaryButton =
+  'h-9 shrink-0 rounded-[10px] border border-line bg-background px-4 text-[13px] font-medium text-fg-secondary transition-colors hover:bg-subtle hover:text-fg cursor-pointer';
+const quietButton =
+  'h-9 shrink-0 rounded-[10px] px-2 text-[13px] font-medium text-fg-tertiary transition-colors hover:bg-subtle hover:text-fg cursor-pointer';
+
+/** The chip naming what the card offers */
+function offerChipKey({
+  offer,
+  openedByTeacher,
+}: Pick<ProactiveCardCommonProps, 'offer' | 'openedByTeacher'>): string {
+  if (offer === 'quiz-review') return 'proactiveCard.review';
+  return offer === 'ask-learner' || openedByTeacher
+    ? 'proactiveCard.question'
+    : 'proactiveCard.discussion';
+}
+
 /**
  * The card's contents: a 3px countdown bar, avatar, name, 讨论 chip, the
- * seconds left, the topic and 加入讨论 / 跳过.
+ * seconds left, the topic and 加入讨论 / 跳过 (no bar or seconds when the
+ * card does not skip itself).
  */
 function ProactiveCardContent({
   action,
   mode,
   agentName,
   agentAvatar,
+  openedByTeacher,
+  offer,
+  autoSkip = true,
+  countdownHeld,
+  engaged,
   onSkip,
+  onAutoSkip,
   onListen,
-}: ProactiveCardCommonProps) {
+  onAnswer,
+}: ProactiveCardCommonProps & { engaged: boolean }) {
   const { t } = useI18n();
-  const { progress, remainingSeconds, isPaused } = useProactiveCountdown({ mode, onSkip });
+  const { progress, remainingSeconds, isPaused } = useProactiveCountdown({
+    mode,
+    onSkip: onAutoSkip ?? onSkip,
+    // Without auto-skip the countdown never runs
+    held: !autoSkip || !!countdownHeld || engaged,
+  });
 
   return (
     <>
-      <span
-        aria-hidden="true"
-        data-testid="proactive-card-progress"
-        className={`absolute top-0 left-0 h-[3px] transition-[width] duration-[50ms] ease-linear ${
-          isPaused ? 'bg-line-strong' : 'bg-amber-500'
-        }`}
-        style={{ width: `${progress}%` }}
-      />
+      {autoSkip && (
+        <span
+          aria-hidden="true"
+          data-testid="proactive-card-progress"
+          className={`absolute top-0 left-0 h-[3px] transition-[width] duration-[50ms] ease-linear ${
+            isPaused ? 'bg-line-strong' : 'bg-amber-500'
+          }`}
+          style={{ width: `${progress}%` }}
+        />
+      )}
       <div className="flex items-center gap-2">
         {agentAvatar && (
           <span className="size-6 shrink-0 overflow-hidden rounded-full ring-1 ring-amber-200 dark:ring-amber-500/40">
@@ -99,63 +204,119 @@ function ProactiveCardContent({
           </span>
         )}
         <span className="shrink-0 rounded-full bg-warning-soft px-1.5 text-[10px] leading-4 font-semibold text-warning">
-          {t('proactiveCard.discussion')}
+          {t(offerChipKey({ offer, openedByTeacher }))}
         </span>
         {/* A ticking number would be read out every second, so the time
             limit is stated once (below) instead */}
-        <span
-          aria-hidden="true"
-          className={`ml-auto shrink-0 text-xs font-semibold tabular-nums ${
-            isPaused ? 'text-fg-tertiary' : 'text-warning'
-          }`}
-        >
-          {remainingSeconds}s
+        {autoSkip && (
+          <span
+            aria-hidden="true"
+            className={`ml-auto shrink-0 text-xs font-semibold tabular-nums ${
+              isPaused ? 'text-fg-tertiary' : 'text-warning'
+            }`}
+          >
+            {remainingSeconds}s
+          </span>
+        )}
+      </div>
+      {autoSkip && (
+        <span className="sr-only">
+          {/* A keyboard or focus user on the card holds its countdown: say so */}
+          {engaged
+            ? t('proactiveCard.countdownPaused')
+            : t('proactiveCard.autoSkipHint', {
+                seconds: Math.round(DISCUSSION_AUTO_SKIP_MS / 1000),
+              })}
         </span>
-      </div>
-      <span className="sr-only">
-        {t('proactiveCard.autoSkipHint', { seconds: Math.round(DISCUSSION_AUTO_SKIP_MS / 1000) })}
-      </span>
+      )}
       <p className="text-sm leading-normal font-semibold text-fg">{action.topic}</p>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onListen}
-          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-primary text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.98] cursor-pointer"
-        >
-          <Play aria-hidden="true" className="size-3 fill-current" />
-          {t('proactiveCard.join')}
-        </button>
-        <button
-          type="button"
-          onClick={onSkip}
-          className="h-9 shrink-0 rounded-[10px] border border-line bg-background px-4 text-[13px] font-medium text-fg-secondary transition-colors hover:bg-subtle hover:text-fg cursor-pointer"
-        >
-          {t('proactiveCard.skip')}
-        </button>
-      </div>
+      {offer === 'ask-learner' ? (
+        // Both start the moment: the learner answers first, or hears the class first
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-testid="proactive-card-answer"
+            onClick={onAnswer ?? onListen}
+            className={primaryButton}
+          >
+            {t('proactiveCard.answerFirst')}
+          </button>
+          <button
+            type="button"
+            data-testid="proactive-card-listen"
+            onClick={onListen}
+            className={secondaryButton}
+          >
+            {t('proactiveCard.listenFirst')}
+          </button>
+          {/* Declining is always possible: the card never blocks the lecture */}
+          <button
+            type="button"
+            data-testid="proactive-card-skip"
+            onClick={onSkip}
+            className={quietButton}
+          >
+            {t('proactiveCard.skip')}
+          </button>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <button type="button" onClick={onListen} className={primaryButton}>
+            <Play aria-hidden="true" className="size-3 fill-current" />
+            {t(
+              offer === 'quiz-review'
+                ? 'proactiveCard.joinReview'
+                : openedByTeacher
+                  ? 'proactiveCard.joinTeacher'
+                  : 'proactiveCard.join',
+            )}
+          </button>
+          <button type="button" onClick={onSkip} className={secondaryButton}>
+            {t('proactiveCard.skip')}
+          </button>
+        </div>
+      )}
     </>
   );
+}
+
+/** The card's accessible name: who offers what */
+function offerLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  {
+    agentName,
+    openedByTeacher,
+    offer,
+  }: Pick<ProactiveCardCommonProps, 'agentName' | 'openedByTeacher' | 'offer'>,
+): string {
+  if (offer === 'quiz-review') return t('proactiveCard.reviewOfferLabel');
+  if (openedByTeacher || offer === 'ask-learner') {
+    return agentName
+      ? t('proactiveCard.teacherOfferLabel', { name: agentName })
+      : t('proactiveCard.question');
+  }
+  return agentName
+    ? t('proactiveCard.offerLabel', { name: agentName })
+    : t('proactiveCard.discussion');
 }
 
 /** The stream row */
 function InlineProactiveCard({ variant: _variant, ...props }: InlineProactiveCardProps) {
   const { t } = useI18n();
+  const { engaged, handlers } = useCardEngagement();
 
   return (
     <motion.div
       role="group"
-      aria-label={
-        props.agentName
-          ? t('proactiveCard.offerLabel', { name: props.agentName })
-          : t('proactiveCard.discussion')
-      }
+      aria-label={offerLabel(t, props)}
       data-testid="proactive-card-inline"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, transition: { duration: 0.15 } }}
       className={cn(cardSurface, 'shrink-0')}
+      {...handlers}
     >
-      <ProactiveCardContent {...props} />
+      <ProactiveCardContent {...props} engaged={engaged} />
     </motion.div>
   );
 }
@@ -172,6 +333,7 @@ function PortalProactiveCard({
   ...props
 }: PortalProactiveCardProps) {
   const { t } = useI18n();
+  const { engaged, handlers } = useCardEngagement();
 
   // Computed position state
   const [pos, setPos] = useState<{
@@ -228,15 +390,12 @@ function PortalProactiveCard({
       <div className="rounded-[14px] bg-background shadow-[0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
         <div
           role="group"
-          aria-label={
-            props.agentName
-              ? t('proactiveCard.offerLabel', { name: props.agentName })
-              : t('proactiveCard.discussion')
-          }
+          aria-label={offerLabel(t, props)}
           data-testid="proactive-card-portal"
           className={cardSurface}
+          {...handlers}
         >
-          <ProactiveCardContent {...props} />
+          <ProactiveCardContent {...props} engaged={engaged} />
         </div>
       </div>
       {/* Tail pointing at the anchor, in the card's (composited) fill */}

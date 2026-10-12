@@ -37,6 +37,14 @@ const CHROME_FILES = [
   'components/chat/chat-area.tsx',
   'components/chat/conversation-stream.tsx',
   'components/chat/chat-session.tsx',
+  'components/chat/proactive-card.tsx',
+  'components/classroom/interaction/composer.tsx',
+  'components/classroom/interaction/agent-mention-menu.tsx',
+  'components/classroom/interaction/classmate-card.tsx',
+  'components/classroom/interaction/participants.tsx',
+  'components/agent/auto-class-choices.tsx',
+  'components/edit/AgentsView/AgentRosterPanel.tsx',
+  'components/edit/AgentsView/PersonaUpgradePanel.tsx',
 ] as const;
 
 const LOCALES: Record<string, unknown> = {

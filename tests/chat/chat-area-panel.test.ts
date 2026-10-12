@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement, createRef, type ReactNode } from 'react';
+import { act, createElement, createRef, useContext, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,7 +7,10 @@ vi.mock('@/lib/hooks/use-i18n', () => ({ useI18n: () => ({ t: (key: string) => k
 vi.mock('@/lib/store', () => ({
   useStageStore: (selector: (state: { scenes: unknown[] }) => unknown) => selector({ scenes: [] }),
 }));
-vi.mock('@/lib/chat/lecture-notes', () => ({ buildLectureNotes: () => [] }));
+vi.mock('@/lib/chat/lecture-notes', () => ({
+  buildLectureNotes: () => [],
+  buildLectureNoteMoments: () => new Map(),
+}));
 vi.mock('@/components/chat/lecture-notes-view', () => ({
   LectureNotesView: () => createElement('div', { 'data-testid': 'notes' }),
 }));
@@ -34,6 +37,7 @@ vi.mock('@/components/chat/use-chat-sessions', () => ({
 }));
 
 import { ChatArea, type ChatAreaRef } from '@/components/chat/chat-area';
+import { ProactiveCardInViewContext } from '@/components/chat/use-proactive-countdown';
 
 describe('ChatArea panel: the 互动 tab behind 笔记 and a collapsed panel', () => {
   let container: HTMLDivElement;
@@ -61,14 +65,14 @@ describe('ChatArea panel: the 互动 tab behind 笔记 and a collapsed panel', (
   const offer = () => container.querySelector('[data-testid="offer"]');
   const interactionPanel = () => container.querySelector('[data-testid="stream"]')!.parentElement!;
 
-  it('keeps a pending 发起讨论 card mounted on 笔记 (its countdown keeps running) and flags 互动', () => {
+  it('keeps a pending 发起讨论 card mounted on 笔记 (its countdown frozen) and flags 互动', () => {
     const trailing = createElement('div', { 'data-testid': 'offer' });
     render({ streamTrailing: trailing });
     const card = offer();
     expect(card).not.toBeNull();
 
     act(() => ref.current!.switchToTab('notes'));
-    // Same node, only hidden: no remount, so no restarted countdown
+    // Same node, only hidden: no remount, so the countdown keeps where it stood
     expect(offer()).toBe(card);
     expect(interactionPanel().getAttribute('data-state')).toBe('inactive');
     expect(interactionPanel().className).toContain('data-[state=inactive]:hidden');
@@ -78,6 +82,42 @@ describe('ChatArea panel: the 互动 tab behind 笔记 and a collapsed panel', (
 
     render({ streamTrailing: undefined });
     expect(interactionTab.querySelector('.animate-ping')).toBeNull();
+  });
+
+  it("tells the stream's card when it can be seen: 互动 in front and the panel open", () => {
+    const seen: boolean[] = [];
+    function Card() {
+      seen.push(useContext(ProactiveCardInViewContext));
+      return createElement('div', { 'data-testid': 'offer' });
+    }
+    render({ streamTrailing: createElement(Card) });
+    expect(seen.at(-1)).toBe(true);
+    act(() => ref.current!.switchToTab('notes'));
+    expect(seen.at(-1)).toBe(false);
+    act(() => ref.current!.switchToTab('interaction'));
+    expect(seen.at(-1)).toBe(true);
+    render({ streamTrailing: createElement(Card), collapsed: true });
+    expect(seen.at(-1)).toBe(false);
+  });
+
+  it("shows the waiting moment's opener on 互动 instead of the bare dot while 笔记 is in front", () => {
+    const pendingOffer = { name: 'Mia', avatar: '/avatars/mia.png', label: 'Mia offers' };
+    const trailing = createElement('div', { 'data-testid': 'offer' });
+    render({ streamTrailing: trailing, pendingOffer });
+    const hint = () => container.querySelector('[data-testid="interaction-offer-hint"]');
+    // 互动 in front: the card itself is in view
+    expect(hint()).toBeNull();
+
+    act(() => ref.current!.switchToTab('notes'));
+    const interactionTab = container.querySelector('[role="tab"]')!;
+    expect(interactionTab.contains(hint())).toBe(true);
+    expect(hint()!.querySelector('img')?.getAttribute('src')).toBe('/avatars/mia.png');
+    expect(hint()!.querySelector('.sr-only')?.textContent).toBe('Mia offers');
+    // One hint, not the dot as well
+    expect(interactionTab.querySelectorAll('.animate-ping')).toHaveLength(1);
+
+    render({ streamTrailing: undefined, pendingOffer: null });
+    expect(hint()).toBeNull();
   });
 
   it('reports the composer going out of sight once per hide (笔记, then collapsing)', () => {

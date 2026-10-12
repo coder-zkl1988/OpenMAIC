@@ -54,6 +54,7 @@ import {
 } from '@/lib/hooks/use-classroom-layout';
 import { CourseGeneratingPlaceholder } from './CourseGeneratingPlaceholder';
 import { GenerationPausedNotice } from './GenerationPausedNotice';
+import { useOwnClassmatesNotice } from './use-own-classmates-notice';
 
 const log = createLogger('Classroom');
 
@@ -289,6 +290,10 @@ export function ClassroomSurface({
   // A course a server-side generation run produces: the classroom follows the
   // run (its scenes, media and pauses) and sends it Retry.
   const runCourse = useRunCourse({ classroomId, ready: !loading && !error });
+
+  // A course with its own classmates replaced the learner's preset ones: say
+  // so once, with the choice to always use the preset classmates
+  useOwnClassmatesNotice(!loading && !error && loadedClassroomId === classroomId);
 
   const view = resolveClassroomSurfaceView({
     variant,

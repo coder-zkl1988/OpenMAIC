@@ -11,12 +11,24 @@ const mocks = vi.hoisted(() => ({
     { name: string; id?: string; role?: string; priority?: number; avatar?: string }
   >,
   sendMessage: vi.fn(),
+  startDiscussion: vi.fn(),
   // The teaching assistant's aside, and the lecture-facing calls it must avoid
   sendAsideMessage: vi.fn(),
   endAsideSession: vi.fn(),
   resumeBuffer: vi.fn(),
   resumeActiveLiveBuffer: vi.fn(),
   ttsCleanup: vi.fn(),
+  announce: vi.fn((_text: string, _agentId: string | null, onSettled?: () => void) => {
+    onSettled?.();
+    return () => {};
+  }),
+  recordLectureMoment: vi.fn(),
+  canVoice: vi.fn((_agentId: string | null) => false),
+  /** The engine's 5th constructor argument (the classroom's tuning) */
+  engineTuning: undefined as
+    | { discussionTriggerDelayMs?: (trigger: Record<string, unknown>) => number }
+    | undefined,
+  beginLearnerDiscussion: vi.fn(() => true),
   whiteboardOpen: false,
   /** Who is drawing on the board (canvasStore.whiteboardDrawing) */
   whiteboardDrawing: null as { agentId?: string } | null,
@@ -102,6 +114,10 @@ const mocks = vi.hoisted(() => ({
   switchToTab: vi.fn(),
   confirmDiscussion: vi.fn(),
   skipDiscussion: vi.fn(),
+  /** The quiz review line the canvas (and its quiz view) sees (I11) */
+  quizReviewed: null as
+    | ((event: import('@/lib/quiz/review-moment').QuizReviewedEvent) => void)
+    | null,
 }));
 
 const textElement = {
@@ -264,9 +280,11 @@ vi.mock('@/components/stage/scene-sidebar', () => ({ SceneSidebar: () => null })
 vi.mock('@/components/header', () => ({ Header: () => null }));
 vi.mock('@/components/canvas/canvas-area', async () => {
   const React = await import('react');
+  const { QuizReviewContext } = await import('@/lib/quiz/review-moment');
   return {
     CanvasArea: (props: Record<string, unknown>) => {
       mocks.canvasProps = props;
+      mocks.quizReviewed = React.useContext(QuizReviewContext);
       return React.createElement(
         'button',
         {
@@ -399,8 +417,9 @@ vi.mock('@/components/chat/chat-area', async () => {
         endSession: mocks.endSession,
         startLecture: mocks.startLecture,
         addLectureMessage: vi.fn(),
+        recordLectureMoment: mocks.recordLectureMoment,
         getLectureMessageId: vi.fn(),
-        startDiscussion: vi.fn(),
+        startDiscussion: mocks.startDiscussion,
         switchToTab: mocks.switchToTab,
         resumeActiveLiveBuffer: mocks.resumeActiveLiveBuffer,
         sendAsideMessage: mocks.sendAsideMessage,
@@ -441,8 +460,10 @@ vi.mock('@/lib/playback', async () => ({
         onComplete?: () => void;
         onDiscussionEnd?: () => void;
       },
+      tuning?: typeof mocks.engineTuning,
     ) {
       mocks.engineOptions = options;
+      mocks.engineTuning = tuning;
       options.onModeChange?.(mocks.engineMode);
     }
     stop() {
@@ -572,8 +593,12 @@ vi.mock('@/lib/playback', async () => ({
     confirmDiscussion() {
       mocks.confirmDiscussion();
     }
-    skipDiscussion() {
-      mocks.skipDiscussion();
+    skipDiscussion(options?: { auto?: boolean }) {
+      if (options) mocks.skipDiscussion(options);
+      else mocks.skipDiscussion();
+    }
+    beginLearnerDiscussion() {
+      return mocks.beginLearnerDiscussion();
     }
   },
   computePlaybackView: () => ({ kind: 'idle', isTopicActive: mocks.topicActive }),
@@ -636,6 +661,9 @@ vi.mock('@/lib/hooks/use-discussion-tts', () => ({
     resume: vi.fn(),
     handleSegmentSealed: vi.fn(),
     shouldHold: vi.fn(() => false),
+    // The card's reading: nothing is heard here, so it settles at once
+    announce: mocks.announce,
+    canVoice: mocks.canVoice,
   }),
 }));
 vi.mock('@/lib/store/widget-iframe', () => ({
@@ -656,6 +684,9 @@ vi.mock('@/lib/config/feature-flags', () => ({
 }));
 
 import { toast } from 'sonner';
+import { DISCUSSION_TRIGGER_DELAY_MS } from '@/lib/choreography';
+import { MOMENT_ADVANCE_DELAY_MS } from '@/lib/playback/auto-resume';
+import { MOMENT_ANNOUNCE_LEAD_MS } from '@/components/chat/use-moment-announcement';
 import {
   PlaybackChromeRoot,
   type PlaybackChromeRootHandle,
@@ -687,6 +718,7 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     stageState.stage.whiteboard = [];
     mocks.sendMessage.mockReset();
     mocks.sendMessage.mockResolvedValue(undefined);
+    mocks.startDiscussion.mockReset();
     mocks.presentationDockProps = undefined;
     mocks.composerMounts = 0;
     for (const spy of [
@@ -709,6 +741,13 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.switchToTab.mockReset();
     mocks.confirmDiscussion.mockReset();
     mocks.skipDiscussion.mockReset();
+    mocks.recordLectureMoment.mockReset();
+    mocks.announce.mockClear();
+    mocks.canVoice.mockReset();
+    mocks.canVoice.mockReturnValue(false);
+    mocks.engineTuning = undefined;
+    mocks.beginLearnerDiscussion.mockReset();
+    mocks.beginLearnerDiscussion.mockReturnValue(true);
     settingsState.chatAreaCollapsed = false;
     settingsState.setChatAreaCollapsed.mockReset();
     mocks.canvasProps = undefined;
@@ -2268,6 +2307,68 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       act(() => (mocks.proactiveProps?.onSkip as () => void)());
       expect(mocks.skipDiscussion).toHaveBeenCalledOnce();
     });
+
+    it("gives a moment without an opener to the classroom's teacher, never a random student", async () => {
+      mocks.registryAgents = {
+        's-1': { id: 's-1', name: 'Mia', role: 'student', priority: 5 },
+        's-2': { id: 's-2', name: 'Leo', role: 'student', priority: 5 },
+        't-1': { id: 't-1', name: 'Ms. Lin', role: 'teacher', priority: 10 },
+      };
+      settingsState.selectedAgentIds = ['s-1', 's-2', 't-1'];
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      const options = mocks.engineOptions as unknown as {
+        onProactiveShow: (trigger: Record<string, unknown>) => void;
+        onDiscussionConfirmed: (topic: string, prompt?: string, agentId?: string) => void;
+        getLectureAgentId: () => string | null;
+      };
+      const trigger: Record<string, unknown> = { id: 'legacy-1', question: 'Guess what happens?' };
+      act(() => options.onProactiveShow(trigger));
+      // Named on the trigger itself: confirmDiscussion reads the same object
+      expect(trigger.agentId).toBe('t-1');
+      expect(mocks.proactiveProps).toMatchObject({
+        action: { agentId: 't-1' },
+        agentName: 'Ms. Lin',
+        openedByTeacher: true,
+        // The teacher names no classmate: a question to the whole class
+        offer: 'ask-learner',
+      });
+      // The lecture's narrator is the same person
+      expect(options.getLectureAgentId()).toBe('t-1');
+
+      act(() => options.onDiscussionConfirmed('Guess what happens?', 'Predict first', 't-1'));
+      expect(mocks.startDiscussion).toHaveBeenCalledExactlyOnceWith({
+        topic: 'Guess what happens?',
+        prompt: 'Predict first',
+        agentId: 't-1',
+        momentKind: 'ask-learner',
+      });
+    });
+
+    it("words a classmate's moment as their discussion, and leaves no opener unresolved as none", async () => {
+      mocks.registryAgents = {
+        's-1': { id: 's-1', name: 'Mia', role: 'student', priority: 5 },
+      };
+      settingsState.selectedAgentIds = ['s-1'];
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      const options = mocks.engineOptions as unknown as {
+        onProactiveShow: (trigger: Record<string, unknown>) => void;
+        onDiscussionConfirmed: (topic: string, prompt?: string, agentId?: string) => void;
+      };
+      act(() => options.onProactiveShow({ id: 'm-1', question: 'Wait, why?', agentId: 's-1' }));
+      expect(mocks.proactiveProps).toMatchObject({ openedByTeacher: false });
+
+      // Nothing resolves (no selected agent is known): the chat layer decides
+      settingsState.selectedAgentIds = [];
+      act(() => options.onDiscussionConfirmed('Why?', undefined, undefined));
+      expect(mocks.startDiscussion).toHaveBeenLastCalledWith({
+        topic: 'Why?',
+        prompt: undefined,
+        agentId: undefined,
+        momentKind: 'lecture',
+      });
+    });
   });
 
   describe('a bare raised hand (举手 without a question)', () => {
@@ -2469,16 +2570,22 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     });
 
     it('names the discussion the hand jumped ahead of, and hands it back when offered again', async () => {
-      mocks.registryAgents = { 'default-1': { name: 'Kai' } };
+      mocks.registryAgents = {
+        'student-1': { id: 'student-1', name: 'Mia', role: 'student', priority: 5 },
+        'default-1': { id: 'default-1', name: 'Kai', role: 'teacher', priority: 10 },
+      };
+      settingsState.selectedAgentIds = ['student-1', 'default-1'];
       await raiseWhilePlaying();
       const trigger: { id: string; question: string; agentId?: string } = {
         id: 'trigger-1',
         question: 'Why green?',
       };
       callAtBoundary(trigger);
-      // The agent is picked now, so the card offered later names the same one
+      // A moment without its opener is the teacher's (never a random
+      // student). It is named now, so the card offered later names the same one
       expect(trigger.agentId).toBe('default-1');
-      expect(mocks.participantsProps?.discussionAgentId).toBe('default-1');
+      // The teacher's moment keeps their tile on their role (the card asks the question)
+      expect(mocks.participantsProps?.discussionAgentId).toBeUndefined();
       // The row names whose discussion now waits behind the learner
       expect(container.querySelector('[data-testid="stream-hand-raised"]')?.textContent).toBe(
         'stage.handRaise.aheadOfDiscussion',
@@ -2494,7 +2601,11 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
         onProactiveShow: (trigger: Record<string, unknown>) => void;
       };
       act(() => options.onProactiveShow(trigger));
-      expect(mocks.proactiveProps).toMatchObject({ action: { agentId: 'default-1' } });
+      expect(mocks.proactiveProps).toMatchObject({
+        action: { agentId: 'default-1' },
+        // The teacher's moment is worded as the teacher's question
+        openedByTeacher: true,
+      });
       expect(container.querySelector('[data-testid="stream-hand-raised"]')).toBeNull();
     });
 
@@ -2750,6 +2861,51 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       expect(mocks.confirmDiscussion).toHaveBeenCalledOnce();
       act(() => (mocks.presentationDockProps?.onDiscussionSkip as () => void)());
       expect(mocks.skipDiscussion).toHaveBeenCalledOnce();
+    });
+
+    it('leaves a fullscreen question to the teacher: the aside would not be seen there', async () => {
+      mocks.registryAgents = {
+        'default-1': { id: 'default-1', name: 'Teacher', role: 'teacher', priority: 10 },
+        'default-2': { id: 'default-2', name: 'AI助教', role: 'assistant', priority: 7 },
+      };
+      settingsState.selectedAgentIds = ['default-1', 'default-2'];
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      expect(mocks.composerProps?.assistantAnswers).toBe(true);
+      await togglePresentation();
+      expect(mocks.composerProps?.assistantAnswers).toBe(false);
+
+      act(() => {
+        mocks.lastSendResult = (mocks.composerProps?.onMessageSend as (message: string) => unknown)(
+          'Why are leaves green?',
+        );
+      });
+      expect(mocks.sendAsideMessage).not.toHaveBeenCalled();
+      // The teacher takes it at the end of the line, as without an assistant
+      expect(mocks.lastSendResult).toBe('queued');
+    });
+
+    it("keeps the director's question and its replies readable in the dock", async () => {
+      await renderOwner();
+      await togglePresentation();
+      const onCueUser = mocks.chatAreaProps?.onCueUser as (from?: string, prompt?: string) => void;
+      act(() => onCueUser(undefined, 'What would you predict?'));
+      expect(mocks.presentationDockProps?.isCueUser).toBe(true);
+      const cueQuestion = mocks.presentationDockProps?.cueQuestion as {
+        props: Record<string, unknown>;
+      };
+      expect(cueQuestion.props.directorCue).toEqual({ prompt: 'What would you predict?' });
+      expect(cueQuestion.props.quickReplies).toEqual([
+        'stage.handRaise.cueReplies.unsure',
+        'stage.handRaise.cueReplies.hint',
+      ]);
+      // "Let me think" opens the dock's card, and sends nothing
+      act(() => (cueQuestion.props.onThink as () => void)());
+      expect(mocks.dockOpenText).toHaveBeenCalledOnce();
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+      act(() => onCueUser(undefined));
+      expect(mocks.presentationDockProps?.cueQuestion).toBeUndefined();
     });
   });
 
@@ -3107,6 +3263,472 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe('class moments: heard, frozen out of sight, recorded, and back to the course', () => {
+    type Trigger = { id: string; question: string; prompt?: string; agentId?: string };
+    type MomentOptions = {
+      onProactiveShow: (trigger: Trigger) => void;
+      onDiscussionOutcome: (trigger: Trigger, outcome: string) => void;
+      onDiscussionEnd: () => void;
+    };
+    const momentOptions = () => mocks.engineOptions as unknown as MomentOptions;
+
+    function withClassroom() {
+      mocks.registryAgents = {
+        's-1': { id: 's-1', name: 'Mia', role: 'student', priority: 5, avatar: '/mia.png' },
+        't-1': { id: 't-1', name: 'Ms. Lin', role: 'teacher', priority: 10, avatar: '/lin.png' },
+      };
+      settingsState.selectedAgentIds = ['s-1', 't-1'];
+    }
+
+    it("records how each moment ended on the page's lecture bubble (a legacy one is the teacher's)", async () => {
+      withClassroom();
+      await renderOwner();
+      act(() =>
+        momentOptions().onDiscussionOutcome(
+          { id: 'm-1', question: 'Why?', prompt: 'Predict', agentId: 's-1' },
+          'auto_skipped',
+        ),
+      );
+      expect(mocks.recordLectureMoment).toHaveBeenLastCalledWith(
+        'scene-1',
+        { type: 'discussion', id: 'm-1', topic: 'Why?', prompt: 'Predict', agentId: 's-1' },
+        { agentId: 's-1', outcome: 'auto_skipped' },
+      );
+      act(() => momentOptions().onDiscussionOutcome({ id: 'm-2', question: 'Guess?' }, 'skipped'));
+      expect(mocks.recordLectureMoment).toHaveBeenLastCalledWith(
+        'scene-1',
+        { type: 'discussion', id: 'm-2', topic: 'Guess?' },
+        { agentId: 't-1', outcome: 'skipped' },
+      );
+    });
+
+    it('shows a voiced card sooner, and only when its opener can be heard', async () => {
+      withClassroom();
+      await renderOwner();
+      const delay = mocks.engineTuning!.discussionTriggerDelayMs!;
+      expect(delay({ id: 'm-1', question: 'Why?', agentId: 's-1' })).toBe(
+        DISCUSSION_TRIGGER_DELAY_MS,
+      );
+      mocks.canVoice.mockReturnValue(true);
+      await rerenderOwner();
+      expect(delay({ id: 'm-1', question: 'Why?', agentId: 's-1' })).toBe(MOMENT_ANNOUNCE_LEAD_MS);
+      // A legacy moment is read by the teacher
+      delay({ id: 'm-2', question: 'Guess?' });
+      expect(mocks.canVoice).toHaveBeenLastCalledWith('t-1');
+    });
+
+    it("reads the card in its opener's voice: the tile speaks, the countdown waits, then auto-skips", async () => {
+      withClassroom();
+      mocks.engineMode = 'playing';
+      let settle: (() => void) | undefined;
+      const cancel = vi.fn();
+      mocks.announce.mockImplementationOnce((_text, _agentId, onSettled) => {
+        settle = onSettled;
+        return cancel;
+      });
+      await renderOwner();
+      act(() => momentOptions().onProactiveShow({ id: 'm-1', question: 'Why?', agentId: 's-1' }));
+      expect(mocks.announce).toHaveBeenCalledWith('Why?', 's-1', expect.any(Function));
+      expect(mocks.proactiveProps?.countdownHeld).toBe(true);
+      expect(mocks.participantsProps?.announcingAgentId).toBe('s-1');
+
+      await act(async () => {
+        settle?.();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(mocks.proactiveProps?.countdownHeld).toBe(false);
+      expect(mocks.participantsProps?.announcingAgentId).toBeNull();
+
+      // The countdown running out is an auto skip
+      act(() => (mocks.proactiveProps?.onAutoSkip as () => void)());
+      expect(mocks.skipDiscussion).toHaveBeenCalledExactlyOnceWith({ auto: true });
+      // The card goes: its reading stops
+      act(() =>
+        (mocks.engineOptions as unknown as { onProactiveHide: () => void }).onProactiveHide(),
+      );
+      expect(cancel).toHaveBeenCalledOnce();
+    });
+
+    it("points at a card waiting in the collapsed panel with its opener's avatar", async () => {
+      withClassroom();
+      settingsState.chatAreaCollapsed = true;
+      await renderOwner();
+      act(() => momentOptions().onProactiveShow({ id: 'm-1', question: 'Why?', agentId: 's-1' }));
+      expect(mocks.chatAreaProps?.pendingOffer).toMatchObject({
+        name: 'Mia',
+        avatar: '/mia.png',
+        label: 'proactiveCard.offerLabel',
+      });
+      // Revealing the card already expanded the panel; collapsed again by hand
+      settingsState.setChatAreaCollapsed.mockClear();
+      const hint = container.querySelector('[data-testid="collapsed-offer-hint"]') as HTMLElement;
+      expect(hint).not.toBeNull();
+      expect(hint.getAttribute('aria-label')).toBe('proactiveCard.offerLabel');
+      act(() => hint.click());
+      expect(settingsState.setChatAreaCollapsed).toHaveBeenCalledWith(false);
+      expect(mocks.switchToTab).toHaveBeenCalledWith('interaction');
+    });
+
+    async function endJoinedMoment(source: string, endReason = 'user_done') {
+      act(() =>
+        momentOptions().onDiscussionOutcome(
+          { id: 'm-1', question: 'Why?', agentId: 's-1' },
+          'joined',
+        ),
+      );
+      mocks.engineExhausted = true;
+      await act(async () => {
+        await (mocks.chatAreaProps?.onStopSession as (payload: unknown) => Promise<void>)({
+          sessionId: 'disc-1',
+          source,
+          endReason,
+        });
+      });
+    }
+
+    it('moves on to the next page after a joined moment closes, counting down in the caption', async () => {
+      vi.useFakeTimers();
+      settingsState.autoPlayLecture = true;
+      try {
+        withClassroom();
+        await renderOwner();
+        const before = Date.now();
+        await endJoinedMoment('soft_close_timeout');
+        const deadline = captionElementProps()?.lectureResumeDeadline as number;
+        expect(deadline - before).toBe(MOMENT_ADVANCE_DELAY_MS);
+
+        // The page completes as if its last line had just played, so onComplete
+        // turns it as the countdown ends
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(MOMENT_ADVANCE_DELAY_MS - 1500 - 10);
+        });
+        expect(mocks.engineContinuePlayback).not.toHaveBeenCalled();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(20);
+        });
+        expect(mocks.engineContinuePlayback).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stays put without auto-play, after a manual stop, or once the learner starts typing', async () => {
+      vi.useFakeTimers();
+      try {
+        withClassroom();
+        await renderOwner();
+        // Auto-play off
+        await endJoinedMoment('soft_close_confirmed');
+        expect(captionElementProps()?.lectureResumeDeadline).toBeUndefined();
+
+        settingsState.autoPlayLecture = true;
+        await endJoinedMoment('manual_stop');
+        expect(captionElementProps()?.lectureResumeDeadline).toBeUndefined();
+
+        // A skipped moment is not followed: the lecture already went on
+        act(() => momentOptions().onDiscussionOutcome({ id: 'm-2', question: 'Hm?' }, 'skipped'));
+        await act(async () => {
+          await (mocks.chatAreaProps?.onStopSession as (payload: unknown) => Promise<void>)({
+            sessionId: 'qa-1',
+            source: 'soft_close_timeout',
+            endReason: 'user_done',
+          });
+        });
+        expect(captionElementProps()?.lectureResumeDeadline).toBeUndefined();
+
+        await endJoinedMoment('soft_close_confirmed');
+        expect(captionElementProps()?.lectureResumeDeadline).toBeDefined();
+        act(() => (mocks.composerProps?.onInputActivate as (kind: 'text') => void)('text'));
+        expect(captionElementProps()?.lectureResumeDeadline).toBeUndefined();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(MOMENT_ADVANCE_DELAY_MS * 2);
+        });
+        expect(mocks.engineContinuePlayback).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('opens a moment the learner let pass from the notes, interrupting the lecture like a question', async () => {
+      withClassroom();
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      expect(mocks.chatAreaProps?.canDiscussMoment).toBe(true);
+      const describeAgent = mocks.chatAreaProps?.describeAgent as (
+        agentId?: string,
+      ) => { name: string; avatar?: string } | undefined;
+      expect(describeAgent('s-1')).toEqual({ name: 'Mia', avatar: '/mia.png' });
+      // No opener: the teacher
+      expect(describeAgent()).toEqual({ name: 'Ms. Lin', avatar: '/lin.png' });
+
+      const moment = {
+        sceneId: 'scene-1',
+        actionId: 'm-1',
+        topic: 'Why do they cancel?',
+        prompt: 'Predict',
+        agentId: 's-1',
+        outcome: 'skipped',
+      };
+      await act(async () => {
+        (mocks.chatAreaProps?.onDiscussMoment as (value: typeof moment) => void)(moment);
+        await Promise.resolve();
+      });
+      expect(mocks.beginLearnerDiscussion).toHaveBeenCalledOnce();
+      expect(mocks.startDiscussion).toHaveBeenCalledExactlyOnceWith({
+        topic: 'Why do they cancel?',
+        prompt: 'Predict',
+        agentId: 's-1',
+        momentKind: 'lecture',
+      });
+      expect(mocks.recordLectureMoment).toHaveBeenCalledWith(
+        'scene-1',
+        {
+          type: 'discussion',
+          id: 'm-1',
+          topic: 'Why do they cancel?',
+          prompt: 'Predict',
+          agentId: 's-1',
+        },
+        { agentId: 's-1', outcome: 'joined' },
+      );
+    });
+  });
+
+  describe('persona moments: the question to the class, the cue, the quiz review, the lecture heard', () => {
+    type DiscussionOptions = {
+      onProactiveShow: (trigger: Record<string, unknown>) => void;
+      onDiscussionConfirmed: (topic: string, prompt?: string, agentId?: string) => void;
+      onProgress: (snapshot: { actionIndex: number; sceneId: string }) => void;
+    };
+    const discussionOptions = () => mocks.engineOptions as unknown as DiscussionOptions;
+
+    function withClass() {
+      mocks.registryAgents = {
+        's-1': { id: 's-1', name: 'Mia', role: 'student', priority: 5 },
+        's-2': { id: 's-2', name: 'Leo', role: 'student', priority: 5 },
+        't-1': { id: 't-1', name: 'Ms. Lin', role: 'teacher', priority: 10 },
+      };
+      settingsState.selectedAgentIds = ['s-1', 's-2', 't-1'];
+    }
+
+    afterEach(() => {
+      settingsState.autoPlayLecture = false;
+      mocks.confirmDiscussion.mockReset();
+    });
+
+    it("waits for a watching learner on the teacher's whole-class question, and sends their choice", async () => {
+      withClass();
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      act(() =>
+        discussionOptions().onProactiveShow({
+          id: 'ask-1',
+          question: 'What do you predict happens to the beam?',
+          prompt: 'Predict first',
+          agentId: 't-1',
+        }),
+      );
+      // No countdown: the card waits for the learner, with two ways in
+      expect(mocks.proactiveProps).toMatchObject({ offer: 'ask-learner', autoSkip: false });
+      // The teacher asking the class is not "wanting to speak"
+      expect(mocks.participantsProps?.discussionAgentId).toBeUndefined();
+
+      // 我来答: confirmDiscussion starts the moment with the learner's choice
+      mocks.confirmDiscussion.mockImplementationOnce(() =>
+        discussionOptions().onDiscussionConfirmed(
+          'What do you predict happens to the beam?',
+          'Predict first',
+          't-1',
+        ),
+      );
+      act(() => (mocks.proactiveProps?.onAnswer as () => void)());
+      expect(mocks.confirmDiscussion).toHaveBeenCalledOnce();
+      expect(mocks.startDiscussion).toHaveBeenLastCalledWith({
+        topic: 'What do you predict happens to the beam?',
+        prompt: 'Predict first',
+        agentId: 't-1',
+        momentKind: 'ask-learner',
+        learnerStance: 'answer',
+      });
+
+      // 先听听大家: the class first
+      mocks.confirmDiscussion.mockImplementationOnce(() =>
+        discussionOptions().onDiscussionConfirmed('What do you predict?', undefined, 't-1'),
+      );
+      act(() => (mocks.proactiveProps?.onListen as () => void)());
+      expect(mocks.startDiscussion).toHaveBeenLastCalledWith({
+        topic: 'What do you predict?',
+        prompt: undefined,
+        agentId: 't-1',
+        momentKind: 'ask-learner',
+        learnerStance: 'listen',
+      });
+      // The choice is spent: a later moment carries none
+      act(() => discussionOptions().onDiscussionConfirmed('Guess again?', undefined, 't-1'));
+      expect(mocks.startDiscussion).toHaveBeenLastCalledWith({
+        topic: 'Guess again?',
+        prompt: undefined,
+        agentId: 't-1',
+        momentKind: 'ask-learner',
+      });
+    });
+
+    it('never skips a whole-class question by itself, even with page autoplay on; the learner may', async () => {
+      withClass();
+      settingsState.autoPlayLecture = true;
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      act(() =>
+        discussionOptions().onProactiveShow({ id: 'ask-1', question: 'Guess?', agentId: 't-1' }),
+      );
+      expect(mocks.proactiveProps).toMatchObject({ offer: 'ask-learner', autoSkip: false });
+
+      // 跳过: a user skip, so the lecture goes on
+      act(() => (mocks.proactiveProps?.onSkip as () => void)());
+      expect(mocks.skipDiscussion).toHaveBeenCalledExactlyOnceWith();
+      expect(mocks.confirmDiscussion).not.toHaveBeenCalled();
+    });
+
+    it('keeps a teacher calling on a named classmate as that classmate’s moment', async () => {
+      withClass();
+      mocks.engineMode = 'playing';
+      await renderOwner();
+      act(() =>
+        discussionOptions().onProactiveShow({
+          id: 'call-1',
+          question: 'mia, what do you think?',
+          agentId: 't-1',
+        }),
+      );
+      expect(mocks.proactiveProps?.offer).toBeUndefined();
+      expect(mocks.proactiveProps?.autoSkip).toBe(true);
+      act(() => (mocks.proactiveProps?.onListen as () => void)());
+      expect(mocks.confirmDiscussion).toHaveBeenCalledOnce();
+      act(() => discussionOptions().onDiscussionConfirmed('mia, what do you think?', '', 't-1'));
+      expect(mocks.startDiscussion).toHaveBeenLastCalledWith(
+        expect.objectContaining({ momentKind: 'lecture' }),
+      );
+    });
+
+    it("shows the cue's question with quick replies, and a neutral hand-back without one", async () => {
+      withClass();
+      await renderOwner();
+      const onCueUser = mocks.chatAreaProps?.onCueUser as (from?: string, prompt?: string) => void;
+      act(() => onCueUser('s-1', '  What would you predict?  '));
+      const cue = container.querySelector('[data-testid="stream-cue"]');
+      expect(cue?.getAttribute('data-cue')).toBe('asked');
+      expect(cue?.textContent).toContain('stage.handRaise.askedBy');
+      // Never "the class is paused" for the director's cue
+      expect(mocks.composerProps?.cueStatusText).toBe('stage.composer.cueAsked');
+      // The box invites an answer to that question
+      expect(mocks.composerProps?.cueAsksLearner).toBe(true);
+      const think = container.querySelector('[data-testid="stream-cue-think"]');
+      expect(think?.textContent).toBe('stage.handRaise.cueReplies.think');
+      const replies = [...container.querySelectorAll('[data-testid="stream-cue-reply"]')];
+      expect(replies.map((reply) => reply.textContent)).toEqual([
+        'stage.handRaise.cueReplies.unsure',
+        'stage.handRaise.cueReplies.hint',
+      ]);
+      // A quick reply goes out as the learner's message
+      await act(async () => {
+        (replies[0] as HTMLButtonElement).click();
+        await Promise.resolve();
+      });
+      expect(mocks.sendMessage).toHaveBeenCalledOnce();
+      expect(mocks.sendMessage.mock.calls[0][0]).toBe('stage.handRaise.cueReplies.unsure');
+
+      // "Let me think" sends nothing: the composer, the learner's time, the question still open
+      mocks.sendMessage.mockClear();
+      act(() => onCueUser('s-1', 'And now?'));
+      await act(async () => {
+        (container.querySelector('[data-testid="stream-cue-think"]') as HTMLButtonElement).click();
+        await Promise.resolve();
+      });
+      expect(mocks.sendMessage).not.toHaveBeenCalled();
+      expect(mocks.focusComposer).toHaveBeenCalledOnce();
+      expect(container.querySelector('[data-testid="stream-cue"]')?.getAttribute('data-cue')).toBe(
+        'asked',
+      );
+      expect(container.querySelector('[data-testid="stream-cue-think"]')).toBeNull();
+      expect(container.querySelector('[data-testid="stream-cue-reply"]')).toBeNull();
+
+      act(() => onCueUser('s-1'));
+      expect(container.querySelector('[data-testid="stream-cue"]')?.getAttribute('data-cue')).toBe(
+        'hand-back',
+      );
+      expect(container.querySelector('[data-testid="stream-cue-reply"]')).toBeNull();
+      expect(mocks.composerProps?.cueStatusText).toBe('stage.composer.cueHandBack');
+      expect(mocks.composerProps?.cueAsksLearner).toBe(false);
+    });
+
+    it('offers a skippable review after a quiz graded with wrong answers', async () => {
+      withClass();
+      await renderOwner();
+      expect(mocks.quizReviewed).toBeTypeOf('function');
+      const misses: import('@/lib/quiz/review-moment').QuizReviewMiss[] = [
+        {
+          questionId: 'q2',
+          number: 2,
+          question: 'Where does photosynthesis happen?',
+          type: 'single',
+          aiGraded: false,
+        },
+        {
+          questionId: 'q4',
+          number: 4,
+          question: 'Explain why leaves look green.',
+          type: 'short_answer',
+          aiGraded: true,
+        },
+      ];
+      // Another page's quiz offers nothing here
+      act(() => mocks.quizReviewed?.({ stageId: 'stage-1', sceneId: 'scene-2', misses }));
+      expect(mocks.chatAreaProps?.streamTrailing).toBeUndefined();
+
+      act(() => mocks.quizReviewed?.({ stageId: 'stage-1', sceneId: 'scene-1', misses }));
+      expect(mocks.proactiveProps).toMatchObject({
+        offer: 'quiz-review',
+        autoSkip: false,
+        action: { topic: 'quizReview.topic' },
+      });
+      expect((mocks.proactiveProps?.action as { agentId?: string }).agentId).toBeUndefined();
+
+      // 跳过: the offer goes away
+      act(() => (mocks.proactiveProps?.onSkip as () => void)());
+      expect(mocks.skipDiscussion).not.toHaveBeenCalled();
+      expect(mocks.chatAreaProps?.streamTrailing).toBeUndefined();
+
+      // 一起复盘: no opener (the director picks), the missed questions for the director
+      act(() => mocks.quizReviewed?.({ stageId: 'stage-1', sceneId: 'scene-1', misses }));
+      await act(async () => {
+        (mocks.proactiveProps?.onListen as () => void)();
+        await Promise.resolve();
+      });
+      expect(mocks.confirmDiscussion).not.toHaveBeenCalled();
+      expect(mocks.startDiscussion).toHaveBeenCalledOnce();
+      const request = mocks.startDiscussion.mock.calls[0][0] as Record<string, string>;
+      expect(request).toMatchObject({
+        topic: 'quizReview.topic',
+        agentId: undefined,
+        momentKind: 'quiz-review',
+      });
+      expect(request.prompt).toContain('Q2 (single choice)');
+      expect(request.prompt).toContain('the grading may be inaccurate');
+      expect(request).not.toHaveProperty('learnerStance');
+      expect(mocks.chatAreaProps?.streamTrailing).toBeUndefined();
+    });
+
+    it('says how far the lecture got on this page, once it has been heard', async () => {
+      withClass();
+      await renderOwner();
+      const getLectureProgress = () => (mocks.chatAreaProps?.getLectureProgress as () => unknown)();
+      // Nothing played yet on this page
+      expect(getLectureProgress()).toBeNull();
+      act(() => discussionOptions().onProgress({ actionIndex: 3, sceneId: 'scene-1' }));
+      expect(getLectureProgress()).toEqual({ sceneId: 'scene-1', actionIndex: 3 });
     });
   });
 });

@@ -285,7 +285,15 @@
       "pageLabel": "Seite {{n}}",
       "currentPage": "Aktuell",
       "jumpToLine": "Zu dieser Zeile springen",
-      "jumpUnavailable": "Für diese Zeile ist kein Sprung verfügbar"
+      "jumpUnavailable": "Für diese Zeile ist kein Sprung verfügbar",
+      "discussNow": "Jetzt besprechen",
+      "discussNowBusy": "Beende zuerst das laufende Gespräch",
+      "momentOutcome": {
+        "joined": "Teilgenommen",
+        "skipped": "Übersprungen",
+        "autoSkipped": "Verpasst",
+        "notShown": "Nicht in dieser Klasse"
+      }
     },
     "badge": {
       "qa": "Q&A",
@@ -337,7 +345,22 @@
     "join": "Mitmachen",
     "skip": "Überspringen",
     "offerLabel": "{{name}} möchte eine Diskussion beginnen",
-    "autoSkipHint": "Wird in {{seconds}} Sekunden automatisch übersprungen"
+    "autoSkipHint": "Wird in {{seconds}} Sekunden automatisch übersprungen",
+    "countdownPaused": "Countdown angehalten: wähle, wenn du so weit bist",
+    "question": "Frage",
+    "joinTeacher": "Mitdenken",
+    "teacherOfferLabel": "{{name}} stellt eine Frage",
+    "review": "Nachbesprechung",
+    "joinReview": "Gemeinsam durchgehen",
+    "reviewOfferLabel": "Quiz-Nachbesprechung",
+    "answerFirst": "Ich antworte",
+    "listenFirst": "Erst die anderen hören"
+  },
+  "quizReview": {
+    "topic": "Schauen wir uns die falsch beantworteten Fragen an: {{questions}}",
+    "question": "Frage {{n}} „{{text}}“",
+    "separator": "; ",
+    "more": " und {{count}} weitere"
   },
   "voice": {
     "startListening": "Spracheingabe",
@@ -387,7 +410,10 @@
       "lowerHand": "Senken",
       "lowerHandHint": "Hand senken und Frage zurückziehen",
       "cuePlaceholder": "Frage sprechen oder eingeben",
+      "answerPlaceholder": "Sag oder schreib deine Antwort",
       "cueStatus": "Du bist dran · Unterricht pausiert",
+      "cueAsked": "{{name}} wartet auf deine Antwort",
+      "cueHandBack": "Du bist dran · sag, was dir einfällt",
       "send": "Senden",
       "cancelRecording": "Aufnahme abbrechen",
       "handRaised": "Gemeldet · du bist nach diesem Satz dran",
@@ -396,6 +422,8 @@
       "raisedPlaceholder": "Du kannst deine Frage schon aufschreiben...",
       "followUpPlaceholder": "Nachfrage stellen...",
       "referencePlaceholder": "{{type}}: Was möchtest du dazu fragen?",
+      "mentionMenu": "Wen fragen",
+      "mentionPlaceholder": "Frage eingeben oder mit @ jemanden direkt fragen",
       "handLowered": "Hand gesenkt"
     },
     "handRaise": {
@@ -405,7 +433,14 @@
       "pendingQuestion": "In der Warteschlange · Antwort nach diesem Satz",
       "pendingQuestionStep": "In der Warteschlange · Antwort nach diesem Schritt",
       "assistantPrompt": "Stell mir deine Frage, ich helfe dir weiter.",
-      "assistantAnswering": "Die Assistenz antwortet…"
+      "assistantAnswering": "Die Assistenz antwortet…",
+      "askedBy": "{{name}} fragt dich: {{prompt}}",
+      "handBack": "{{name}} gibt an dich weiter",
+      "cueReplies": {
+        "think": "Lass mich kurz nachdenken…",
+        "unsure": "Ich bin mir nicht sicher",
+        "hint": "Gib mir einen Tipp"
+      }
     },
     "participants": {
       "label": "Teilnehmende",
@@ -414,7 +449,9 @@
       "answering": "Antwortet",
       "wantsToSpeak": "Möchte sprechen",
       "handRaised": "Meldet sich",
-      "more": "{{count}} weitere Teilnehmende"
+      "more": "{{count}} weitere Teilnehmende",
+      "cardLabel": "{{name}}, {{status}}",
+      "askThem": "{{name}} fragen"
     },
     "generating": "Wird generiert...",
     "paused": "Pausiert",
@@ -428,7 +465,12 @@
     "exitFullscreen": "Vollbild beenden",
     "editCourse": "Kurs bearbeiten",
     "doneEditing": "Bearbeitung abschließen",
-    "proModeDisabledHint": "Diese Seite kann nicht bearbeitet werden — öffne eine Kursfolie, um sie im Pro-Modus zu bearbeiten."
+    "proModeDisabledHint": "Diese Seite kann nicht bearbeitet werden — öffne eine Kursfolie, um sie im Pro-Modus zu bearbeiten.",
+    "ownClassmates": {
+      "title": "Dieser Kurs hat eigene Mitschüler",
+      "description": "Deine voreingestellten Mitschüler bleiben für neue Kurse und für Kurse ohne eigene Mitschüler erhalten.",
+      "alwaysPreset": "Immer meine voreingestellten Mitschüler verwenden"
+    }
   },
   "edit": {
     "proMode": "Pro",
@@ -821,7 +863,7 @@
       "count": "Anzahl: {{count}}",
       "editHint": "Zum Bearbeiten ein Mitglied anklicken",
       "personaLabel": "Persona",
-      "personaPlaceholder": "Persönlichkeit der Rolle, Lehrstil und Aufgaben beschreiben…",
+      "personaPlaceholder": "Diese Person beschreiben: Temperament, wie sie spricht, was sie schon weiß und noch nicht weiß, wann sie sich zu Wort meldet.",
       "noPersona": "Noch keine Persona",
       "unnamed": "Unbenannt",
       "teacherBadge": "Leitung",
@@ -830,7 +872,29 @@
       "removeFromClass": "Aus dem Kurs entfernen",
       "aiClassmates": "KI-Mitlernende · {{count}}",
       "addRole": "Rolle hinzufügen",
-      "shortTitle": "Roster"
+      "upgrade": {
+        "action": "Als echte Menschen neu schreiben",
+        "actionHint": "Jede Persona als glaubwürdigen Menschen neu schreiben: Temperament, Sprechweise, Wissensstand. Jede Änderung wird vorher angezeigt.",
+        "loading": "Personas werden neu geschrieben…",
+        "previewTitle": "Vorschau der neuen Personas",
+        "previewHint": "Nur die Personas ändern sich; Namen, Avatare und Stimmen bleiben. Lässt sich danach rückgängig machen.",
+        "now": "Jetzt",
+        "rewritten": "Neu geschrieben",
+        "apply": "Übernehmen",
+        "failed": "Die Personas konnten nicht neu geschrieben werden. Bitte erneut versuchen.",
+        "invalid": "Diese Liste kann nicht neu geschrieben werden. Haben alle einen Namen und eine Rolle?"
+      },
+      "shortTitle": "Roster",
+      "impact": {
+        "title": "Wo das Kursskript dieses Mitglied verwendet",
+        "moments": "Unterrichtsmomente, die {{name}} eröffnet: {{count}}",
+        "mentions": "Zeilen, die {{name}} erwähnen: {{count}}. Bereits erzeugte Erzählung und Stimme ändern sich nicht.",
+        "handToTeacher": "Lehrkraft eröffnen lassen",
+        "dropMoments": "Diese Momente auch entfernen",
+        "removeAnyway": "Trotzdem entfernen",
+        "renameMentions": "Zeilen, die noch „{{name}}“ sagen: {{count}}. Bereits erzeugte Erzählung und Stimme behalten den alten Namen.",
+        "renameAnyway": "Trotzdem umbenennen"
+      }
     },
     "elementRef": {
       "remove": "移除引用 {{label}}",
@@ -1394,6 +1458,14 @@
     "agentModeAutoDesc": "Die KI generiert automatisch passende Rollen",
     "autoAgentCount": "Anzahl der Agenten",
     "autoAgentCountDesc": "Anzahl der automatisch zu generierenden Agenten (einschließlich Lehrkraft)",
+    "autoAgentCountAuto": "KI entscheidet",
+    "classAtmosphere": "Klassenklima",
+    "classAtmosphereDesc": "Welche Art von Mitschülern erzeugt wird",
+    "classAtmosphereOptions": {
+      "focused": "Ruhig & konzentriert",
+      "conversational": "Lebhafter Austausch",
+      "lively": "Lebendig"
+    },
     "atLeastOneAgent": "Wähle bitte mindestens einen Agenten aus",
     "singleAgentMode": "Einzelagentenmodus",
     "directAnswer": "Direkte Antwort",
@@ -1408,11 +1480,11 @@
     "required": "Erforderlich",
     "agentNames": {
       "default-1": "KI-Lehrkraft",
-      "default-2": "KI-Assistent",
-      "default-3": "Klassenclown",
+      "default-2": "KI-Assistentin",
+      "default-3": "Klassenclownin",
       "default-4": "Neugieriger Geist",
       "default-5": "Mitschreiber",
-      "default-6": "Denker"
+      "default-6": "Denkerin"
     },
     "agentRoles": {
       "teacher": "Lehrkraft",
@@ -1420,12 +1492,12 @@
       "student": "Lernender"
     },
     "agentDescriptions": {
-      "default-1": "Leitet den Unterricht mit klaren und strukturierten Erklärungen",
-      "default-2": "Unterstützt beim Lernen und verdeutlicht wichtige Punkte",
-      "default-3": "Bringt Humor und Schwung in den Kurs",
-      "default-4": "Ist stets neugierig und fragt gern, warum und wie etwas funktioniert",
-      "default-5": "Hält Unterrichtsnotizen gewissenhaft fest und ordnet sie",
-      "default-6": "Denkt gründlich nach und ergründet den Kern der Themen"
+      "default-1": "Ruhiger, herzlicher Lehrer, der Schritt für Schritt erklärt und die Klasse gern raten lässt",
+      "default-2": "Hilfsbereite Tutorin, die dir einen Tipp gibt, wenn du feststeckst",
+      "default-3": "Lebhafte Spaßmacherin, die ihre erste Idee sofort ausspricht",
+      "default-4": "Wissbegieriger Schüler, der immer nach dem Warum fragt",
+      "default-5": "Sorgfältiger Mitschreiber, der jeden Schritt nachprüft",
+      "default-6": "Stille Denkerin, die fragt: „Aber was wäre, wenn …?“"
     },
     "close": "Schließen",
     "providerNames": {
@@ -1468,6 +1540,10 @@
     "classroomSection": "Unterricht",
     "assistantAnswersDuringLecture": "Assistenz beantwortet Fragen während des Vortrags",
     "assistantAnswersDuringLectureDesc": "Wenn aktiviert, unterbrechen Fragen während des Vortrags die Lehrkraft nicht: Die Assistenz beantwortet sie im Interaktionsbereich.",
+    "teacherMayCallOnLearner": "Lehrkraft darf mich aufrufen",
+    "teacherMayCallOnLearnerDesc": "Wenn aktiviert, kann die Lehrkraft dir wie deinen Mitschülern direkt eine Frage stellen. Wenn deaktiviert, fragt sie nur die ganze Klasse und ruft dich nie einzeln auf.",
+    "presetAgentsInGeneratedCourses": "Immer meine voreingestellten Mitschüler verwenden",
+    "presetAgentsInGeneratedCoursesDesc": "Wenn aktiviert, verwenden auch Kurse mit eigenen Mitschülern die auf der Startseite gewählten Mitschüler. Wenn deaktiviert, unterrichten diese Kurse mit ihren eigenen Mitschülern.",
     "importFromClipboard": "Aus Zwischenablage importieren",
     "baseUrlRegion": {
       "china": "China",

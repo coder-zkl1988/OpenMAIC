@@ -887,3 +887,60 @@ describe('runClassroomLoad before the custom agents arrived', () => {
     expect(settings.setAgentSelectionIsUserSet).toHaveBeenCalledWith(false);
   });
 });
+
+describe('runClassroomLoad with a course that has its own classmates', () => {
+  function presetUser(parked: string[] = []) {
+    const { deps, settings, setStage } = makeDeps({
+      getAgent: (id) =>
+        id.startsWith('default-') ? { isGenerated: false } : { isGenerated: true },
+      applyGeneratedAgents: vi.fn().mockReturnValue(['gen-teacher', 'gen-student']),
+      restoreAgentSelection,
+    });
+    const parkedSettings = Object.assign(settings, {
+      parkedPresetAgentIds: parked,
+      setParkedPresetAgentIds: vi.fn(),
+      presetAgentsInGeneratedCourses: false,
+    });
+    settings.agentMode = 'preset' as never;
+    settings.selectedAgentIds = ['default-1', 'default-4'];
+    settings.agentSelectionIsUserSet = true;
+    setStage(
+      makeStage('stage-a', [makeAgentConfig('gen-teacher'), makeAgentConfig('gen-student')]),
+    );
+    return { deps, settings: parkedSettings };
+  }
+
+  it("opens it with its own classmates and parks the user's preset choice", async () => {
+    const { deps, settings } = presetUser();
+    await expect(runClassroomLoad(deps)).resolves.toEqual({ outcome: 'ready' });
+    expect(settings.setAgentMode).toHaveBeenCalledWith('auto');
+    expect(settings.setSelectedAgentIds).toHaveBeenCalledWith(['gen-teacher', 'gen-student']);
+    expect(settings.setAgentSelectionIsUserSet).toHaveBeenCalledWith(false);
+    expect(settings.setParkedPresetAgentIds).toHaveBeenCalledExactlyOnceWith([
+      'default-1',
+      'default-4',
+    ]);
+  });
+
+  it('keeps the preset choice when the user asked to always use it', async () => {
+    const { deps, settings } = presetUser();
+    settings.presetAgentsInGeneratedCourses = true;
+    await runClassroomLoad(deps);
+    expect(settings.setSelectedAgentIds).not.toHaveBeenCalled();
+    expect(settings.setAgentMode).not.toHaveBeenCalled();
+    expect(settings.setParkedPresetAgentIds).not.toHaveBeenCalled();
+  });
+
+  it('clears the parked choice once a course without generated classmates takes it back', async () => {
+    const { deps, settings } = presetUser(['default-2']);
+    settings.agentMode = 'auto' as never;
+    settings.selectedAgentIds = ['gen-old'];
+    settings.agentSelectionIsUserSet = false;
+    (deps.applyGeneratedAgents as ReturnType<typeof vi.fn>).mockReturnValue([]);
+    await runClassroomLoad(deps);
+    expect(settings.setAgentMode).toHaveBeenCalledWith('preset');
+    expect(settings.setSelectedAgentIds).toHaveBeenCalledWith(['default-2']);
+    expect(settings.setAgentSelectionIsUserSet).toHaveBeenCalledWith(true);
+    expect(settings.setParkedPresetAgentIds).toHaveBeenCalledExactlyOnceWith([]);
+  });
+});

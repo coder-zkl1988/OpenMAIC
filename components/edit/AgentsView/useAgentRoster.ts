@@ -19,7 +19,7 @@
  * holds the aggregate-save veto for the course on screen.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { nanoid } from 'nanoid';
 import { materializeRoster } from '@/lib/edit/agent-roster';
 import {
@@ -35,6 +35,7 @@ import {
 import { useStageStore } from '@/lib/store/stage';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
 import type { GeneratedAgentConfig } from '@/lib/types/stage';
+import type { Action } from '@/lib/types/action';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,6 +63,12 @@ function resolvePreset(id: string): GeneratedAgentConfig | undefined {
   };
 }
 
+/** Write scenes' actions back to the stage (a roster edit's script, undone or redone) */
+function applySceneActions(scenes: readonly SceneActions[]): void {
+  const { updateScene } = useStageStore.getState();
+  for (const { sceneId, actions } of scenes) updateScene(sceneId, { actions });
+}
+
 /** True when the id refers to a built-in global default agent (isDefault flag). */
 function isGlobalDefault(id: string): boolean {
   return useAgentRegistry.getState().getAgent(id)?.isDefault === true;
@@ -71,13 +78,35 @@ function isGlobalDefault(id: string): boolean {
 // Types
 // ---------------------------------------------------------------------------
 
+/** One scene's actions, as `updateScene` takes them */
+export interface SceneActions {
+  sceneId: string;
+  actions: Action[];
+}
+
+/**
+ * The script edit that goes with a roster edit: a removed classmate's class
+ * moments handed to the teacher or dropped. `before` is what undo puts back,
+ * `after` what redo applies again.
+ */
+export interface RosterScriptEdit {
+  before: SceneActions[];
+  after: SceneActions[];
+}
+
 export interface AgentRosterController {
   roster: AgentRoster;
   selectedId: string | null;
   select: (id: string | null) => void;
   add: (role?: string) => void;
   update: (id: string, patch: AgentConfigPatch) => void;
-  remove: (id: string) => void;
+  /** Several members at once, as one undo step (the persona upgrade, I25) */
+  updateMany: (updates: ReadonlyArray<{ id: string; patch: AgentConfigPatch }>) => void;
+  /**
+   * Remove a member; `scriptEdit` (already applied by the caller) is the
+   * script change that went with it, which undo / redo then follow
+   */
+  remove: (id: string, scriptEdit?: RosterScriptEdit) => void;
   reorder: (id: string, index: number) => void;
   history: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
 }
@@ -100,6 +129,16 @@ export function useAgentRoster(): AgentRosterController {
   const [selectedId, setSelectedId] = useState<string | null>(
     () => histState.present[0]?.id ?? null,
   );
+
+  // The script edits that went with roster edits, keyed by the roster they
+  // produced: undoing that roster puts the scenes back, redoing it reapplies
+  // them, so one undo restores a removed classmate and their class moments
+  const scriptEditsRef = useRef(new WeakMap<AgentRoster, RosterScriptEdit>());
+  // The history as last rendered: undo / redo read which edit they cross
+  const histRef = useRef(histState);
+  useLayoutEffect(() => {
+    histRef.current = histState;
+  }, [histState]);
 
   // Guard: only commit after a real user edit, not on initial materialization.
   // Set to true inside every mutation path (applyOp, add, undo, redo) so the
@@ -160,9 +199,27 @@ export function useAgentRoster(): AgentRosterController {
     [applyOp],
   );
 
+  const updateMany = useCallback(
+    (updates: ReadonlyArray<{ id: string; patch: AgentConfigPatch }>) => {
+      if (updates.length > 0) applyOp({ type: 'agent.updateMany', updates });
+    },
+    [applyOp],
+  );
+
   const remove = useCallback(
-    (id: string) => {
-      const succeeded = applyOp({ type: 'agent.delete', id });
+    (id: string, scriptEdit?: RosterScriptEdit) => {
+      let succeeded = true;
+      isDirtyRef.current = true;
+      setHistState((prev) => {
+        try {
+          const next = applyAgentEditOperation(prev, { type: 'agent.delete', id });
+          if (scriptEdit && next !== prev) scriptEditsRef.current.set(next.present, scriptEdit);
+          return next;
+        } catch {
+          succeeded = false;
+          return prev;
+        }
+      });
       if (succeeded) {
         setSelectedId((prev) => {
           if (prev !== id) return prev;
@@ -171,7 +228,7 @@ export function useAgentRoster(): AgentRosterController {
         });
       }
     },
-    [applyOp, histState.present],
+    [histState.present],
   );
 
   const reorder = useCallback(
@@ -183,11 +240,17 @@ export function useAgentRoster(): AgentRosterController {
 
   const undo = useCallback(() => {
     isDirtyRef.current = true;
+    const current = histRef.current;
+    const edit = current.past.length > 0 ? scriptEditsRef.current.get(current.present) : undefined;
+    if (edit) applySceneActions(edit.before);
     setHistState((prev) => undoAgentEditOperation(prev));
   }, []);
 
   const redo = useCallback(() => {
     isDirtyRef.current = true;
+    const next = histRef.current.future[0];
+    const edit = next ? scriptEditsRef.current.get(next) : undefined;
+    if (edit) applySceneActions(edit.after);
     setHistState((prev) => redoAgentEditOperation(prev));
   }, []);
 
@@ -197,6 +260,7 @@ export function useAgentRoster(): AgentRosterController {
     select,
     add,
     update,
+    updateMany,
     remove,
     reorder,
     history: {

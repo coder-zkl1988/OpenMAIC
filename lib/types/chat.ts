@@ -7,7 +7,9 @@ import type { InteractiveStateEvidence } from '@/lib/interactive/chat-observatio
  */
 
 import type { UIMessage } from 'ai';
+import type { Locale } from '@/lib/i18n/types';
 import type { CleanupSource } from '@/lib/playback/auto-resume';
+import type { DiscussionOutcome } from '@/lib/playback/types';
 import type { ThinkingConfig } from './provider';
 
 // Session Types
@@ -32,6 +34,8 @@ export interface ChatMessageMetadata {
   agentColor?: string;
   createdAt?: number;
   interrupted?: boolean;
+  /** Why the director cast this speaker (from agent_start), kept for offline casting stats */
+  castReason?: CastReason;
 }
 
 /**
@@ -124,6 +128,17 @@ export interface SessionConfig {
   agentIds: string[];
   triggerAgentId?: string; // For discussion: first agent to speak
   defaultAgentId?: string; // For QA: the responding agent
+  /**
+   * Discussion only: the opener's own words, as the learner saw them on the
+   * card. Kept so follow-ups and retries send the same moment to the server.
+   */
+  discussionTopic?: string;
+  /** Discussion only: where the teacher wants the moment to go (director-only) */
+  discussionPrompt?: string;
+  /** Discussion only: which kind of class moment this session is */
+  momentKind?: DiscussionMomentKind;
+  /** Discussion only ('ask-learner'): what the learner chose on the card */
+  learnerStance?: LearnerStance;
   /**
    * A teaching-assistant aside: the assistant answered in the chat while the
    * teacher kept lecturing (the session stays type 'qa')
@@ -338,6 +353,198 @@ export type ElementReference =
   | InteractiveComponentReference
   | WhiteboardElementReference;
 
+// ==================== Classroom Context (persona-driven casting) ====================
+
+/**
+ * Size bounds of the classroom context a Pi request may carry. The route
+ * enforces them (truncating text, dropping what does not fit or does not
+ * resolve); client builders use the same numbers so nothing is cut twice.
+ * Lengths count characters (code points).
+ */
+export const PI_REQUEST_BOUNDS = {
+  /** Ids (agents, scenes, actions) */
+  idMaxChars: 200,
+  discussionTopicMaxChars: 500,
+  discussionPromptMaxChars: 1000,
+  /** A request-sent agent persona (config.agentConfigs[].persona) */
+  personaMaxChars: 2000,
+  addressedAgentIdsMax: 8,
+  /** Turn and learner-turn counts in classPresence */
+  presenceCountMax: 9999,
+  presenceMomentsMax: 64,
+  memoryEntriesMax: 12,
+  memoryPointsPerEntryMax: 8,
+  /** One speaker's gist in a memory entry */
+  memoryGistMaxChars: 60,
+  memoryLearnerQuestionMaxChars: 120,
+  memoryMissedConceptsMax: 8,
+  memoryMissedConceptMaxChars: 80,
+  memoryRepeatedQuestionsMax: 5,
+  memoryRepeatedQuestionMaxChars: 120,
+  memoryAgentNoteMaxChars: 160,
+  /** All text in classMemory together; the oldest entries go first when over */
+  memoryTotalMaxChars: 1500,
+  lectureActionIndexMax: 100_000,
+  /** cue_user.prompt as forwarded to the client */
+  cuePromptMaxChars: 200,
+} as const;
+
+/**
+ * The kind of class moment a discussion session is:
+ * - 'lecture': a scripted lecture moment (a scene's discussion action) opened
+ *   by a student or the assistant, or by the teacher calling on a named student
+ * - 'ask-learner': the teacher puts a question (predict, guess, estimate) to
+ *   the whole class and the learner, who may answer before the class does
+ *   (see LearnerStance)
+ * - 'quiz-review': after a graded quiz with wrong answers; the topic is the
+ *   client's summary of the missed questions (never the answers)
+ */
+export type DiscussionMomentKind = 'lecture' | 'ask-learner' | 'quiz-review';
+
+export const DISCUSSION_MOMENT_KINDS: readonly DiscussionMomentKind[] = [
+  'lecture',
+  'ask-learner',
+  'quiz-review',
+];
+
+/**
+ * The learner's choice on an 'ask-learner' card: answer first, or hear the
+ * class first. Applies until the learner has spoken in the session.
+ */
+export type LearnerStance = 'answer' | 'listen';
+
+export const LEARNER_STANCES: readonly LearnerStance[] = ['answer', 'listen'];
+
+/** Presence facts for one agent across this course's persisted chat sessions */
+export interface ClassPresenceAgent {
+  /** One of config.agentIds; other entries are dropped */
+  agentId: string;
+  /**
+   * Visible messages this agent spoke in Q&A, discussion and aside sessions
+   * (lecture narration and moment cards excluded; interrupted or "..."-only
+   * messages excluded). Integer 0..presenceCountMax.
+   */
+  turns: number;
+  /** Scene of the session where the agent last spoke; absent: never spoke */
+  lastSceneId?: string;
+  /** Learner messages sent since the agent last spoke; absent: never spoke */
+  learnerTurnsSince?: number;
+}
+
+/**
+ * How one lecture moment ended for the learner. The server looks up its
+ * opener, topic and scene in storeState.scenes by actionId; unknown ids drop.
+ */
+export interface ClassMomentOutcome {
+  /** The scene's DiscussionAction.id */
+  actionId: string;
+  outcome: DiscussionOutcome;
+}
+
+/**
+ * Who has been present in this course so far: facts the director states, not
+ * instructions. Built on the client from loaded sessions and lecture badges.
+ */
+export interface ClassPresence {
+  /** At most one entry per agentId, at most config.agentIds.length entries */
+  agents: ClassPresenceAgent[];
+  /** Oldest first, at most PI_REQUEST_BOUNDS.presenceMomentsMax */
+  moments?: ClassMomentOutcome[];
+}
+
+export type ClassMemoryEntryKind = 'lecture-moment' | 'qa' | 'discussion' | 'aside';
+
+export const CLASS_MEMORY_ENTRY_KINDS: readonly ClassMemoryEntryKind[] = [
+  'lecture-moment',
+  'qa',
+  'discussion',
+  'aside',
+];
+
+/** What one speaker said in a memory entry, in a few words */
+export interface ClassMemoryPoint {
+  /** One of config.agentIds; points of other agents are dropped */
+  agentId: string;
+  /** At most PI_REQUEST_BOUNDS.memoryGistMaxChars */
+  gist: string;
+}
+
+/** One earlier exchange of this course */
+export interface ClassMemoryEntry {
+  kind: ClassMemoryEntryKind;
+  /** Scene it happened on; dropped when not in storeState.scenes */
+  sceneId?: string;
+  /** The learner's question in one sentence, at most memoryLearnerQuestionMaxChars */
+  learnerQuestion?: string;
+  /** Each speaker's gist, in speaking order, at most memoryPointsPerEntryMax */
+  points: ClassMemoryPoint[];
+  /** The learner still had an open question when it ended */
+  unresolved?: boolean;
+}
+
+/** Turns per speaker in the entries too old to keep one by one */
+export interface ClassMemoryTally {
+  agentId: string;
+  turns: number;
+}
+
+/** How the learner is doing; given to the teacher and assistant only */
+export interface ClassMemoryLearner {
+  /** Concepts behind quiz questions answered wrong, without answers or scores */
+  missedConcepts?: string[];
+  /** Questions the learner asked more than once */
+  repeatedQuestions?: string[];
+}
+
+/**
+ * Reserved (I33): an agent's latest state of mind, at most one per agent,
+ * never rewriting the persona. Validated by the route; nothing produces it yet.
+ */
+export interface AgentStateNote {
+  agentId: string;
+  /** At most PI_REQUEST_BOUNDS.memoryAgentNoteMaxChars */
+  note: string;
+}
+
+/**
+ * A compact memory of this course's earlier exchanges, built by
+ * lib/chat/class-memory.ts. All its text together stays within
+ * PI_REQUEST_BOUNDS.memoryTotalMaxChars.
+ */
+export interface ClassMemory {
+  /** Oldest first, at most PI_REQUEST_BOUNDS.memoryEntriesMax */
+  entries: ClassMemoryEntry[];
+  olderTallies?: ClassMemoryTally[];
+  learner?: ClassMemoryLearner;
+  agentNotes?: AgentStateNote[];
+}
+
+/** Where the lecture stands on one scene */
+export interface LectureProgress {
+  /** A scene in storeState.scenes; otherwise the progress is dropped */
+  sceneId: string;
+  /**
+   * Index into that scene's actions of the action playing now, or next to
+   * play when paused at a boundary. Speech at indexes <= actionIndex counts as
+   * said (the current line possibly only half). Integer >= 0.
+   */
+  actionIndex: number;
+}
+
+/**
+ * Persisted params of a lecture bubble's discussion badge (a lecture moment
+ * and how it ended), the source of ClassPresence.moments.
+ */
+export interface LectureDiscussionBadgeParams {
+  topic: string;
+  prompt?: string;
+  /** The scene's DiscussionAction.id */
+  discussionActionId?: string;
+  /** The opener actually used (the teacher for a legacy moment without one) */
+  agentId?: string;
+  outcome?: DiscussionOutcome;
+}
+
 /**
  * Request body for the stateless chat API
  * All state is sent from the client on each request
@@ -375,6 +582,12 @@ export interface StatelessChatRequest {
         aiComment?: string;
       }>;
     };
+    /**
+     * How far the lecture has got on one scene (normally the current one), so
+     * the teacher and assistant know what was just said there. Absent when
+     * nothing of that scene is known to have been narrated.
+     */
+    lectureProgress?: LectureProgress;
   };
   /** Optional Pi-only, identity-only reference to one classroom component. */
   elementReference?: ElementReference;
@@ -384,12 +597,41 @@ export interface StatelessChatRequest {
   config: {
     agentIds: string[];
     sessionType?: 'qa' | 'discussion';
-    /** Discussion topic (for agent-initiated discussions) */
+    /**
+     * Discussion: the opener's own words, verbatim as the learner saw them on
+     * the card (the opener says essentially this). Sent on every request of
+     * the session. At most PI_REQUEST_BOUNDS.discussionTopicMaxChars.
+     */
     discussionTopic?: string;
-    /** Discussion prompt (for agent-initiated discussions) */
+    /**
+     * Discussion: where the teacher wants the moment to go; director-only
+     * guidance, never quoted. At most PI_REQUEST_BOUNDS.discussionPromptMaxChars.
+     */
     discussionPrompt?: string;
-    /** Which agent should speak first in a discussion */
+    /**
+     * Discussion: who opens the moment. Must be one of agentIds (else dropped).
+     * Absent: the director picks the opener (default the teacher).
+     */
     triggerAgentId?: string;
+    /** Discussion only: the kind of class moment; absent means 'lecture'. */
+    momentKind?: DiscussionMomentKind;
+    /** Discussion with momentKind 'ask-learner' only: what the learner chose on the card. */
+    learnerStance?: LearnerStance;
+    /**
+     * Agents the learner explicitly addressed in the latest user message
+     * (@-mention or "ask them"). Subset of agentIds, unique, at most
+     * PI_REQUEST_BOUNDS.addressedAgentIdsMax. Per request; never persisted.
+     */
+    addressedAgentIds?: string[];
+    /** Facts about who has been present in this course so far (statements, no instructions) */
+    classPresence?: ClassPresence;
+    /** What was said earlier in this course, and how the learner is doing */
+    classMemory?: ClassMemory;
+    /**
+     * The learner allows the teacher to call on them by name with a direct
+     * question. Absent or false: nobody singles the learner out by name.
+     */
+    teacherMayCallOnLearner?: boolean;
     /** Full agent configs for generated (non-default) agents that aren't in the server-side registry */
     agentConfigs?: Array<{
       id: string;
@@ -426,6 +668,11 @@ export interface StatelessChatRequest {
     nickname?: string;
     bio?: string;
   };
+  /**
+   * The learner's interface language: built-in agents are named as the
+   * learner sees them. Dropped unless one of the supported locales.
+   */
+  uiLocale?: Locale;
   /** OpenAI-compatible API credentials */
   apiKey: string;
   baseUrl?: string;
@@ -475,6 +722,8 @@ export type StatelessEvent =
         agentName: string;
         agentAvatar?: string;
         agentColor?: string;
+        /** The director's reason for casting this speaker, when it gave a valid one */
+        castReason?: CastReason;
       };
     }
   | { type: 'agent_end'; data: { messageId: string; agentId: string } }
@@ -504,7 +753,19 @@ export type StatelessEvent =
           }
         | { kind: 'projection'; stageId: string; lastSeq: number };
     }
-  | { type: 'cue_user'; data: { fromAgentId?: string; prompt?: string } }
+  | {
+      type: 'cue_user';
+      data: {
+        /** The last agent who spoke in this turn */
+        fromAgentId?: string;
+        /**
+         * Present only when the turn's last line asks the learner a direct
+         * question: that question, as the speaker (fromAgentId) put it, at
+         * most PI_REQUEST_BOUNDS.cuePromptMaxChars. Absent: a plain hand-back.
+         */
+        prompt?: string;
+      };
+    }
   | {
       type: 'done';
       data: {
@@ -520,3 +781,104 @@ export type StatelessEvent =
       };
     }
   | { type: 'error'; data: { message: string } };
+
+// ==================== Pi Casting (director) ====================
+
+/**
+ * Why the director casts a speaker: call_agent's optional `castReason`. A
+ * missing or unknown value is ignored (never fails the call); a valid one is
+ * echoed on agent_start and kept in the message metadata.
+ */
+export const CAST_REASONS = [
+  /** Answers the learner's question or request */
+  'answers_learner',
+  /** The learner (or the teacher) named this agent */
+  'addressed',
+  /** Opens the class moment with their own line */
+  'opens_moment',
+  /** A follow-up "why" / "what if" the last answer opened */
+  'follow_up',
+  /** Voices the confusion their level leads to */
+  'voices_confusion',
+  /** Clears up a confusion, or a peer's wrong or unsure line */
+  'clears_up',
+  /** A concrete example or hands-on tip */
+  'example_or_tip',
+  /** A quick check of understanding */
+  'checks_understanding',
+  /** Puts a direct question to the learner */
+  'asks_learner',
+  /** A short peer reaction */
+  'reacts',
+  /** Closes the moment or leads back to the lesson */
+  'wraps_up',
+  'other',
+] as const;
+
+export type CastReason = (typeof CAST_REASONS)[number];
+
+export function isCastReason(value: unknown): value is CastReason {
+  return typeof value === 'string' && (CAST_REASONS as readonly string[]).includes(value);
+}
+
+/**
+ * The director's casting rules: 'persona' (who each person is decides who
+ * speaks) or 'legacy' (the earlier role-order rules), for A/B evals and
+ * rollback. Server env OPENMAIC_PI_PERSONA_CASTING ('legacy', '0', 'false' or
+ * 'off' selects 'legacy'); default 'persona'.
+ */
+export type PiCastingMode = 'persona' | 'legacy';
+
+/** What an eval-only child stub learns about one call_agent turn */
+export interface PiChildTurnStubInput {
+  agentId: string;
+  agentName: string;
+  role: string;
+  instruction: string;
+  castReason?: CastReason;
+  /** 0-based index of this child turn in the loop */
+  turnIndex: number;
+  /** Scenes whose read_scene evidence was attached to this delegation */
+  evidenceSceneIds: readonly string[];
+}
+
+/**
+ * Eval-only injection point (runPiDirectorLoop opts.childTurnStub, passed on
+ * to buildCallAgentTool): replaces the child LLM run with scripted speech.
+ * call_agent still emits agent_start / text_delta / agent_end and records the
+ * turn; '' is an empty turn. Never set by the route.
+ */
+export type PiChildTurnStub = (input: PiChildTurnStubInput) => string | Promise<string>;
+
+// ==================== Persona Upgrade (edit mode) ====================
+
+/** POST: rewrite chosen agents' personas as real people; nothing else changes */
+export const PERSONA_UPGRADE_PATH = '/api/generate/persona-upgrade';
+
+/** Request body of PERSONA_UPGRADE_PATH */
+export interface PersonaUpgradeRequest {
+  stage: {
+    /** At most 200 characters */
+    name: string;
+    /** At most 1000 characters */
+    description?: string;
+    /** The course's language directive (stage.languageDirective) */
+    languageDirective?: string;
+  };
+  /** In order, at most 40; title at most 160, description at most 400 characters */
+  sceneOutlines?: Array<{ title: string; description?: string }>;
+  /** The whole current roster, as context: 1..12 agents, unique ids, persona at most 4000 */
+  agents: Array<{ id: string; name: string; role: string; persona: string }>;
+  /** Whose persona to rewrite: 1..12 unique ids, all in agents */
+  targetAgentIds: string[];
+}
+
+/**
+ * Success body of PERSONA_UPGRADE_PATH (failures use the usual apiError body).
+ * Exactly one persona per targetAgentId, in that order; ids, names, roles,
+ * avatars and voices are untouched.
+ */
+export interface PersonaUpgradeResponse {
+  success: true;
+  personas: Array<{ id: string; persona: string }>;
+}

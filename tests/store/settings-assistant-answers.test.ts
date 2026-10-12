@@ -47,6 +47,21 @@ describe('settings: the assistant answers during the lecture', () => {
     });
   });
 
+  it('keeps the teacher from calling on the learner unless they allow it (I10.5)', async () => {
+    const store = await loadStore();
+    expect(store.getState().teacherMayCallOnLearner).toBe(false);
+    store.getState().setTeacherMayCallOnLearner(true);
+    await vi.waitFor(async () => {
+      const blob = (await kv.get('settings-storage', 'account')) as {
+        state: Record<string, unknown>;
+      } | null;
+      expect(blob?.state.teacherMayCallOnLearner).toBe(true);
+    });
+    vi.resetModules();
+    const reloaded = await loadStore();
+    expect(reloaded.getState().teacherMayCallOnLearner).toBe(true);
+  });
+
   it('persists turning it off, and a later load keeps it off', async () => {
     const store = await loadStore();
     store.getState().setAssistantAnswersDuringLecture(false);

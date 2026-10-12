@@ -1,11 +1,12 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { Type, type Static } from 'typebox';
-import type { StatelessEvent } from '@/lib/types/chat';
+import { PI_REQUEST_BOUNDS, type StatelessEvent } from '@/lib/types/chat';
 
 const CueUserParams = Type.Object({
   prompt: Type.Optional(
     Type.String({
-      description: 'Optional short prompt for handing the turn back to the user.',
+      description:
+        'Only when the last visible line of this turn asks the learner a direct question: that question as the speaker put it, short; leave it empty otherwise.',
     }),
   ),
 });
@@ -17,12 +18,32 @@ type CueUserSkipReason =
   | 'no_substantive_teacher_turn'
   | 'no_substantive_teaching_turn';
 
+/** The question forwarded to the client: trimmed, cut, or absent when empty */
+export function normalizeCuePrompt(prompt: string | undefined): string | undefined {
+  const trimmed = prompt?.trim();
+  if (!trimmed) return undefined;
+  const chars = Array.from(trimmed);
+  return chars.length > PI_REQUEST_BOUNDS.cuePromptMaxChars
+    ? chars.slice(0, PI_REQUEST_BOUNDS.cuePromptMaxChars).join('')
+    : trimmed;
+}
+
 export function buildCueUserTool(opts: {
   cueUser: (data: Extract<StatelessEvent, { type: 'cue_user' }>['data']) => Promise<boolean>;
   getLastAgentId: () => string | undefined;
-  canCueUser?: () => boolean;
+  /**
+   * The hand-back gate. It sees the normalized prompt: a student's last line
+   * that asks the learner a direct question may hand the turn back (I02/I31).
+   */
+  canCueUser?: (prompt: string | undefined) => boolean;
   cueUserSkipReason?: CueUserSkipReason;
   isSessionClosed?: () => boolean;
+  /**
+   * A one-time reminder when a student had the last word of the turn (their
+   * line may be wrong or open). Returns the reminder text the first time it
+   * applies, undefined otherwise; the call after a reminder goes through.
+   */
+  takeLastWordNudge?: (prompt: string | undefined) => string | undefined;
 }): AgentTool<typeof CueUserParams> {
   return {
     name: 'cue_user',
@@ -44,7 +65,8 @@ export function buildCueUserTool(opts: {
         };
       }
 
-      if (opts.canCueUser && !opts.canCueUser()) {
+      const prompt = normalizeCuePrompt(params.prompt);
+      if (opts.canCueUser && !opts.canCueUser(prompt)) {
         const reason = opts.cueUserSkipReason ?? 'no_agent_turns';
         return {
           content: [
@@ -54,7 +76,7 @@ export function buildCueUserTool(opts: {
                 reason === 'no_substantive_teacher_turn'
                   ? 'Call the teacher for a visible answer before cueing the user.'
                   : reason === 'no_substantive_teaching_turn'
-                    ? 'Call the teacher or teaching assistant for a visible answer before cueing the user.'
+                    ? "Call the teacher or teaching assistant for a visible answer before cueing the user. If a student's last line asked the learner a direct question, cue the user with that question as the prompt."
                     : 'Call at least one classroom agent before cueing the user.',
             },
           ],
@@ -62,9 +84,17 @@ export function buildCueUserTool(opts: {
         };
       }
 
+      const nudge = opts.takeLastWordNudge?.(prompt);
+      if (nudge) {
+        return {
+          content: [{ type: 'text', text: nudge }],
+          details: { emitted: false, skipped: true, reason: 'student_last_word' },
+        };
+      }
+
       const emitted = await opts.cueUser({
         fromAgentId: opts.getLastAgentId(),
-        prompt: params.prompt,
+        ...(prompt ? { prompt } : {}),
       });
       return {
         content: [

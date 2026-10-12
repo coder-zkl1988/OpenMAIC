@@ -7,6 +7,7 @@ import type { UIMessage } from 'ai';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { AvatarDisplay } from '@/components/ui/avatar-display';
+import { ClassmateCard } from '@/components/classroom/interaction/classmate-card';
 import { CircleStop } from 'lucide-react';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
 import { InlineActionTag, isWhiteboardAction } from './inline-action-tag';
@@ -308,6 +309,19 @@ export function ChatSessionComponent({
         }
 
         const role = senderRole(message.metadata);
+        const name = senderName(message.metadata);
+        const avatar = (
+          <span className="block size-7 shrink-0 overflow-hidden rounded-full bg-subtle ring-1 ring-line">
+            <AvatarDisplay
+              src={message.metadata?.senderAvatar || AVATARS.teacher}
+              alt=""
+              className="text-xs"
+            />
+          </span>
+        );
+        // A speaker of this class opens their classmate card (I24)
+        const speakerId = message.metadata?.agentId;
+        const speaker = speakerId ? getAgentConfig(speakerId) : undefined;
         return (
           <motion.div
             key={message.id}
@@ -318,18 +332,27 @@ export function ChatSessionComponent({
             transition={{ duration: 0.3 }}
             className="flex items-start gap-2"
           >
-            <span className="size-7 shrink-0 overflow-hidden rounded-full bg-subtle ring-1 ring-line">
-              <AvatarDisplay
-                src={message.metadata?.senderAvatar || AVATARS.teacher}
-                alt=""
-                className="text-xs"
-              />
-            </span>
+            {speakerId && speaker ? (
+              <ClassmateCard
+                person={{
+                  id: speakerId,
+                  name,
+                  avatar: message.metadata?.senderAvatar || speaker.avatar,
+                }}
+                triggerLabel={t('stage.participants.cardLabel', {
+                  name,
+                  status: t(`settings.agentRoles.${role}`),
+                })}
+                triggerClassName="shrink-0 rounded-full"
+              >
+                {avatar}
+              </ClassmateCard>
+            ) : (
+              avatar
+            )}
             <div className="flex min-w-0 max-w-[85%] flex-col gap-1">
               <div className="flex min-w-0 items-center gap-1.5">
-                <span className="truncate text-xs font-semibold text-fg-secondary">
-                  {senderName(message.metadata)}
-                </span>
+                <span className="truncate text-xs font-semibold text-fg-secondary">{name}</span>
                 <span
                   className={cn(
                     'shrink-0 rounded-full px-1.5 text-[10px] font-semibold leading-4',

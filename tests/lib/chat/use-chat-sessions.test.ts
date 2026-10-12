@@ -19,6 +19,8 @@ import {
   withPiInclassWhiteboardTools,
   MANUAL_STOP_END_OPTIONS,
   takeSoftCloseRegistration,
+  classicLoopConfig,
+  discussionRequestFields,
 } from '@/components/chat/use-chat-sessions';
 import { useCanvasStore } from '@/lib/store/canvas';
 import { useStageStore } from '@/lib/store/stage';
@@ -347,13 +349,27 @@ describe('lectureActionPersistParams', () => {
   });
 
   it('omits undefined discussion prompt and keeps laser params required-only', () => {
+    // A discussion badge names its moment (the class presence's moment id)
     expect(
       lectureActionPersistParams({
         id: 'disc-1',
         type: 'discussion',
         topic: 'Heat islands',
       }),
-    ).toEqual({ topic: 'Heat islands' });
+    ).toEqual({ topic: 'Heat islands', discussionActionId: 'disc-1' });
+    // Once known: the opener actually used and how the moment ended
+    expect(
+      lectureActionPersistParams(
+        { id: 'disc-1', type: 'discussion', topic: 'Heat islands', prompt: 'Why?' },
+        { agentId: 'teacher-1', outcome: 'auto_skipped' },
+      ),
+    ).toEqual({
+      topic: 'Heat islands',
+      prompt: 'Why?',
+      discussionActionId: 'disc-1',
+      agentId: 'teacher-1',
+      outcome: 'auto_skipped',
+    });
     expect(
       lectureActionPersistParams({
         id: 'laser-1',
@@ -868,5 +884,42 @@ describe('classroom chat requests carry no provider data', () => {
     for (const field of ['apiKey', 'baseUrl', 'model', 'providerType', 'webSearchProviderId']) {
       expect(sent).not.toHaveProperty(field);
     }
+  });
+});
+
+describe('classicLoopConfig', () => {
+  const discussion = makeSession({
+    type: 'discussion',
+    title: 'Why do the charges cancel?',
+    config: {
+      agentIds: ['default-1', 'default-4'],
+      triggerAgentId: 'default-4',
+      discussionTopic: 'Why do the charges cancel?',
+      discussionPrompt: 'Let the class reason about it',
+      momentKind: 'lecture',
+    },
+  });
+  const config = {
+    agentIds: ['default-1', 'default-4'],
+    sessionType: 'discussion',
+    ...discussionRequestFields(discussion),
+  };
+  const user = { role: 'user' as const };
+  const assistant = { role: 'assistant' as const };
+
+  it('keeps the moment fields on the request that opens the discussion', () => {
+    expect(classicLoopConfig(config, [])).toBe(config);
+    expect(classicLoopConfig(config, [user])).toMatchObject({
+      triggerAgentId: 'default-4',
+      discussionTopic: 'Why do the charges cancel?',
+    });
+  });
+
+  it('lets the classic director choose on a follow-up: no trigger agent, no fresh topic', () => {
+    const followUp = classicLoopConfig(config, [user, assistant, user]);
+    expect(followUp).toEqual({ agentIds: ['default-1', 'default-4'], sessionType: 'discussion' });
+    expect(followUp).not.toHaveProperty('triggerAgentId');
+    // The Pi request template itself is untouched
+    expect(config.triggerAgentId).toBe('default-4');
   });
 });

@@ -285,7 +285,15 @@
       "pageLabel": "Página {{n}}",
       "currentPage": "Atual",
       "jumpToLine": "Jump to this line",
-      "jumpUnavailable": "Jump unavailable for this line"
+      "jumpUnavailable": "Jump unavailable for this line",
+      "discussNow": "Conversar agora",
+      "discussNowBusy": "Termine primeiro a conversa em andamento",
+      "momentOutcome": {
+        "joined": "Participou",
+        "skipped": "Pulado",
+        "autoSkipped": "Perdido",
+        "notShown": "Não está nesta turma"
+      }
     },
     "badge": {
       "qa": "P&R",
@@ -337,7 +345,22 @@
     "join": "Entrar",
     "skip": "Pular",
     "offerLabel": "{{name}} quer iniciar uma discussão",
-    "autoSkipHint": "Será pulado automaticamente em {{seconds}} segundos"
+    "autoSkipHint": "Será pulado automaticamente em {{seconds}} segundos",
+    "countdownPaused": "Contagem pausada: escolha quando estiver pronto",
+    "question": "Pergunta",
+    "joinTeacher": "Pensar junto",
+    "teacherOfferLabel": "{{name}} faz uma pergunta",
+    "review": "Revisão",
+    "joinReview": "Revisar juntos",
+    "reviewOfferLabel": "Revisão do quiz",
+    "answerFirst": "Eu respondo",
+    "listenFirst": "Ouvir a turma primeiro"
+  },
+  "quizReview": {
+    "topic": "Vamos rever as que você errou: {{questions}}",
+    "question": "Q{{n}} “{{text}}”",
+    "separator": "; ",
+    "more": " e mais {{count}}"
   },
   "voice": {
     "startListening": "Entrada por voz",
@@ -734,7 +757,7 @@
       "count": "{{count}} integrantes",
       "editHint": "Clique em um integrante para editar",
       "personaLabel": "Persona",
-      "personaPlaceholder": "Descreva a personalidade, o estilo de ensino e as tarefas do papel...",
+      "personaPlaceholder": "Descreva esta pessoa: temperamento, jeito de falar, o que já sabe e o que ainda não sabe, quando costuma falar.",
       "noPersona": "Nenhuma persona ainda",
       "unnamed": "Sem título",
       "teacherBadge": "Principal",
@@ -743,7 +766,29 @@
       "removeFromClass": "Remover da sala",
       "aiClassmates": "Colegas de IA · {{count}}",
       "addRole": "Adicionar papel",
-      "shortTitle": "Elenco"
+      "upgrade": {
+        "action": "Reescrever como pessoas reais",
+        "actionHint": "Reescreve cada persona como uma pessoa crível: temperamento, jeito de falar, o que sabe. Você vê cada mudança antes de aplicar.",
+        "loading": "Reescrevendo as personas…",
+        "previewTitle": "Prévia das novas personas",
+        "previewHint": "Só as personas mudam; nomes, avatares e vozes ficam. Dá para desfazer depois.",
+        "now": "Agora",
+        "rewritten": "Reescrito",
+        "apply": "Aplicar",
+        "failed": "Não foi possível reescrever as personas. Tente de novo.",
+        "invalid": "Esta lista não pode ser reescrita. Verifique se todos têm nome e papel."
+      },
+      "shortTitle": "Elenco",
+      "impact": {
+        "title": "Onde o roteiro do curso usa este membro",
+        "moments": "Momentos de aula que {{name}} abre: {{count}}",
+        "mentions": "Falas que mencionam {{name}}: {{count}}. A narração e a voz já geradas não mudam.",
+        "handToTeacher": "Deixar o professor abrir",
+        "dropMoments": "Remover esses momentos também",
+        "removeAnyway": "Remover mesmo assim",
+        "renameMentions": "Falas que ainda dizem “{{name}}”: {{count}}. A narração e a voz já geradas mantêm o nome antigo.",
+        "renameAnyway": "Renomear mesmo assim"
+      }
     },
     "elementRef": {
       "remove": "移除引用 {{label}}",
@@ -800,7 +845,10 @@
       "lowerHand": "Abaixar",
       "lowerHandHint": "Abaixar a mão e retirar a pergunta",
       "cuePlaceholder": "Fale ou digite sua pergunta",
+      "answerPlaceholder": "Fale ou digite sua resposta",
       "cueStatus": "Sua vez de falar · aula pausada",
+      "cueAsked": "{{name}} está esperando sua resposta",
+      "cueHandBack": "Sua vez · diga o que vier à cabeça",
       "send": "Enviar",
       "cancelRecording": "Cancelar gravação",
       "handRaised": "Mão levantada · sua vez ao fim desta frase",
@@ -809,6 +857,8 @@
       "raisedPlaceholder": "Você pode escrever sua pergunta antes...",
       "followUpPlaceholder": "Faça uma pergunta de acompanhamento...",
       "referencePlaceholder": "{{type}}: o que você quer perguntar sobre isso?",
+      "mentionMenu": "Para quem perguntar",
+      "mentionPlaceholder": "Digite sua pergunta ou use @ para perguntar a alguém",
       "handLowered": "Mão abaixada"
     },
     "handRaise": {
@@ -818,7 +868,14 @@
       "pendingQuestion": "Na fila · resposta ao fim desta frase",
       "pendingQuestionStep": "Na fila · resposta ao fim desta etapa",
       "assistantPrompt": "Diga sua pergunta que eu te ajudo.",
-      "assistantAnswering": "O assistente está respondendo…"
+      "assistantAnswering": "O assistente está respondendo…",
+      "askedBy": "{{name}} pergunta para você: {{prompt}}",
+      "handBack": "{{name}} passa a palavra para você",
+      "cueReplies": {
+        "think": "Deixa eu pensar…",
+        "unsure": "Não tenho certeza",
+        "hint": "Me dá uma dica"
+      }
     },
     "participants": {
       "label": "Participantes",
@@ -827,7 +884,9 @@
       "answering": "Respondendo",
       "wantsToSpeak": "Quer falar",
       "handRaised": "Mão levantada",
-      "more": "Mais {{count}} participantes"
+      "more": "Mais {{count}} participantes",
+      "cardLabel": "{{name}}, {{status}}",
+      "askThem": "Perguntar a {{name}}"
     },
     "generating": "Gerando...",
     "paused": "Pausado",
@@ -841,7 +900,12 @@
     "exitFullscreen": "Sair da tela cheia",
     "editCourse": "Editar curso",
     "doneEditing": "Concluir edição",
-    "proModeDisabledHint": "A edição não está disponível nesta página — abra um slide do curso para editar no modo Pro."
+    "proModeDisabledHint": "A edição não está disponível nesta página — abra um slide do curso para editar no modo Pro.",
+    "ownClassmates": {
+      "title": "Este curso tem seus próprios colegas",
+      "description": "Seus colegas predefinidos ficam guardados para novos cursos e para cursos sem colegas próprios.",
+      "alwaysPreset": "Sempre usar meus colegas predefinidos"
+    }
   },
   "classroomComplete": {
     "title": "Curso concluído",
@@ -1394,6 +1458,14 @@
     "agentModeAutoDesc": "A IA criará automaticamente papéis adequados",
     "autoAgentCount": "Número de Agentes",
     "autoAgentCountDesc": "Quantidade de agentes a gerar (incluindo o professor)",
+    "autoAgentCountAuto": "A IA decide",
+    "classAtmosphere": "Clima da turma",
+    "classAtmosphereDesc": "Que tipo de colegas são gerados",
+    "classAtmosphereOptions": {
+      "focused": "Calma e concentrada",
+      "conversational": "Com troca de ideias",
+      "lively": "Animada"
+    },
     "atLeastOneAgent": "Selecione ao menos 1 agente",
     "singleAgentMode": "Modo de Agente Único",
     "directAnswer": "Resposta Direta",
@@ -1409,10 +1481,10 @@
     "agentNames": {
       "default-1": "Professor de IA",
       "default-2": "Assistente de IA",
-      "default-3": "Animador da Turma",
+      "default-3": "Animadora da Turma",
       "default-4": "Mente Curiosa",
       "default-5": "Anotador",
-      "default-6": "Pensador Profundo"
+      "default-6": "Pensadora Profunda"
     },
     "agentRoles": {
       "teacher": "Professor",
@@ -1420,12 +1492,12 @@
       "student": "Estudante"
     },
     "agentDescriptions": {
-      "default-1": "Professor principal com explicações claras e bem estruturadas",
-      "default-2": "Apoia o aprendizado e ajuda a esclarecer pontos-chave",
-      "default-3": "Traz humor e energia para a sala de aula",
-      "default-4": "Sempre curioso, adora perguntar por quê e como",
-      "default-5": "Registra e organiza as anotações da aula com dedicação",
-      "default-6": "Pensa profundamente e explora a essência dos temas"
+      "default-1": "Professor calmo e acolhedor que explica passo a passo e faz a turma arriscar palpites",
+      "default-2": "Monitora prestativa que dá uma dica quando você trava",
+      "default-3": "Brincalhona animada que solta o primeiro palpite",
+      "default-4": "Aluno empolgado que sempre pergunta por quê",
+      "default-5": "Anotador cuidadoso que confere cada passo",
+      "default-6": "Pensadora quieta que pergunta \"e se…?\""
     },
     "close": "Fechar",
     "providerNames": {
@@ -1468,6 +1540,10 @@
     "classroomSection": "Aula",
     "assistantAnswersDuringLecture": "O assistente responde às perguntas durante a aula",
     "assistantAnswersDuringLectureDesc": "Ativado, as perguntas feitas durante a aula não interrompem o professor: o assistente responde no painel Interação.",
+    "teacherMayCallOnLearner": "Permitir que o professor me chame",
+    "teacherMayCallOnLearnerDesc": "Quando ativado, o professor pode fazer uma pergunta para você pelo nome, como faz com seus colegas. Quando desativado, ele só pergunta para a turma toda e nunca chama você sozinho.",
+    "presetAgentsInGeneratedCourses": "Sempre usar meus colegas predefinidos",
+    "presetAgentsInGeneratedCoursesDesc": "Ativado, cursos gerados com colegas próprios também usam os colegas escolhidos na página inicial. Desativado, esses cursos são conduzidos pelos próprios colegas.",
     "importFromClipboard": "Importar da Área de Transferência",
     "baseUrlRegion": {
       "china": "China",

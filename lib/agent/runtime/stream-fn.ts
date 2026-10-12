@@ -32,6 +32,7 @@ import {
   type LanguageModelUsage,
   type LanguageModel,
   type ModelMessage,
+  type SystemModelMessage,
   type ToolSet,
 } from 'ai';
 import { streamLLM } from '@/lib/ai/llm';
@@ -154,6 +155,90 @@ export interface CallLlmStreamFnOptions {
   source?: string;
   /** Optional abort signal forwarded to the underlying streamLLM call. */
   abortSignal?: AbortSignal;
+  /**
+   * Marker that splits the system prompt into segments, from the most stable
+   * to the most volatile. It is always removed before the call; with
+   * `promptCaching` the segments become separately cacheable system blocks.
+   */
+  systemPromptSegmentBreak?: string;
+  /**
+   * Anthropic prompt caching, for Claude models only: every system segment
+   * but the last, and the newest message, become cache breakpoints, so a
+   * multi-step loop re-reads its growing prefix instead of paying for it on
+   * every step. Other providers are unaffected.
+   */
+  promptCaching?: boolean;
+}
+
+/** Anthropic accepts at most this many cache breakpoints per request */
+const MAX_CACHE_BREAKPOINTS = 4;
+const ANTHROPIC_EPHEMERAL_CACHE = {
+  anthropic: { cacheControl: { type: 'ephemeral' } },
+} as const;
+
+/**
+ * A Claude model on the Anthropic Messages API. Anthropic-compatible stand-ins
+ * (e.g. MiniMax on the same adapter) are excluded: they may reject or ignore
+ * cache_control.
+ */
+export function isAnthropicClaudeModel(model: LanguageModel): boolean {
+  if (!model || typeof model !== 'object') return false;
+  const { provider, modelId } = model as { provider?: unknown; modelId?: unknown };
+  return (
+    typeof provider === 'string' &&
+    provider.startsWith('anthropic') &&
+    typeof modelId === 'string' &&
+    modelId.toLowerCase().includes('claude')
+  );
+}
+
+/**
+ * The system prompt and messages as sent: the segment marker removed, and
+ * for prompt caching on a Claude model, cache breakpoints on the stable
+ * system segments and on the newest message.
+ */
+export function applyPromptCaching(
+  systemPrompt: string | undefined,
+  messages: ModelMessage[],
+  opts: Pick<
+    CallLlmStreamFnOptions,
+    'languageModel' | 'systemPromptSegmentBreak' | 'promptCaching'
+  >,
+): { system: string | SystemModelMessage[] | undefined; messages: ModelMessage[] } {
+  if (systemPrompt === undefined) return { system: undefined, messages };
+  const segments = opts.systemPromptSegmentBreak
+    ? systemPrompt.split(opts.systemPromptSegmentBreak)
+    : [systemPrompt];
+  if (!opts.promptCaching || !isAnthropicClaudeModel(opts.languageModel)) {
+    return { system: segments.join(''), messages };
+  }
+
+  // Empty text blocks are rejected; one breakpoint stays for the newest message
+  const blocks = segments.filter((segment) => segment.trim().length > 0);
+  const cachedBlocks = Math.min(
+    MAX_CACHE_BREAKPOINTS - 1,
+    blocks.length > 1 ? blocks.length - 1 : blocks.length,
+  );
+  const system = blocks.map(
+    (content, index): SystemModelMessage => ({
+      role: 'system',
+      content,
+      ...(index < cachedBlocks ? { providerOptions: ANTHROPIC_EPHEMERAL_CACHE } : {}),
+    }),
+  );
+  const last = messages.at(-1);
+  return {
+    system,
+    messages: last
+      ? [
+          ...messages.slice(0, -1),
+          {
+            ...last,
+            providerOptions: { ...last.providerOptions, ...ANTHROPIC_EPHEMERAL_CACHE },
+          } as ModelMessage,
+        ]
+      : messages,
+  };
 }
 
 /**
@@ -400,14 +485,19 @@ async function pump(
       : opts.maxOutputTokens && requestedMaxTokens
         ? Math.min(opts.maxOutputTokens, requestedMaxTokens)
         : (requestedMaxTokens ?? opts.maxOutputTokens);
+    const prompt = applyPromptCaching(
+      context.systemPrompt,
+      toModelMessages(context.messages, {
+        includeReasoning: preservesReasoningForModel(opts.languageModel),
+        includeToolImages: opts.supportsToolImages,
+      }),
+      opts,
+    );
     const result = await streamLLM(
       {
         model: opts.languageModel,
-        system: context.systemPrompt,
-        messages: toModelMessages(context.messages, {
-          includeReasoning: preservesReasoningForModel(opts.languageModel),
-          includeToolImages: opts.supportsToolImages,
-        }),
+        system: prompt.system,
+        messages: prompt.messages,
         tools: toAiTools(context.tools ?? []),
         toolChoice: 'auto',
         // pi's loop owns multi-step; one LLM turn per streamFn call.

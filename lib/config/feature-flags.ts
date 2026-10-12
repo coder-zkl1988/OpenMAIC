@@ -7,6 +7,8 @@
  * default, anything else (including unset) is treated as disabled.
  */
 
+import type { PiCastingMode } from '@/lib/types/chat';
+
 function readBoolean(envValue: string | undefined): boolean {
   return envValue === 'true' || envValue === '1';
 }
@@ -114,6 +116,19 @@ export function isCoursewareReferenceEnabled(): boolean {
  */
 export function isPiNativeChildRuntimeEnabled(): boolean {
   return readBoolean(process.env.OPENMAIC_ENABLE_PI_NATIVE_CHILD_RUNTIME);
+}
+
+/**
+ * Server-only selector for the Pi director's casting rules, read at call
+ * time. Default 'persona' (who each person is decides who speaks);
+ * `OPENMAIC_PI_PERSONA_CASTING` set to `legacy`, `0`, `false` or `off` selects
+ * the earlier role-order rules, for A/B evals and rollback.
+ */
+export function getPiCastingMode(): PiCastingMode {
+  const value = process.env.OPENMAIC_PI_PERSONA_CASTING?.trim().toLowerCase();
+  return value === 'legacy' || value === '0' || value === 'false' || value === 'off'
+    ? 'legacy'
+    : 'persona';
 }
 
 /**

@@ -673,3 +673,94 @@ describe('discussion TTS under a mobile autoplay policy', () => {
     expect(audio.play).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("a class moment's card read out in its opener's voice", () => {
+  it('reads the topic as a line of the opener and settles once it has been heard', async () => {
+    const onSettled = vi.fn();
+    await act(async () => {
+      hook.announce('Why do they cancel?', 'teacher', onSettled);
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0].body.text).toBe('Why do they cancel?');
+    expect(requests[0].body.ttsVoice).toBe('alloy');
+    expect(String(requests[0].body.audioId)).toMatch(/^announce-/);
+    await respond(0);
+    expect(stateChange).toHaveBeenLastCalledWith('teacher', 'playing');
+    expect(onSettled).not.toHaveBeenCalled();
+
+    await act(async () => FakeAudio.instances[0].end());
+    expect(onSettled).toHaveBeenCalledOnce();
+    expect(hook.shouldHold().holding).toBe(false);
+  });
+
+  it('settles at once when nothing would be heard (TTS off or muted)', () => {
+    enabled = false;
+    act(() => root.render(createElement(Probe)));
+    expect(hook.canVoice('teacher')).toBe(false);
+    const onSettled = vi.fn();
+    act(() => {
+      hook.announce('Why?', 'teacher', onSettled);
+    });
+    expect(onSettled).toHaveBeenCalledOnce();
+    expect(requests).toHaveLength(0);
+  });
+
+  it('says whether a line by this agent would be heard', () => {
+    expect(hook.canVoice('teacher')).toBe(true);
+    mocks.settings.ttsMuted = true;
+    act(() => root.render(createElement(Probe)));
+    expect(hook.canVoice('teacher')).toBe(false);
+  });
+
+  it('stops a reading still being generated, and the queue moves on to the next line', async () => {
+    const onSettled = vi.fn();
+    let cancel = () => {};
+    await act(async () => {
+      cancel = hook.announce('Why?', 'teacher', onSettled);
+    });
+    await seal('A');
+    act(() => cancel());
+    expect(onSettled).toHaveBeenCalledOnce();
+    expect(requests[0].signal.aborted).toBe(true);
+    // The discussion's own line is next
+    await act(async () => undefined);
+    expect(requests.map((r) => r.body.audioId)).toContain('A');
+    // A late answer for the reading is ignored
+    await respond(0);
+    expect(FakeAudio.instances.every((audio) => !audio.src.includes(btoa('audio-0')))).toBe(true);
+  });
+
+  it('stops a reading while it plays, and drops a queued one without a request', async () => {
+    const playing = vi.fn();
+    const queued = vi.fn();
+    let stopPlaying = () => {};
+    let dropQueued = () => {};
+    await act(async () => {
+      stopPlaying = hook.announce('First', 'teacher', playing);
+      dropQueued = hook.announce('Second', 'teacher', queued);
+    });
+    await respond(0);
+    // The second reading was prefetched behind the first
+    expect(requests).toHaveLength(2);
+    act(() => dropQueued());
+    expect(queued).toHaveBeenCalledOnce();
+    expect(requests[1].signal.aborted).toBe(true);
+
+    act(() => stopPlaying());
+    expect(playing).toHaveBeenCalledOnce();
+    expect(FakeAudio.instances[0].src).toBe('');
+    expect(stateChange).toHaveBeenLastCalledWith(null, 'idle');
+    // Stopping twice is harmless
+    act(() => stopPlaying());
+    expect(playing).toHaveBeenCalledOnce();
+  });
+
+  it('settles a reading that cleanup cuts off', async () => {
+    const onSettled = vi.fn();
+    await act(async () => {
+      hook.announce('Why?', 'teacher', onSettled);
+    });
+    act(() => hook.cleanup());
+    expect(onSettled).toHaveBeenCalledOnce();
+  });
+});

@@ -145,14 +145,15 @@ describe('aside director and child prompts', () => {
     expect(prompt).toContain('call `cue_user` so the learner can follow up');
     expect(prompt).toContain('there is no `close_session` here');
     // None of the teacher-first or closing rules of a normal Q&A
-    expect(prompt).not.toContain('The teacher (role: teacher, highest priority) should usually');
+    expect(prompt).not.toContain('The teacher (role: teacher) should usually');
     expect(prompt).not.toContain('# Classroom Casting');
     expect(prompt).not.toContain('For these call `close_session`');
   });
 
   it('keeps the normal Q&A rules without the flag', () => {
     const prompt = buildDirectorPrompt(makeBody(), [teacher, assistant], 4);
-    expect(prompt).toContain('The teacher (role: teacher, highest priority) should usually');
+    expect(prompt).toContain('The teacher (role: teacher) should usually');
+    expect(prompt).not.toContain('highest priority');
     expect(prompt).toContain('For these call `close_session`');
     expect(prompt).not.toContain('KEEPS lecturing');
   });
@@ -161,15 +162,15 @@ describe('aside director and child prompts', () => {
     const aside = buildChildPrompt(makeBody({ asideToLecture: true }), assistant, [], []);
     expect(aside).toContain('answering on the side');
     expect(aside).toContain('around 150 Chinese characters or 2-4 short sentences');
-    expect(aside).not.toContain('around 60 Chinese characters');
+    expect(aside).not.toContain('About 60-100 Chinese characters');
     expect(buildChildTurnPrompt('Answer it.', 'assistant', {}, { aside: true })).toContain(
       'no more than about 150 Chinese characters',
     );
 
     const qa = buildChildPrompt(makeBody(), assistant, [], []);
-    expect(qa).toContain('around 60 Chinese characters');
+    expect(qa).toContain('About 60-100 Chinese characters');
     expect(buildChildTurnPrompt('Answer it.', 'assistant')).toContain(
-      'no more than 60 Chinese characters',
+      'about 60-100 Chinese characters',
     );
   });
 });

@@ -440,6 +440,24 @@ describe('Composer: raised hand (queued question), activation and voice', () => 
     expect(box.className).toContain('border-warning');
   });
 
+  it("words the director's cue in its own words instead of 'class is paused'", async () => {
+    await render({ isCueUser: true, cueStatusText: 'Mia is waiting for your answer' });
+    const row = container.querySelector('[data-testid="composer-cue"]');
+    expect(row?.textContent).toContain('Mia is waiting for your answer');
+    expect(row?.textContent).not.toContain('stage.composer.cueStatus');
+    // A plain hand-back still invites a question
+    expect(textarea().placeholder).toBe('stage.composer.cuePlaceholder');
+  });
+
+  it('invites an answer, not a question, when the cue asks the learner something', async () => {
+    await render({
+      isCueUser: true,
+      cueStatusText: 'Mia is waiting for your answer',
+      cueAsksLearner: true,
+    });
+    expect(textarea().placeholder).toBe('stage.composer.answerPlaceholder');
+  });
+
   it('exposes focus (activating), openTextInput (quiet) and dismiss to the shell', async () => {
     await render();
     act(() => handle.current!.openTextInput());

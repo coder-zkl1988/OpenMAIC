@@ -150,6 +150,13 @@ describe('useQueuedQuestionEffects', () => {
     expect(queued.liveText).toBe('stage.composer.cueStatus');
   });
 
+  it("announces the director's cue in its own words, but a called hand as paused", () => {
+    render({ isCueUser: true, cueStatusText: 'Mia is waiting for your answer' });
+    expect(queued.liveText).toBe('Mia is waiting for your answer');
+    render({ handState: 'called', cueStatusText: 'Mia is waiting for your answer' });
+    expect(queued.liveText).toBe('stage.composer.cueStatus');
+  });
+
   it('does not replay a state passed on mount', () => {
     render({ queuedQuestion: question('restored') });
     expect(options.onReturned).not.toHaveBeenCalled();

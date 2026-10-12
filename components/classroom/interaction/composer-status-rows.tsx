@@ -20,6 +20,11 @@ interface ComposerStatusRowsProps {
   readonly queuedRowRef?: Ref<HTMLDivElement>;
   /** The director handed the floor to the learner */
   readonly isCueUser?: boolean;
+  /**
+   * The cue's own words (the director's question or a plain hand-back);
+   * absent: 轮到你发言了 · 课堂已暂停 (a called hand: the lecture is paused)
+   */
+  readonly cueText?: string;
 }
 
 function Dot() {
@@ -30,7 +35,8 @@ function Dot() {
  * The status rows above the composer (Classroom.dc.html, HandRaiseFlow.dc.html):
  * the raised hand — '已举手 · 老师讲完这句就回答你' with the question, or a bare
  * hand's '已举手 · 讲完这句就请你发言' — with 撤回 and the line's progress, or
- * the cue '轮到你发言了 · 课堂已暂停'. Visual only — the composer's
+ * the cue: '轮到你发言了 · 课堂已暂停' for a called hand, the director's own
+ * words otherwise (`cueText`). Visual only — the composer's
  * always-mounted live region announces the raised hand, the call and 撤回.
  */
 export function ComposerStatusRows({
@@ -41,6 +47,7 @@ export function ComposerStatusRows({
   onCancelQueued,
   queuedRowRef,
   isCueUser,
+  cueText,
 }: ComposerStatusRowsProps) {
   const { t } = useI18n();
   const labelId = useId();
@@ -109,7 +116,9 @@ export function ComposerStatusRows({
         className="mb-2 ml-1 flex items-center gap-1.5 text-xs font-semibold text-warning"
       >
         <Dot />
-        {t('stage.composer.cueStatus')}
+        <span className="min-w-0 truncate" title={cueText}>
+          {cueText || t('stage.composer.cueStatus')}
+        </span>
       </div>
     );
   }

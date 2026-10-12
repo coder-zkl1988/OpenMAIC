@@ -15,7 +15,25 @@ import {
   type PiSessionBoundaryContext,
   type StatelessEvent,
   type ElementReference,
+  type SessionConfig,
+  type DiscussionMomentKind,
+  type LearnerStance,
+  type LectureDiscussionBadgeParams,
+  type LectureProgress,
+  type CastReason,
+  PI_REQUEST_BOUNDS,
+  isCastReason,
 } from '@/lib/types/chat';
+import type { Locale } from '@/lib/i18n/types';
+import { supportedLocales } from '@/lib/i18n/locales';
+import type { DiscussionOutcome } from '@/lib/playback/types';
+import {
+  buildClassPresence,
+  upsertLectureMomentBadge,
+  withRequestMessages,
+} from '@/lib/chat/class-presence';
+import { buildClassMemory, loadQuizMisses, type QuizMissRecord } from '@/lib/chat/class-memory';
+import { mentionRoster, resolveAddressedAgentIds } from '@/lib/chat/agent-mention';
 import type { DiscussionRequest } from '@/lib/types/roundtable';
 import type { Action } from '@/lib/types/action';
 import type { Stage } from '@/lib/types/stage';
@@ -26,6 +44,7 @@ import { useSettingsStore } from '@/lib/store/settings';
 import { useUserProfileStore } from '@/lib/store/user-profile';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
 import type { AgentConfig } from '@/lib/orchestration/registry/types';
+import { pickClassroomTeacher } from '@/lib/orchestration/registry/agent-selection';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { classroomChatUsable, loadModelCapabilities } from '@/lib/model-settings/capabilities';
 import { USER_AVATAR } from '@/lib/types/roundtable';
@@ -152,6 +171,12 @@ interface UseChatSessionsOptions {
    */
   onAsideLiveSpeech?: (text: string | null, agentId?: string | null) => void;
   onAsideThinking?: (state: { stage: string; agentId?: string } | null) => void;
+  /**
+   * Where the lecture stands on the current scene (the playback cursor), read
+   * as each Pi request leaves: the teacher and assistant hear what was just
+   * said there (I14). Null or absent when playback has not started there.
+   */
+  getLectureProgress?: () => LectureProgress | null | undefined;
 }
 
 export type ChatRequestTemplate = {
@@ -167,6 +192,8 @@ export type ChatRequestTemplate = {
   directorState?: DirectorState;
   piSessionBoundary?: PiSessionBoundaryContext;
   elementReference?: ElementReference;
+  /** Pi: the learner's interface language (built-in agents go by the names shown) */
+  uiLocale?: Locale;
 };
 
 export interface ChatMessageSendOptions {
@@ -223,6 +250,7 @@ export function buildAsideRequestTemplate({
   userProfile,
   directorState,
   elementReference,
+  addressedAgentIds,
 }: {
   messages: UIMessage<ChatMessageMetadata>[];
   agentId: string;
@@ -230,6 +258,8 @@ export function buildAsideRequestTemplate({
   userProfile?: { nickname?: string; bio?: string };
   directorState?: DirectorState;
   elementReference?: ElementReference;
+  /** The latest message named the assistant (@): it answers as the one addressed */
+  addressedAgentIds?: string[];
 }): ChatRequestTemplate {
   const agentConfig = toTextOnlyAgentConfig(agent);
   return {
@@ -241,6 +271,7 @@ export function buildAsideRequestTemplate({
       piMaxAgentTurns: ASIDE_PI_MAX_AGENT_TURNS,
       piEnableWhiteboardTools: false,
       asideToLecture: true,
+      ...(addressedAgentIds?.length ? { addressedAgentIds } : {}),
     },
     userProfile,
     directorState,
@@ -326,8 +357,16 @@ export function shouldAwaitPresentationAction(actionName: string): boolean {
 
 type LectureVisualAction = Extract<Action, { type: 'spotlight' | 'laser' | 'discussion' }>;
 
-/** Persist params for lecture action badges. Omit optional members JSON would drop as undefined. */
-export function lectureActionPersistParams(action: LectureVisualAction): Record<string, unknown> {
+/**
+ * Persist params for lecture action badges. Omit optional members JSON would
+ * drop as undefined. A discussion badge is a LectureDiscussionBadgeParams:
+ * the moment's id, and — once known — the opener actually used and how the
+ * moment ended (`moment`).
+ */
+export function lectureActionPersistParams(
+  action: LectureVisualAction,
+  moment: { agentId?: string; outcome?: DiscussionOutcome } = {},
+): Record<string, unknown> {
   if (action.type === 'spotlight') {
     return {
       elementId: action.elementId,
@@ -337,10 +376,254 @@ export function lectureActionPersistParams(action: LectureVisualAction): Record<
   if (action.type === 'laser') {
     return { elementId: action.elementId };
   }
+  return { ...lectureMomentBadgeParams(action, moment) };
+}
+
+/** A lecture moment's badge: the moment, its opener and (once known) its outcome */
+export function lectureMomentBadgeParams(
+  action: Extract<Action, { type: 'discussion' }>,
+  moment: { agentId?: string; outcome?: DiscussionOutcome } = {},
+): LectureDiscussionBadgeParams {
+  const agentId = moment.agentId ?? action.agentId;
   return {
     topic: action.topic,
     ...(action.prompt === undefined ? {} : { prompt: action.prompt }),
+    ...(action.id ? { discussionActionId: action.id } : {}),
+    ...(agentId ? { agentId } : {}),
+    ...(moment.outcome ? { outcome: moment.outcome } : {}),
   };
+}
+
+/**
+ * A request's config with the course's class presence (I06) for the
+ * requested agents: who spoke how often and where, and how the lecture
+ * moments ended. `sessions` are the loaded ones; the request's own messages
+ * replace (or add) its session's, which the list may not show yet.
+ */
+export function withClassPresence<T extends ChatRequestTemplate>(
+  requestTemplate: T,
+  sessions: readonly ChatSession[],
+  request: { sessionId: string; type: SessionType; sceneId?: string },
+): T {
+  const classPresence = buildClassPresence({
+    sessions: withRequestMessages(sessions, { ...request, messages: requestTemplate.messages }),
+    agentIds: requestTemplate.config.agentIds,
+  });
+  if (!classPresence) return requestTemplate;
+  return { ...requestTemplate, config: { ...requestTemplate.config, classPresence } };
+}
+
+/**
+ * A request's config with the course's class memory (I13): what was said in
+ * the earlier sessions (not this one: its messages travel with the request),
+ * and the learner's missed quiz concepts and repeated questions — this
+ * request's own question included.
+ */
+export function withClassMemory<T extends ChatRequestTemplate>(
+  requestTemplate: T,
+  sessions: readonly ChatSession[],
+  request: { sessionId: string; type: SessionType; sceneId?: string },
+  course: {
+    quizMisses?: readonly QuizMissRecord[];
+    scenes?: readonly { id: string }[];
+    /**
+     * Whose lines to remember, when not just the requested agents: an aside
+     * requests only the assistant, yet what the teacher and classmates said
+     * earlier still concerns it
+     */
+    classAgentIds?: readonly string[];
+  } = {},
+): T {
+  const classMemory = buildClassMemory({
+    sessions: withRequestMessages(sessions, { ...request, messages: requestTemplate.messages }),
+    agentIds: course.classAgentIds
+      ? [...new Set([...requestTemplate.config.agentIds, ...course.classAgentIds])]
+      : requestTemplate.config.agentIds,
+    excludeSessionId: request.sessionId,
+    quizMisses: course.quizMisses,
+    sceneIds: course.scenes ? new Set(course.scenes.map((scene) => scene.id)) : undefined,
+  });
+  if (!classMemory) return requestTemplate;
+  return { ...requestTemplate, config: { ...requestTemplate.config, classMemory } };
+}
+
+/**
+ * The store state with how far the lecture got on its current scene (I14):
+ * only progress on that very scene, as a whole index within the route's
+ * bound; anything else is left out.
+ */
+export function withLectureProgress<S extends AgentLoopStoreState>(
+  storeState: S,
+  progress: LectureProgress | null | undefined,
+): S {
+  if (
+    !progress ||
+    !storeState.currentSceneId ||
+    progress.sceneId !== storeState.currentSceneId ||
+    !Number.isSafeInteger(progress.actionIndex) ||
+    progress.actionIndex < 0
+  ) {
+    return storeState;
+  }
+  return {
+    ...storeState,
+    lectureProgress: {
+      sceneId: progress.sceneId,
+      actionIndex: Math.min(progress.actionIndex, PI_REQUEST_BOUNDS.lectureActionIndexMax),
+    },
+  };
+}
+
+/**
+ * A Pi request in the learner's interface language (I22): built-in agents
+ * are named as the learner sees them. Only a supported locale is sent.
+ */
+export function withUiLocale<T extends ChatRequestTemplate>(
+  requestTemplate: T,
+  locale: string | undefined,
+): T {
+  const known = supportedLocales.find((entry) => entry.code === locale);
+  return known ? { ...requestTemplate, uiLocale: known.code } : requestTemplate;
+}
+
+/**
+ * Whom the learner's message addresses by name (I23): `@` + a roster name,
+ * under the registry's name or the one the interface shows. Per request,
+ * never kept in the session; empty when nobody is named.
+ */
+export function addressedAgentIdsOf(
+  content: string,
+  agentIds: readonly string[],
+  t: (key: string) => string,
+): string[] {
+  const registry = useAgentRegistry.getState();
+  return resolveAddressedAgentIds(
+    content,
+    mentionRoster(agentIds, (id) => registry.getAgent(id), t),
+  );
+}
+
+/**
+ * The assistant message an agent_start opens: its speaker (the registry's
+ * name and avatar first) and, when the director said why it cast them, the
+ * reason (I20), kept for offline casting stats.
+ */
+export function agentStartMessage(
+  data: Pick<AgentStartItem, 'messageId' | 'agentId' | 'agentName' | 'avatar'>,
+  agentConfig: Pick<AgentConfig, 'name' | 'avatar'> | undefined,
+  now: number,
+  castReason?: CastReason,
+): UIMessage<ChatMessageMetadata> {
+  return {
+    id: data.messageId,
+    role: 'assistant',
+    parts: [],
+    metadata: {
+      senderName: agentConfig?.name || data.agentName,
+      senderAvatar: data.avatar || agentConfig?.avatar,
+      originalRole: 'agent',
+      agentId: data.agentId,
+      createdAt: now,
+      ...(castReason ? { castReason } : {}),
+    },
+  };
+}
+
+/**
+ * A discussion text trimmed and cut (by characters) to the Pi route's bound,
+ * so the route has nothing left to cut. Undefined when empty.
+ */
+function boundedDiscussionText(value: string | undefined, maxChars: number): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return Array.from(trimmed).slice(0, maxChars).join('').trimEnd() || undefined;
+}
+
+/** How a discussion's moment opened: kept in the session config, sent on every request */
+export type DiscussionMomentFields = Pick<
+  SessionConfig,
+  'discussionTopic' | 'discussionPrompt' | 'triggerAgentId' | 'momentKind' | 'learnerStance'
+>;
+
+/**
+ * The moment fields of a discussion: the opener's own words (`topic`, as the
+ * card showed them), the teacher's intent (`prompt`, director-only) and who
+ * opened it. Empty values are left out.
+ */
+export function buildDiscussionMomentFields(input: {
+  topic?: string;
+  prompt?: string;
+  triggerAgentId?: string;
+  momentKind?: DiscussionMomentKind;
+  learnerStance?: LearnerStance;
+}): DiscussionMomentFields {
+  const discussionTopic = boundedDiscussionText(
+    input.topic,
+    PI_REQUEST_BOUNDS.discussionTopicMaxChars,
+  );
+  const discussionPrompt = boundedDiscussionText(
+    input.prompt,
+    PI_REQUEST_BOUNDS.discussionPromptMaxChars,
+  );
+  return {
+    ...(discussionTopic ? { discussionTopic } : {}),
+    ...(discussionPrompt ? { discussionPrompt } : {}),
+    ...(input.triggerAgentId ? { triggerAgentId: input.triggerAgentId } : {}),
+    ...(input.momentKind ? { momentKind: input.momentKind } : {}),
+    ...(input.learnerStance ? { learnerStance: input.learnerStance } : {}),
+  };
+}
+
+/**
+ * A class moment to open: a lecture moment (its opener and words, and for a
+ * teacher's whole-class question what the learner chose on its card), or a
+ * quiz review (no opener: the director picks one).
+ */
+export type ClassMomentRequest = DiscussionRequest;
+
+/**
+ * The moment fields a follow-up or retry of this session sends: a
+ * discussion's, copied from its config (a discussion persisted before the
+ * config kept its topic falls back to its title, which is the topic), so the
+ * server still knows how the moment opened. Nothing for Q&A.
+ */
+export function discussionRequestFields(
+  session: Pick<ChatSession, 'type' | 'title' | 'config'> | undefined,
+): DiscussionMomentFields {
+  if (!session || session.type !== 'discussion') return {};
+  const { config } = session;
+  return buildDiscussionMomentFields({
+    topic: config.discussionTopic ?? session.title,
+    prompt: config.discussionPrompt,
+    triggerAgentId: config.triggerAgentId,
+    momentKind: config.momentKind,
+    learnerStance: config.learnerStance,
+  });
+}
+
+const DISCUSSION_MOMENT_FIELD_KEYS = [
+  'discussionTopic',
+  'discussionPrompt',
+  'triggerAgentId',
+  'momentKind',
+  'learnerStance',
+] as const satisfies readonly (keyof DiscussionMomentFields)[];
+
+/**
+ * The config the classic (non-Pi) loop sends. Its director dispatches the
+ * trigger agent unasked on a loop's first turn and frames any request with a
+ * topic as a freshly opened discussion, so the moment fields go only with the
+ * request that opens it (no assistant message yet). On a follow-up or resume
+ * the classic director chooses who speaks, as it always did.
+ */
+export function classicLoopConfig(
+  config: ChatRequestTemplate['config'],
+  messages: readonly Pick<UIMessage, 'role'>[],
+): ChatRequestTemplate['config'] {
+  if (!messages.some((message) => message.role === 'assistant')) return config;
+  const followUp = { ...config };
+  for (const key of DISCUSSION_MOMENT_FIELD_KEYS) delete followUp[key];
+  return followUp;
 }
 
 export async function retireLiveRequestResources<
@@ -667,6 +950,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   const shouldHoldAfterRevealRef = useRef(options.shouldHoldAfterReveal);
   const onAsideLiveSpeechRef = useRef(options.onAsideLiveSpeech);
   const onAsideThinkingRef = useRef(options.onAsideThinking);
+  const getLectureProgressRef = useRef(options.getLectureProgress);
   useEffect(() => {
     onLiveSpeechRef.current = options.onLiveSpeech;
     onSpeechProgressRef.current = options.onSpeechProgress;
@@ -680,6 +964,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     shouldHoldAfterRevealRef.current = options.shouldHoldAfterReveal;
     onAsideLiveSpeechRef.current = options.onAsideLiveSpeech;
     onAsideThinkingRef.current = options.onAsideThinking;
+    getLectureProgressRef.current = options.getLectureProgress;
   }, [
     options.onLiveSpeech,
     options.onSpeechProgress,
@@ -693,8 +978,17 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     options.shouldHoldAfterReveal,
     options.onAsideLiveSpeech,
     options.onAsideThinking,
+    options.getLectureProgress,
   ]);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  // The interface language each Pi request is sent in (read as it leaves)
+  const localeRef = useRef<string | undefined>(locale);
+  useEffect(() => {
+    localeRef.current = locale;
+  }, [locale]);
+  // Why the director cast each speaker, from agent_start until its message
+  // opens (the buffer reveals it later)
+  const castReasonsRef = useRef<Map<string, CastReason>>(new Map());
 
   // Track current stageId for data isolation
   const stageId = useStageStore((s) => s.stage?.id);
@@ -1048,6 +1342,9 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   // Tracks last action index per lecture session (avoids stale closure reads)
   const lectureLastActionIndexRef = useRef<Map<string, number>>(new Map());
 
+  // Tracks the narrator (the classroom's teacher) per lecture session
+  const lectureAgentIdsRef = useRef<Map<string, string>>(new Map());
+
   /**
    * Create a StreamBuffer for a session and wire its callbacks to React state.
    * Returns the buffer instance (also stored in buffersRef).
@@ -1075,18 +1372,9 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           onAgentStart(data: AgentStartItem) {
             const now = Date.now();
             const agentConfig = useAgentRegistry.getState().getAgent(data.agentId);
-            const newMsg: UIMessage<ChatMessageMetadata> = {
-              id: data.messageId,
-              role: 'assistant',
-              parts: [],
-              metadata: {
-                senderName: agentConfig?.name || data.agentName,
-                senderAvatar: data.avatar || agentConfig?.avatar,
-                originalRole: 'agent',
-                agentId: data.agentId,
-                createdAt: now,
-              },
-            };
+            const castReason = castReasonsRef.current.get(data.messageId);
+            castReasonsRef.current.delete(data.messageId);
+            const newMsg = agentStartMessage(data, agentConfig, now, castReason);
             setSessions((prev) =>
               prev.map((s) =>
                 s.id === sessionId
@@ -1327,8 +1615,11 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
         switch (event.type) {
           case 'agent_start': {
-            const { messageId, agentId, agentName, agentAvatar, agentColor } = event.data;
+            const { messageId, agentId, agentName, agentAvatar, agentColor, castReason } =
+              event.data;
             currentMessageId = messageId;
+            // Kept until the buffer opens the message (stats only; I20)
+            if (isCastReason(castReason)) castReasonsRef.current.set(messageId, castReason);
             currentBuffer.pushAgentStart({
               messageId,
               agentId,
@@ -1439,11 +1730,40 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         // Pi bypasses runAgentLoop's per-iteration getStoreState, so its single
         // request needs the snapshot built here — /api/chat/pi rejects bodies
         // without storeState.
-        const storeState = await buildFreshAgentLoopStoreState();
+        const [freshState, quizMisses] = await Promise.all([
+          buildFreshAgentLoopStoreState(),
+          loadQuizMisses(useStageStore.getState().scenes),
+        ]);
+        // What was just said on this page, read as the request leaves (I14)
+        const storeState = withLectureProgress(freshState, getLectureProgressRef.current?.());
         const firstRequestContext = getFirstPiRequestContext(sessionId);
-        const piRequestTemplate = firstRequestContext
-          ? { ...requestTemplate, storeState, piSessionBoundary: firstRequestContext }
-          : { ...requestTemplate, storeState };
+        // Who has been present in this course so far, and what was said
+        // earlier (I06, I13), read as the request leaves
+        const classRequest = {
+          sessionId,
+          type: sessionType,
+          sceneId: currentSceneIdRef.current ?? undefined,
+        };
+        const classTemplate = withClassMemory(
+          withClassPresence(requestTemplate, sessionsRef.current, classRequest),
+          sessionsRef.current,
+          classRequest,
+          { quizMisses, scenes: freshState.scenes as { id: string }[] },
+        );
+        // Off by default: nobody singles the learner out by name (I10.5)
+        const presentTemplate = useSettingsStore.getState().teacherMayCallOnLearner
+          ? {
+              ...classTemplate,
+              config: { ...classTemplate.config, teacherMayCallOnLearner: true },
+            }
+          : classTemplate;
+        // Built-in agents are named in the learner's interface language (I22)
+        const piRequestTemplate = withUiLocale(
+          firstRequestContext
+            ? { ...presentTemplate, storeState, piSessionBoundary: firstRequestContext }
+            : { ...presentTemplate, storeState },
+          localeRef.current,
+        );
         // Web search is the workspace's webSearch slot, resolved on the server.
         await runPiSingleRequest(
           sessionId,
@@ -1477,7 +1797,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       const outcome = await runAgentLoop(
         {
-          config: requestTemplate.config,
+          config: classicLoopConfig(requestTemplate.config, requestTemplate.messages),
           userProfile: requestTemplate.userProfile,
         },
         {
@@ -1615,6 +1935,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       }
       lectureMessageIds.current.delete(sessionId);
       lectureLastActionIndexRef.current.delete(sessionId);
+      lectureAgentIdsRef.current.delete(sessionId);
 
       if (isLiveSession && wasStreaming) {
         // Append "..." + interrupted marker to last assistant message
@@ -1782,10 +2103,30 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         storeDirectorState(id, data?.directorState);
 
       if (isPiChatEnabled()) {
-        const storeState = await buildFreshAgentLoopStoreState();
+        const [freshState, quizMisses] = await Promise.all([
+          buildFreshAgentLoopStoreState(),
+          loadQuizMisses(useStageStore.getState().scenes),
+        ]);
+        // The assistant explains along the teacher's line of the moment (I14)
+        const storeState = withLectureProgress(freshState, getLectureProgressRef.current?.());
+        const classRequest = {
+          sessionId,
+          type: 'qa' as const,
+          sceneId: currentSceneIdRef.current ?? undefined,
+        };
+        const presentTemplate = withClassMemory(
+          withClassPresence(requestTemplate, sessionsRef.current, classRequest),
+          sessionsRef.current,
+          classRequest,
+          {
+            quizMisses,
+            scenes: freshState.scenes as { id: string }[],
+            classAgentIds: useSettingsStore.getState().selectedAgentIds ?? [],
+          },
+        );
         await runPiSingleRequest(
           sessionId,
-          { ...requestTemplate, storeState },
+          withUiLocale({ ...presentTemplate, storeState }, localeRef.current),
           controller,
           'qa',
           createAsideConsumer,
@@ -1938,6 +2279,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           },
           directorState,
           elementReference: options.elementReference,
+          addressedAgentIds: addressedAgentIdsOf(content, [agentId], t),
         });
         await runAsideRequest(sessionId, requestTemplate, controller, options.onResponseAccepted);
       } catch (error) {
@@ -2136,6 +2478,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             config: {
               agentIds,
               sessionType: session.type,
+              ...discussionRequestFields(session),
             },
             userProfile: {
               nickname: userProfileState.nickname || undefined,
@@ -2326,6 +2669,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         );
 
         const userProfileState = useUserProfileStore.getState();
+        // Whom this message names (@): they answer first, in character (I23)
+        const addressedAgentIds = addressedAgentIdsOf(content, agentIds, t);
 
         await runAgentLoopFn(
           sessionId!,
@@ -2334,6 +2679,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             config: {
               agentIds,
               sessionType,
+              ...discussionRequestFields(existingSession),
+              ...(addressedAgentIds.length > 0 ? { addressedAgentIds } : {}),
             },
             userProfile: {
               nickname: userProfileState.nickname || undefined,
@@ -2384,7 +2731,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
    * Start a discussion with agent speaking first
    */
   const startDiscussion = useCallback(
-    async (request: DiscussionRequest): Promise<void> => {
+    async (request: ClassMomentRequest): Promise<void> => {
       log.info(`[ChatArea] Starting discussion: "${request.topic}"`);
       // Explicitly clear buffer-pause intent (also cleared transitively via endSession,
       // but being explicit guards against future refactors)
@@ -2394,6 +2741,14 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       // the workspace's classroom slot (assigned there or inherited).
       if (!classroomChatUsable(await loadModelCapabilities())) {
         toast.error(t('settings.modelNotConfigured'));
+        // The card already handed the engine over to the moment: undo that, so
+        // the lecture is back where it was rather than stuck in a discussion
+        // that never starts
+        if (onLiveSessionErrorRef.current) {
+          onLiveSessionErrorRef.current();
+        } else {
+          onThinkingRef.current?.(null);
+        }
         return;
       }
 
@@ -2408,19 +2763,36 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       const sessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const now = Date.now();
-      const agentId = request.agentId || 'default-1';
       registerFirstPiRequest(sessionId);
 
       // Read all selected agent IDs from settings store
       const settingsState = useSettingsStore.getState();
-      const agentIds: string[] =
-        settingsState.selectedAgentIds?.length > 0
-          ? [...settingsState.selectedAgentIds]
-          : [agentId];
+      const selectedAgentIds: string[] =
+        settingsState.selectedAgentIds?.length > 0 ? [...settingsState.selectedAgentIds] : [];
+      // The moment's opener: its own agent; a legacy moment without one is
+      // opened by the classroom's teacher, never a student picked at random.
+      // A quiz review names none: the director picks who opens it.
+      const registry = useAgentRegistry.getState();
+      const isQuizReview = request.momentKind === 'quiz-review';
+      const agentId =
+        request.agentId ||
+        (isQuizReview
+          ? undefined
+          : pickClassroomTeacher(selectedAgentIds, (id) => registry.getAgent(id))?.id ||
+            (selectedAgentIds.length === 0 ? 'default-1' : undefined));
+      const agentIds = selectedAgentIds.length > 0 ? selectedAgentIds : [agentId ?? 'default-1'];
       // Ensure the trigger agent is included
-      if (!agentIds.includes(agentId)) {
+      if (agentId && !agentIds.includes(agentId)) {
         agentIds.unshift(agentId);
       }
+      const moment = buildDiscussionMomentFields({
+        topic: request.topic,
+        prompt: request.prompt,
+        triggerAgentId: agentId,
+        momentKind: request.momentKind,
+        // The learner's choice belongs to a teacher's whole-class question only
+        learnerStance: request.momentKind === 'ask-learner' ? request.learnerStance : undefined,
+      });
 
       // No pre-created assistant message — agent_start events create them dynamically
       const newSession: ChatSession = {
@@ -2431,7 +2803,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         messages: [],
         config: {
           agentIds,
-          triggerAgentId: agentId,
+          ...moment,
         },
         toolCalls: [],
         pendingToolCalls: [],
@@ -2458,9 +2830,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             config: {
               agentIds,
               sessionType: 'discussion',
-              discussionTopic: request.topic,
-              discussionPrompt: request.prompt,
-              triggerAgentId: agentId,
+              ...moment,
             },
             userProfile: {
               nickname: userProfileState.nickname || undefined,
@@ -2526,6 +2896,12 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           (s.status === 'active' || s.status === 'completed'),
       );
       if (existing) {
+        // Its narrator stays whoever it was created with (a lecture persisted
+        // before lectures named the classroom's teacher keeps default-1)
+        lectureAgentIdsRef.current.set(
+          existing.id,
+          existing.config.agentIds[0] ?? existing.messages[0]?.metadata?.agentId ?? 'default-1',
+        );
         // Reactivate a completed session so the chat panel shows it as active again.
         // Actions won't be re-appended because lastActionIndex already covers them.
         if (existing.status === 'completed') {
@@ -2552,7 +2928,21 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       const scene = useStageStore.getState().scenes.find((s) => s.id === sceneId);
       const title = scene?.title || t('chat.lecture');
 
-      const agentConfig = useAgentRegistry.getState().getAgent('default-1');
+      // The lecture's narrator: the classroom's teacher, as the participants
+      // block and the playback engine name them; the default teacher only
+      // when no selected agent resolves
+      const registry = useAgentRegistry.getState();
+      const teacher = pickClassroomTeacher(
+        useSettingsStore.getState().selectedAgentIds ?? [],
+        (id) => registry.getAgent(id),
+      );
+      const lectureAgentId = teacher?.id ?? 'default-1';
+      const agentConfig = teacher ?? registry.getAgent('default-1');
+      const i18nNameKey = `settings.agentNames.${lectureAgentId}`;
+      const i18nName = t(i18nNameKey);
+      const senderName =
+        (i18nName !== i18nNameKey ? i18nName : agentConfig?.name) ||
+        t('settings.agentNames.default-1');
 
       // Create session with a single assistant message (all actions append parts here)
       const lectureMessage: UIMessage<ChatMessageMetadata> = {
@@ -2560,10 +2950,10 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         role: 'assistant',
         parts: [],
         metadata: {
-          senderName: agentConfig?.name || t('settings.agentNames.default-1'),
+          senderName,
           senderAvatar: agentConfig?.avatar,
           originalRole: 'teacher',
-          agentId: 'default-1',
+          agentId: lectureAgentId,
           createdAt: now,
         },
       };
@@ -2575,7 +2965,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         status: 'active',
         messages: [lectureMessage],
         config: {
-          agentIds: ['default-1'],
+          agentIds: [lectureAgentId],
         },
         toolCalls: [],
         pendingToolCalls: [],
@@ -2586,6 +2976,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       };
 
       lectureMessageIds.current.set(sessionId, messageId);
+      lectureAgentIdsRef.current.set(sessionId, lectureAgentId);
 
       setSessions((prev) => [...prev, newSession]);
       setActiveSessionId(sessionId);
@@ -2625,9 +3016,10 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       if (!buffer || buffer.disposed) {
         buffer = createBufferForSession(sessionId, 'lecture');
       }
+      const lectureAgentId = lectureAgentIdsRef.current.get(sessionId) ?? 'default-1';
 
       if (action.type === 'speech') {
-        buffer.pushText(messageId, action.text, 'default-1');
+        buffer.pushText(messageId, action.text, lectureAgentId);
         buffer.sealText(messageId);
       } else if (
         action.type === 'spotlight' ||
@@ -2640,11 +3032,59 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           actionId: `${action.type}-${now}`,
           actionName: action.type,
           params: lectureActionPersistParams(action),
-          agentId: 'default-1',
+          agentId: lectureAgentId,
         });
       }
     },
     [createBufferForSession],
+  );
+
+  /**
+   * Record how a lecture moment ended (I06) as a discussion badge on its
+   * page's lecture bubble: written directly (no reveal pacing — the badge is
+   * a fact, not narration), replacing an earlier badge of the same moment.
+   * The page's lecture session that is playing, else its latest one; nothing
+   * is written when the page has none (never lectured).
+   */
+  const recordLectureMoment = useCallback(
+    (
+      sceneId: string,
+      action: Extract<Action, { type: 'discussion' }>,
+      moment: { agentId?: string; outcome: DiscussionOutcome },
+    ) => {
+      if (!action.id) return;
+      const badge = {
+        ...lectureMomentBadgeParams(action, moment),
+        discussionActionId: action.id,
+      };
+      const now = Date.now();
+      // Looked up in the updater: a lecture session created a moment ago is
+      // already there, even before the session list re-renders
+      setSessions((prev) => {
+        const lectures = prev.filter(
+          (s) => s.type === 'lecture' && s.sceneId === sceneId && s.messages.length > 0,
+        );
+        const target =
+          lectures.find((s) => lectureMessageIds.current.has(s.id)) ??
+          [...lectures].sort((a, b) => b.createdAt - a.createdAt)[0];
+        if (!target) return prev;
+        const messageId = lectureMessageIds.current.get(target.id) ?? target.messages[0].id;
+        return prev.map((s) =>
+          s.id === target.id
+            ? {
+                ...s,
+                messages: s.messages.map((m) =>
+                  m.id === messageId
+                    ? { ...m, parts: upsertLectureMomentBadge(m.parts, badge, now) }
+                    : m,
+                ),
+                updatedAt: nextChatUpdatedAt(s, now),
+              }
+            : s,
+        );
+      });
+    },
+    [],
   );
 
   // Derive active session type for external consumers
@@ -2709,6 +3149,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     startDiscussion,
     startLecture,
     addLectureMessage,
+    recordLectureMoment,
     handleInterrupt,
     getLectureMessageId,
     pauseBuffer,

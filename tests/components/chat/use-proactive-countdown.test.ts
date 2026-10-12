@@ -3,7 +3,10 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DISCUSSION_AUTO_SKIP_MS } from '@/lib/choreography';
-import { useProactiveCountdown } from '@/components/chat/use-proactive-countdown';
+import {
+  isProactiveCountdownRunning,
+  useProactiveCountdown,
+} from '@/components/chat/use-proactive-countdown';
 
 type Mode = 'playback' | 'paused' | 'autonomous';
 
@@ -102,5 +105,21 @@ describe('useProactiveCountdown', () => {
     expect(countdown.progress).toBe(100);
     expect(countdown.isPaused).toBe(false);
     expect(onSkip).not.toHaveBeenCalled();
+  });
+});
+
+describe('isProactiveCountdownRunning', () => {
+  const seen = { mode: 'playback', held: false, inView: true, documentVisible: true } as const;
+
+  it('runs only in playback, unheld, with the card in view and the page shown', () => {
+    expect(isProactiveCountdownRunning(seen)).toBe(true);
+    expect(isProactiveCountdownRunning({ ...seen, mode: 'paused' })).toBe(false);
+    expect(isProactiveCountdownRunning({ ...seen, mode: 'autonomous' })).toBe(false);
+    // The opener still reads it out, or the learner is on it by keyboard
+    expect(isProactiveCountdownRunning({ ...seen, held: true })).toBe(false);
+    // Another tab in front, the panel collapsed
+    expect(isProactiveCountdownRunning({ ...seen, inView: false })).toBe(false);
+    // A background browser tab
+    expect(isProactiveCountdownRunning({ ...seen, documentVisible: false })).toBe(false);
   });
 });
