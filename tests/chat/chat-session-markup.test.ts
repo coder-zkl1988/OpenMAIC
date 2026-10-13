@@ -263,6 +263,37 @@ describe('ChatSessionComponent markup contract', () => {
     expect(html.indexOf('data-action="wb_draw_code"')).toBeGreaterThan(row);
     expect(html).toContain('data-state="running"');
   });
+
+  it('shows one chip per kind of whiteboard step, with its count', () => {
+    const wb = (name: string) => ({ type: `action-${name}`, actionName: name, state: 'result' });
+    const html = renderToStaticMarkup(
+      createElement(ChatSessionComponent, {
+        session: session({
+          messages: [
+            {
+              id: 'a1',
+              role: 'assistant',
+              parts: [
+                { type: 'text', text: 'Twice the speed, four times the distance' },
+                wb('wb_open'),
+                wb('wb_draw_text'),
+                wb('wb_draw_text'),
+                wb('wb_draw_text'),
+                wb('wb_draw_text'),
+              ] as never,
+              metadata: { originalRole: 'teacher' },
+            },
+          ],
+        }),
+        isActive: false,
+      }),
+    );
+
+    expect(html.match(/data-action="/g)).toHaveLength(1);
+    expect(html).toContain('data-action="wb_draw_text"');
+    expect(html).not.toContain('data-action="wb_open"');
+    expect(html).toContain('×4');
+  });
 });
 
 function session(overrides: Partial<ChatSession> = {}): ChatSession {
