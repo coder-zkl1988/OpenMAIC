@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { ChatSession, ChatMessageMetadata } from '@/lib/types/chat';
 import type { UIMessage } from 'ai';
@@ -10,6 +10,13 @@ import { AvatarDisplay } from '@/components/ui/avatar-display';
 import { ClassmateCard } from '@/components/classroom/interaction/classmate-card';
 import { CircleStop } from 'lucide-react';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
+import { useSettingsStore } from '@/lib/store/settings';
+import {
+  findMentions,
+  mentionRoster,
+  splitMentions,
+  type MentionRosterMember,
+} from '@/lib/chat/agent-mention';
 import { InlineActionTag, groupWhiteboardSteps, isWhiteboardAction } from './inline-action-tag';
 import { useSoftCloseCountdown } from './use-soft-close-countdown';
 
@@ -74,6 +81,34 @@ function LoadingDots() {
   );
 }
 
+/** A name the learner addressed, on their own purple bubble: amber reads apart from the white text */
+const USER_MENTION_CLASS = 'font-semibold text-amber-200';
+/** A name in an agent's (white) bubble: the accent */
+const AGENT_MENTION_CLASS = 'font-semibold text-accent-hover dark:text-accent-text';
+
+/** Text with each "@Name" of someone in class set apart in colour */
+function MentionText({
+  text,
+  roster,
+  className,
+}: {
+  readonly text: string;
+  readonly roster: readonly MentionRosterMember[];
+  readonly className: string;
+}) {
+  const spans = findMentions(text, roster);
+  if (spans.length === 0) return text;
+  return splitMentions(text, spans).map((run, index) =>
+    run.mention ? (
+      <span key={index} data-mention={run.mention} className={className}>
+        {run.text}
+      </span>
+    ) : (
+      run.text
+    ),
+  );
+}
+
 /**
  * MessageBubble — renders one message as a single chat bubble.
  *
@@ -91,6 +126,7 @@ const MessageBubble = memo(function MessageBubble({
   isLastMessage,
   isActive,
   isActiveBubble,
+  roster,
 }: {
   message: UIMessage<ChatMessageMetadata>;
   isUser: boolean;
@@ -98,6 +134,8 @@ const MessageBubble = memo(function MessageBubble({
   isLastMessage: boolean;
   isActive: boolean;
   isActiveBubble: boolean;
+  /** Whom a "@Name" in the text may name */
+  roster: readonly MentionRosterMember[];
 }) {
   const { t } = useI18n();
   const parts: MessagePart[] = (message.parts || []) as MessagePart[];
@@ -151,7 +189,11 @@ const MessageBubble = memo(function MessageBubble({
 
                 return (
                   <span key={`${message.id}-${i}`}>
-                    {text}
+                    <MentionText
+                      text={text}
+                      roster={roster}
+                      className={isUser ? USER_MENTION_CLASS : AGENT_MENTION_CLASS}
+                    />
                     {isLive && isLast && (
                       <span className="inline-block w-1.5 h-1.5 rounded-full bg-current opacity-50 animate-pulse ml-1 align-middle" />
                     )}
@@ -241,6 +283,18 @@ export function ChatSessionComponent({
     });
   }
   const getAgentConfig = (id: string) => useAgentRegistry.getState().getAgent(id);
+  // Everyone a message may address: the session's agents and the class's
+  const selectedAgentIds = useSettingsStore((s) => s.selectedAgentIds);
+  const sessionAgentIds = session.config?.agentIds;
+  const roster = useMemo(
+    () =>
+      mentionRoster(
+        [...new Set([...(sessionAgentIds ?? []), ...(selectedAgentIds ?? [])])],
+        (id) => useAgentRegistry.getState().getAgent(id),
+        t,
+      ),
+    [sessionAgentIds, selectedAgentIds, t],
+  );
 
   const senderName = (metadata: ChatMessageMetadata | undefined) => {
     const agentId = metadata?.agentId;
@@ -300,6 +354,7 @@ export function ChatSessionComponent({
             isLastMessage={isLastMessage}
             isActive={isActive}
             isActiveBubble={isActiveBubble}
+            roster={roster}
           />
         );
 

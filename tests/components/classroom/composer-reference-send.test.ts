@@ -66,7 +66,7 @@ describe('Composer: the element-reference chip and sending with it', () => {
     expect(chip.textContent).toContain('互动白板 · 公式 ·');
     expect(chip.textContent).toContain('E = mc^2');
     // Inside the bordered box, before the textarea
-    const box = textarea().parentElement!;
+    const box = textarea().closest('[data-testid="composer-box"]')!;
     expect(box.contains(chip)).toBe(true);
     expect(
       chip.compareDocumentPosition(textarea()) & Node.DOCUMENT_POSITION_FOLLOWING,
