@@ -7,9 +7,11 @@ import {
   addMention,
   filterMentionCandidates,
   findMentionQuery,
+  findMentions,
   insertMention,
   mentionRoster,
   resolveAddressedAgentIds,
+  splitMentions,
   type MentionRosterMember,
 } from '@/lib/chat/agent-mention';
 import { PI_REQUEST_BOUNDS } from '@/lib/types/chat';
@@ -111,5 +113,37 @@ describe('mentionRoster', () => {
       { id: 'default-1', role: 'teacher', names: ['林老师', 'AI teacher'] },
       { id: 'gen-1', role: 'student', names: [undefined, 'Mia'] },
     ]);
+  });
+});
+
+describe('findMentions / splitMentions', () => {
+  it('finds each "@Name" with its range, under any name, longest first', () => {
+    const text = '@小明明 和 @Mia，还有 @小明 呢？';
+    expect(findMentions(text, roster)).toEqual([
+      { start: 0, end: 4, id: 'mingming' },
+      { start: 7, end: 11, id: 'mia' },
+      { start: 15, end: 18, id: 'ming' },
+    ]);
+    expect(findMentions('ask @ms. lin', roster)).toEqual([{ start: 4, end: 12, id: 'teacher' }]);
+  });
+
+  it('skips e-mail addresses, Latin names running on, unknown names and repeats nothing', () => {
+    expect(findMentions('mail a@Mia.cn or @Miami or @Nobody', roster)).toEqual([]);
+    expect(findMentions('@Mia @Mia', roster).map((span) => span.id)).toEqual(['mia', 'mia']);
+    expect(findMentions('no mention here', roster)).toEqual([]);
+  });
+
+  it('cuts the text into plain runs and mention runs that join back to it', () => {
+    const text = '请问 @小米 和 @小明：为什么？';
+    const runs = splitMentions(text, findMentions(text, roster));
+    expect(runs).toEqual([
+      { text: '请问 ' },
+      { text: '@小米', mention: 'mia' },
+      { text: ' 和 ' },
+      { text: '@小明', mention: 'ming' },
+      { text: '：为什么？' },
+    ]);
+    expect(runs.map((run) => run.text).join('')).toBe(text);
+    expect(splitMentions('plain', [])).toEqual([{ text: 'plain' }]);
   });
 });

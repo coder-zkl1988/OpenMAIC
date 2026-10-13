@@ -125,33 +125,70 @@ export function addMention(text: string, name: string): string {
   return rest ? `${mention} ${rest}` : `${mention} `;
 }
 
+/** One "@Name" in a text: where it runs (the "@" included) and whom it names */
+export interface MentionSpan {
+  start: number;
+  end: number;
+  id: string;
+}
+
 /**
- * Who the message addresses: each "@" followed by a roster name (the longest
- * name that fits, so "@小明明" is not "@小明"; a Latin name must end at a word
- * boundary, so "@Mia" is not "@Miami"), in the order first mentioned, each
- * once, at most PI_REQUEST_BOUNDS.addressedAgentIdsMax.
+ * Every "@" followed by a roster name, in order: the longest name that fits
+ * (so "@小明明" is not "@小明"), and a Latin name must end at a word boundary
+ * (so "@Mia" is not "@Miami"). An "@" inside a word (a@b.c) opens nothing.
  */
-export function resolveAddressedAgentIds(
-  text: string,
-  roster: readonly MentionRosterMember[],
-): string[] {
+export function findMentions(text: string, roster: readonly MentionRosterMember[]): MentionSpan[] {
   const named = roster.flatMap((member) =>
     memberNames(member).map((name) => ({ id: member.id, name, key: lower(name) })),
   );
   if (named.length === 0 || !text.includes('@')) return [];
   const haystack = lower(text);
-  const addressed: string[] = [];
-  for (let at = text.indexOf('@'); at >= 0; at = text.indexOf('@', at + 1)) {
-    if (!opensMention(text, at)) continue;
+  const spans: MentionSpan[] = [];
+  for (let at = text.indexOf('@'); at >= 0; ) {
     let best: { id: string; length: number } | null = null;
-    for (const { id, name, key } of named) {
-      if (!haystack.startsWith(key, at + 1)) continue;
-      const next = text[at + 1 + name.length];
-      // "@Mia" inside "@Miami": a Latin name runs on into the next word
-      if (next && ASCII_WORD.test(name[name.length - 1]!) && ASCII_WORD.test(next)) continue;
-      if (!best || name.length > best.length) best = { id, length: name.length };
+    if (opensMention(text, at)) {
+      for (const { id, name, key } of named) {
+        if (!haystack.startsWith(key, at + 1)) continue;
+        const next = text[at + 1 + name.length];
+        // "@Mia" inside "@Miami": a Latin name runs on into the next word
+        if (next && ASCII_WORD.test(name[name.length - 1]!) && ASCII_WORD.test(next)) continue;
+        if (!best || name.length > best.length) best = { id, length: name.length };
+      }
     }
-    if (best && !addressed.includes(best.id)) addressed.push(best.id);
+    if (best) spans.push({ start: at, end: at + 1 + best.length, id: best.id });
+    at = text.indexOf('@', best ? at + 1 + best.length : at + 1);
+  }
+  return spans;
+}
+
+/** The text cut into runs, each either plain or one mention ({@link findMentions}) */
+export function splitMentions(
+  text: string,
+  spans: readonly MentionSpan[],
+): { text: string; mention?: string }[] {
+  const runs: { text: string; mention?: string }[] = [];
+  let cursor = 0;
+  for (const span of spans) {
+    if (span.start > cursor) runs.push({ text: text.slice(cursor, span.start) });
+    runs.push({ text: text.slice(span.start, span.end), mention: span.id });
+    cursor = span.end;
+  }
+  if (cursor < text.length) runs.push({ text: text.slice(cursor) });
+  return runs;
+}
+
+/**
+ * Who the message addresses: the people its mentions name
+ * ({@link findMentions}), in the order first mentioned, each once, at most
+ * PI_REQUEST_BOUNDS.addressedAgentIdsMax.
+ */
+export function resolveAddressedAgentIds(
+  text: string,
+  roster: readonly MentionRosterMember[],
+): string[] {
+  const addressed: string[] = [];
+  for (const { id } of findMentions(text, roster)) {
+    if (!addressed.includes(id)) addressed.push(id);
     if (addressed.length >= PI_REQUEST_BOUNDS.addressedAgentIdsMax) break;
   }
   return addressed;

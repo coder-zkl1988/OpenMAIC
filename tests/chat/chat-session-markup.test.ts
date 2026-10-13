@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { ChatSessionComponent } from '@/components/chat/chat-session';
 import type { ChatSession } from '@/lib/types/chat';
+import { useAgentRegistry } from '@/lib/orchestration/registry/store';
 
 vi.mock('@/lib/hooks/use-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -36,6 +37,61 @@ describe('ChatSessionComponent markup contract', () => {
 
     expect(html).toContain('class="whitespace-pre-wrap break-words"');
     expect(html).toContain('first line\nsecond line');
+  });
+
+  it('sets the names a message addresses apart in colour', () => {
+    useAgentRegistry.setState({
+      agents: {
+        ...useAgentRegistry.getState().agents,
+        'mention-mia': {
+          id: 'mention-mia',
+          name: '显眼包',
+          role: 'student',
+          persona: '',
+          avatar: '',
+          color: '',
+          allowedActions: [],
+          priority: 1,
+          createdAt: new Date(0),
+          updatedAt: new Date(0),
+          isDefault: false,
+        } as never,
+      },
+    });
+    const message = (id: string, role: 'user' | 'teacher', text: string) => ({
+      id,
+      role: role === 'user' ? ('user' as const) : ('assistant' as const),
+      parts: [{ type: 'text' as const, text }],
+      metadata: { originalRole: role, senderName: role },
+    });
+    const html = renderToStaticMarkup(
+      createElement(ChatSessionComponent, {
+        session: {
+          id: 'session-1',
+          type: 'qa',
+          title: 'Q&A',
+          status: 'active',
+          messages: [
+            message('u1', 'user', '@显眼包 你好'),
+            message('a1', 'teacher', '@显眼包 说得对，a@b.c 不是点名'),
+          ],
+          config: { agentIds: ['mention-mia'] },
+          toolCalls: [],
+          pendingToolCalls: [],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        isActive: false,
+      }),
+    );
+
+    expect(html.match(/data-mention="mention-mia"/g)).toHaveLength(2);
+    expect(html).toContain(
+      '<span data-mention="mention-mia" class="font-semibold text-amber-200">@显眼包</span> 你好',
+    );
+    expect(html).toContain(
+      'class="font-semibold text-accent-hover dark:text-accent-text">@显眼包</span> 说得对，a@b.c 不是点名',
+    );
   });
 
   it('renders separate stop and continue controls during soft-closing', () => {

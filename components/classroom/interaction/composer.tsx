@@ -7,6 +7,7 @@ import {
   useId,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type Ref,
@@ -26,9 +27,14 @@ import {
   type QueuedQuestionState,
 } from './use-queued-question-effects';
 import { ComposerStatusRows } from './composer-status-rows';
-import { addMention, type MentionCandidate } from '@/lib/chat/agent-mention';
+import {
+  addMention,
+  type MentionCandidate,
+  type MentionRosterMember,
+} from '@/lib/chat/agent-mention';
 import { useAgentMention } from './use-agent-mention';
 import { AgentMentionMenu, mentionOptionId } from './agent-mention-menu';
+import { MentionTextarea } from './mention-textarea';
 
 /** What the shell asks of the panel composer (shortcuts, the stream's "continue") */
 export interface ComposerHandle {
@@ -264,6 +270,16 @@ export function Composer({
   });
   const { voice, isSendCooldown } = controller;
   const mentionMenuId = useId();
+  // The names the draft may address, drawn in the accent as they are typed
+  const mentionRoster = useMemo<MentionRosterMember[]>(
+    () =>
+      (mentionCandidates ?? NO_CANDIDATES).map((candidate) => ({
+        id: candidate.id,
+        role: candidate.role,
+        names: [candidate.name],
+      })),
+    [mentionCandidates],
+  );
   const mention = useAgentMention({
     candidates: mentionCandidates ?? NO_CANDIDATES,
     draft: controller.draft,
@@ -615,8 +631,9 @@ export function Composer({
             </Fragment>
           ) : (
             <Fragment key="text">
-              <textarea
+              <MentionTextarea
                 ref={setTextarea}
+                roster={mentionRoster}
                 {...controller.textareaProps}
                 onChange={(event) => {
                   controller.textareaProps.onChange(event);

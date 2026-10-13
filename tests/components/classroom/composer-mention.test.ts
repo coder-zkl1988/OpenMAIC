@@ -149,6 +149,40 @@ describe('Composer: the @ menu', () => {
     expect(textarea().value).toBe('@Mia why does it cancel?');
   });
 
+  it('draws the names the draft addresses in the accent, over a transparent textarea ink', async () => {
+    await render();
+    const mirror = () => container.querySelector('[data-testid="composer-mention-mirror"]');
+    type('why is it green?');
+    expect(mirror()).toBeNull();
+    expect(textarea().className).not.toContain('text-transparent');
+
+    type('@Mia why is it green? @Ms. Lin');
+    const names = [...mirror()!.querySelectorAll('[data-mention]')];
+    expect(names.map((node) => [node.getAttribute('data-mention'), node.textContent])).toEqual([
+      ['mia', '@Mia'],
+      ['teacher', '@Ms. Lin'],
+    ]);
+    expect(names[0]!.className).toContain('text-accent-hover');
+    // The mirror lays out the same string as the textarea, plus the closing newline
+    expect(mirror()!.textContent).toBe('@Mia why is it green? @Ms. Lin\n');
+    expect(mirror()!.getAttribute('aria-hidden')).toBe('true');
+    expect(textarea().className).toContain('text-transparent');
+    expect(textarea().className).toContain('caret-fg');
+
+    // While an IME composes, the textarea draws its own ink again and the names
+    // keep only their ground
+    act(() => {
+      textarea().dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    });
+    expect(textarea().className).not.toContain('text-transparent');
+    expect(mirror()!.hasAttribute('data-inked')).toBe(false);
+    expect(mirror()!.querySelector('[data-mention]')!.className).not.toContain('text-accent-hover');
+    act(() => {
+      textarea().dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    });
+    expect(textarea().className).toContain('text-transparent');
+  });
+
   it('has no menu without people to address', async () => {
     await act(async () => root.render(createElement(Composer, {})));
     type('@');
