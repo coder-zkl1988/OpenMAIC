@@ -533,6 +533,8 @@ const earth = new THREE.Mesh(earthGeometry, earthMaterial);
 ### 6. Custom (`custom`)
 - Follow the same lighting and zoom requirements
 
+{{snippet:interactive-viewport}}
+
 ## Design Requirements
 
 ### 1. Visibility & Contrast

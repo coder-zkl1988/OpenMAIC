@@ -17,6 +17,7 @@ import {
   ACTION_CONFIG,
   InlineActionTag,
   getActionTagLabelKey,
+  groupWhiteboardSteps,
   isWhiteboardAction,
 } from '@/components/chat/inline-action-tag';
 
@@ -55,8 +56,8 @@ vi.mock('@/lib/hooks/use-i18n', () => ({
   }),
 }));
 
-const render = (actionName: string, state = 'result') =>
-  renderToStaticMarkup(createElement(InlineActionTag, { actionName, state }));
+const render = (actionName: string, state = 'result', count?: number) =>
+  renderToStaticMarkup(createElement(InlineActionTag, { actionName, state, count }));
 
 describe('InlineActionTag labels', () => {
   beforeEach(() => {
@@ -113,5 +114,50 @@ describe('InlineActionTag chips', () => {
     expect(isWhiteboardAction('wb_open')).toBe(true);
     expect(isWhiteboardAction('spotlight')).toBe(false);
     expect(isWhiteboardAction('discussion')).toBe(false);
+  });
+});
+
+describe('whiteboard chip grouping', () => {
+  const step = (actionName: string, state = 'result') => ({ actionName, state });
+
+  it('shows one chip per kind with its count, opening the board implied', () => {
+    expect(
+      groupWhiteboardSteps([
+        step('wb_open'),
+        step('wb_draw_text'),
+        step('wb_draw_text'),
+        step('wb_draw_text'),
+        step('wb_draw_text'),
+      ]),
+    ).toEqual([{ actionName: 'wb_draw_text', count: 4, running: false }]);
+  });
+
+  it('keeps kinds in the order first used and marks a kind running while any step runs', () => {
+    expect(
+      groupWhiteboardSteps([
+        step('wb_draw_latex'),
+        step('wb_draw_text'),
+        step('wb_draw_latex', 'running'),
+        step('wb_clear'),
+        step('wb_close'),
+      ]),
+    ).toEqual([
+      { actionName: 'wb_draw_latex', count: 2, running: true },
+      { actionName: 'wb_draw_text', count: 1, running: false },
+      { actionName: 'wb_clear', count: 1, running: false },
+    ]);
+  });
+
+  it('still shows opening or closing the board when nothing else happened', () => {
+    expect(groupWhiteboardSteps([step('wb_open', 'running')])).toEqual([
+      { actionName: 'wb_open', count: 1, running: true },
+    ]);
+    expect(groupWhiteboardSteps([])).toEqual([]);
+  });
+
+  it('prints the count after the label only when there is more than one', () => {
+    expect(render('wb_draw_text', 'result', 4)).toContain('×4');
+    expect(render('wb_draw_text', 'result', 1)).not.toContain('×');
+    expect(render('wb_draw_text')).not.toContain('×');
   });
 });

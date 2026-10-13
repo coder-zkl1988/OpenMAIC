@@ -313,6 +313,8 @@ Avoid these failures:
 - Do not use the same dark dashboard or checklist panel for every procedural task.
 - Do not turn visual framing into a read-only PPT or passive explanation page.
 
+{{snippet:interactive-viewport}}
+
 ## Technical Requirements
 
 - Use inline CSS and JavaScript.

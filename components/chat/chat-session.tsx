@@ -10,7 +10,7 @@ import { AvatarDisplay } from '@/components/ui/avatar-display';
 import { ClassmateCard } from '@/components/classroom/interaction/classmate-card';
 import { CircleStop } from 'lucide-react';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
-import { InlineActionTag, isWhiteboardAction } from './inline-action-tag';
+import { InlineActionTag, groupWhiteboardSteps, isWhiteboardAction } from './inline-action-tag';
 import { useSoftCloseCountdown } from './use-soft-close-countdown';
 
 /** Extended message part type covering standard + custom action parts */
@@ -81,7 +81,8 @@ function LoadingDots() {
  * React state. No UI-layer animation is needed — we render parts directly.
  * Action badges only appear once the buffer's tick loop reaches them (after
  * all preceding text is fully revealed). Whiteboard actions are collected into
- * a chip row under the bubble; other actions stay inline in the text.
+ * a chip row under the bubble, one chip per kind (see groupWhiteboardSteps);
+ * other actions stay inline in the text.
  */
 const MessageBubble = memo(function MessageBubble({
   message,
@@ -107,12 +108,14 @@ const MessageBubble = memo(function MessageBubble({
   const hasBubbleContent = parts.some(
     (p) => isText(p) || (isAction(p) && !isWhiteboardAction(actionNameOf(p))),
   );
-  const boardParts = parts
-    .map((part, index) => ({ part, index }))
-    .filter(({ part }) => isAction(part) && isWhiteboardAction(actionNameOf(part)));
+  const boardChips = groupWhiteboardSteps(
+    parts
+      .filter((part) => isAction(part) && isWhiteboardAction(actionNameOf(part)))
+      .map((part) => ({ actionName: actionNameOf(part), state: part.state || 'result' })),
+  );
 
   // Loading dots (between agent_start and first text_delta)
-  if (!hasBubbleContent && boardParts.length === 0) {
+  if (!hasBubbleContent && boardChips.length === 0) {
     if (!isActive || message.role !== 'assistant') return null;
     return (
       <div className="w-fit rounded-[4px_14px_14px_14px] border border-line bg-background px-3 py-2">
@@ -175,13 +178,14 @@ const MessageBubble = memo(function MessageBubble({
         </div>
       )}
 
-      {boardParts.length > 0 && (
+      {boardChips.length > 0 && (
         <div role="group" aria-label={t('chat.actionTag.group')} className="flex flex-wrap gap-1">
-          {boardParts.map(({ part, index }) => (
+          {boardChips.map((chip) => (
             <InlineActionTag
-              key={`${message.id}-action-${index}`}
-              actionName={actionNameOf(part)}
-              state={part.state || 'result'}
+              key={`${message.id}-action-${chip.actionName}`}
+              actionName={chip.actionName}
+              state={chip.running ? 'running' : 'result'}
+              count={chip.count}
             />
           ))}
         </div>

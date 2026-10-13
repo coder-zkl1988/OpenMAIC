@@ -16,6 +16,8 @@ import type { LucideIcon } from 'lucide-react';
 interface InlineActionTagProps {
   actionName: string;
   state: string;
+  /** How many steps of this kind the chip stands for (whiteboard chips) */
+  count?: number;
 }
 
 // ── Style tokens ──────────────────────────────────────────────
@@ -74,16 +76,51 @@ export function isWhiteboardAction(actionName: string): boolean {
   return ACTION_CONFIG[actionName]?.wb ?? actionName.startsWith('wb_');
 }
 
+/** Opening or closing the board: implied by anything drawn on it */
+const WB_LIFECYCLE = new Set(['wb_open', 'wb_close']);
+
+export interface WhiteboardStep {
+  readonly actionName: string;
+  readonly state: string;
+}
+
+export interface WhiteboardChip {
+  readonly actionName: string;
+  readonly count: number;
+  readonly running: boolean;
+}
+
+const isRunningState = (state: string) => state === 'running' || state === 'input-available';
+
+/**
+ * The chips for one message's whiteboard steps: one per kind, in the order
+ * first used, with how many times it ran, so a teacher writing four lines
+ * shows 「板书 · 文字 ×4」 instead of four chips. Opening or closing the board
+ * shows only when nothing else happened on it.
+ */
+export function groupWhiteboardSteps(steps: readonly WhiteboardStep[]): WhiteboardChip[] {
+  const drew = steps.some((step) => !WB_LIFECYCLE.has(step.actionName));
+  const chips = new Map<string, { count: number; running: boolean }>();
+  for (const step of steps) {
+    if (drew && WB_LIFECYCLE.has(step.actionName)) continue;
+    const chip = chips.get(step.actionName) ?? { count: 0, running: false };
+    chip.count += 1;
+    chip.running ||= isRunningState(step.state);
+    chips.set(step.actionName, chip);
+  }
+  return [...chips].map(([actionName, chip]) => ({ actionName, ...chip }));
+}
+
 // ── Component ─────────────────────────────────────────────────
 
-export function InlineActionTag({ actionName, state }: InlineActionTagProps) {
+export function InlineActionTag({ actionName, state, count = 1 }: InlineActionTagProps) {
   const { t } = useI18n();
   const config = ACTION_CONFIG[actionName];
   const labelKey = getActionTagLabelKey(actionName);
   const translated = config ? t(labelKey) : labelKey;
   // Unknown actions fall back to their raw name
   const label = translated === labelKey ? actionName : translated;
-  const isRunning = state === 'running' || state === 'input-available';
+  const isRunning = isRunningState(state);
 
   if (isWhiteboardAction(actionName)) {
     // Whiteboard chip (ClassroomWhiteboard.dc.html): 22px, 11px/600; the
@@ -104,6 +141,7 @@ export function InlineActionTag({ actionName, state }: InlineActionTagProps) {
           <PenLine className="size-[11px] shrink-0" strokeWidth={2.25} />
         )}
         {label}
+        {count > 1 && <span className="tabular-nums">×{count}</span>}
       </span>
     );
   }

@@ -1,9 +1,5 @@
 import { useCallback, useRef } from 'react';
-import {
-  GENUI_LOGICAL_HEIGHT,
-  GENUI_LOGICAL_WIDTH,
-  fitGenUiViewport,
-} from '@/lib/interactive/logical-viewport';
+import { fitGenUiViewport } from '@/lib/interactive/logical-viewport';
 import {
   STANDALONE_INTERACTIVE_SANDBOX,
   type StandalonePlayerStrings,
@@ -13,8 +9,8 @@ import type { WidgetChannel } from '../playback/media-ports';
 
 /**
  * An interactive scene: the exported page in a sandboxed `srcdoc` iframe,
- * laid out at the fixed logical viewport generated pages are authored against
- * and scaled to fit, as in the classroom. The sandbox never grants
+ * laid out at a viewport of at least 1280×720 stretched to the slot's shape
+ * and scaled to fill it, as in the classroom. The sandbox never grants
  * `allow-same-origin`, so the page cannot reach the player's document.
  *
  * Widget actions reach the page the way the classroom sends them: a
@@ -41,7 +37,8 @@ export function InteractiveScene({
     [widgets],
   );
   const { width, height } = useElementSize(slotRef);
-  const { box, scale } = fitGenUiViewport({ left: 0, top: 0, width, height });
+  const viewport = fitGenUiViewport({ left: 0, top: 0, width, height });
+  const { box, scale } = viewport;
   return (
     <div className="absolute inset-0 p-4">
       <div ref={slotRef} className="relative h-full w-full">
@@ -59,8 +56,8 @@ export function InteractiveScene({
               position: 'absolute',
               left: 0,
               top: 0,
-              width: GENUI_LOGICAL_WIDTH,
-              height: GENUI_LOGICAL_HEIGHT,
+              width: viewport.width,
+              height: viewport.height,
               border: 0,
               transform: `scale(${scale})`,
               transformOrigin: 'top left',

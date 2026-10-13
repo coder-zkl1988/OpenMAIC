@@ -21,6 +21,7 @@ export type PromptId =
 /** Snippets referenced by generation-owned prompt templates. */
 export type SnippetId =
   | 'interactive-observation'
+  | 'interactive-viewport'
   | 'json-output-rules'
   | 'image-instructions'
   | 'video-instructions'
