@@ -107,6 +107,8 @@ To make highlight/annotation work, use consistent IDs for controls:
 - Buttons: `id="{action}-btn"` (e.g., `id="start-btn"`, `id="reset-btn"`)
 - Displays: `id="{variable_name}-display"` (e.g., `id="acceleration-display"`)
 
+{{snippet:interactive-viewport}}
+
 ## CRITICAL Design Requirements
 
 ### 1. Mobile Layout - NO OVERLAP

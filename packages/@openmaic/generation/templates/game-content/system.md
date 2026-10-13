@@ -149,6 +149,8 @@ Learning: Player EXPERIENCES F=ma by adjusting thrust and seeing result
 // Player can adjust thrust before any danger
 ```
 
+{{snippet:interactive-viewport}}
+
 ## Layout & Positioning (CRITICAL)
 
 ### Game Object Positioning

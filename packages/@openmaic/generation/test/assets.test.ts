@@ -34,6 +34,7 @@ const SNIPPET_IDS = [
   'video-instructions',
   'media-safety-guidelines',
   'interactive-observation',
+  'interactive-viewport',
   'slide-image-instructions',
   'slide-generated-image-instructions',
   'slide-video-instructions',
@@ -116,6 +117,18 @@ describe('packaged prompt assets', () => {
     for (const snippetId of SNIPPET_IDS) {
       expect(loadSnippet(snippetId, PACKAGE_ROOT).length).toBeGreaterThan(0);
     }
+  });
+
+  test.each([
+    'simulation-content',
+    'diagram-content',
+    'code-content',
+    'game-content',
+    'visualization3d-content',
+    'procedural-skill-content',
+  ])('%s lays the page out to fill the classroom viewport', (promptId) => {
+    const source = readFileSync(join(PACKAGE_ROOT, 'templates', promptId, 'system.md'), 'utf8');
+    expect(source).toContain('{{snippet:interactive-viewport}}');
   });
 
   // The loader only interpolates `\w+` names. Pin the app's grandfathered

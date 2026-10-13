@@ -130,6 +130,8 @@ async function runCode() {
 - Hint button that reveals hints progressively
 - Mobile-responsive layout
 
+{{snippet:interactive-viewport}}
+
 ## Layout Guidelines
 
 - Code editor should be visible and not overlap with output panel
