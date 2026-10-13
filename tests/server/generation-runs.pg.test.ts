@@ -62,6 +62,7 @@ import type { GenerationRunInput } from '@/lib/server/generation/run/types';
 import type { MediaConnection } from '@/lib/server/model-config/media';
 import { storeGeneratedAsset } from '@/lib/server/store-generated-asset';
 import { createOwnerAgent } from '@/lib/server/agents/store';
+import { getBuiltInAgent } from '@/lib/orchestration/registry/built-in';
 import { StepRefusal } from '@/lib/server/generation/steps/context';
 import type { ConnectableQueryable } from '@openmaic/storage/server/reference';
 import type { SceneOutline } from '@/lib/types/generation';
@@ -1441,7 +1442,10 @@ describe.skipIf(!contractUrl)('generation runs on PostgreSQL', () => {
     // built-in teacher, as in the browser), voiced from its persona.
     expect(voxcpm.calls.narrateClip[0]).toMatchObject({
       voice: 'voxcpm:auto',
-      providerOptions: { voiceMode: 'auto', voicePrompt: expect.stringContaining('lead teacher') },
+      providerOptions: {
+        voiceMode: 'auto',
+        voicePrompt: expect.stringContaining(getBuiltInAgent('default-1')!.persona.slice(0, 60)),
+      },
     });
 
     const voices: string[] = [];

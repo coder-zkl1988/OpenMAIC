@@ -102,7 +102,7 @@ test.describe('Classroom Interaction', () => {
     // The composer lives at the foot of the interaction panel (P4d): always
     // visible, no bottom roundtable strip under the stage any more
     const composer = page.getByTestId('classroom-composer');
-    const textarea = composer.getByPlaceholder('Type your message...', { exact: true });
+    const textarea = composer.getByRole('textbox', { name: 'Text input', exact: true });
     await expect(composer).toBeVisible();
     await expect(textarea).toBeVisible();
     await expect(page.getByTestId('roundtable-non-presentation-card')).toHaveCount(0);
@@ -174,7 +174,7 @@ test.describe('Classroom Interaction', () => {
     await classroom.waitForLoaded();
 
     const composer = page.getByTestId('classroom-composer');
-    const textarea = composer.getByPlaceholder('Type your message...', { exact: true });
+    const textarea = composer.getByRole('textbox', { name: 'Text input', exact: true });
     await expect(textarea).toBeVisible();
 
     // Collapse the panel (C), then T brings the composer back and focuses it
@@ -205,7 +205,7 @@ test.describe('Classroom Interaction', () => {
 
     await page.keyboard.press('T');
     await expect(card).toBeVisible();
-    const textarea = card.getByPlaceholder('Type your message...', { exact: true });
+    const textarea = card.getByRole('textbox', { name: 'Text input', exact: true });
     await expect(textarea).toBeFocused();
     await page.keyboard.type('Why is it green?');
 
@@ -225,7 +225,7 @@ test.describe('Classroom Interaction', () => {
     await expect.poll(isFullscreen).toBe(false);
     const panelTextarea = page
       .getByTestId('classroom-composer')
-      .getByPlaceholder('Type your message...', { exact: true });
+      .getByRole('textbox', { name: 'Text input', exact: true });
     await expect(panelTextarea).toBeVisible();
     await expect(panelTextarea).toHaveValue('Why is it green?');
   });
