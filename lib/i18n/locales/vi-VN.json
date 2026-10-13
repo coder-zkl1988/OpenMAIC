@@ -285,12 +285,22 @@
       "pageLabel": "Trang {{n}}",
       "currentPage": "Hiện tại",
       "jumpToLine": "Nhảy tới dòng này",
-      "jumpUnavailable": "Dòng này không nhảy tới được"
+      "jumpUnavailable": "Dòng này không nhảy tới được",
+      "discussNow": "Thảo luận ngay",
+      "discussNowBusy": "Hãy kết thúc cuộc trò chuyện đang mở trước",
+      "momentOutcome": {
+        "joined": "Đã tham gia",
+        "skipped": "Đã bỏ qua",
+        "autoSkipped": "Đã lỡ",
+        "notShown": "Không có trong lớp này"
+      }
     },
     "badge": {
       "qa": "Hỏi đáp",
       "discussion": "Thảo luận",
-      "lecture": "GIẢNG"
+      "lecture": "GIẢNG",
+      "aside": "Hỏi trợ giảng",
+      "asideClassmate": "Trao đổi nhỏ"
     }
   },
   "actions": {
@@ -336,7 +346,22 @@
     "join": "Tham gia",
     "skip": "Bỏ qua",
     "offerLabel": "{{name}} muốn bắt đầu thảo luận",
-    "autoSkipHint": "Tự động bỏ qua sau {{seconds}} giây"
+    "autoSkipHint": "Tự động bỏ qua sau {{seconds}} giây",
+    "countdownPaused": "Đã tạm dừng đếm ngược: chọn khi bạn sẵn sàng",
+    "question": "Câu hỏi",
+    "joinTeacher": "Cùng suy nghĩ",
+    "teacherOfferLabel": "{{name}} đặt một câu hỏi",
+    "review": "Ôn lại",
+    "joinReview": "Cùng ôn lại",
+    "reviewOfferLabel": "Ôn lại bài kiểm tra",
+    "answerFirst": "Để mình trả lời",
+    "listenFirst": "Nghe mọi người trước"
+  },
+  "quizReview": {
+    "topic": "Cùng xem lại những câu bạn làm sai: {{questions}}",
+    "question": "Câu {{n}} “{{text}}”",
+    "separator": "; ",
+    "more": " và {{count}} câu khác"
   },
   "voice": {
     "startListening": "Nhập bằng giọng nói",
@@ -381,18 +406,25 @@
     "composer": {
       "raiseHand": "Giơ tay",
       "raiseHandHint": "Giơ tay: giáo viên sẽ mời bạn phát biểu khi hết câu này",
+      "raiseHandHintAssistant": "Giơ tay: trợ giảng trả lời trong bảng Tương tác, giáo viên vẫn tiếp tục giảng",
       "raiseHandInLiveSession": "Trong phần hỏi đáp bạn có thể nói ngay",
       "lowerHand": "Hạ tay",
       "lowerHandHint": "Hạ tay và rút lại câu hỏi",
       "cuePlaceholder": "Nói hoặc nhập câu hỏi của bạn",
+      "answerPlaceholder": "Nói hoặc nhập câu trả lời của bạn",
       "cueStatus": "Đến lượt bạn nói · lớp học đang tạm dừng",
+      "cueAsked": "{{name}} đang chờ câu trả lời của bạn",
+      "cueHandBack": "Đến lượt bạn · nghĩ gì cứ nói",
       "send": "Gửi",
       "cancelRecording": "Hủy ghi âm",
       "handRaised": "Đã giơ tay · đến lượt bạn khi hết câu này",
       "handRaisedStep": "Đã giơ tay · đến lượt bạn khi xong bước này",
+      "handRaisedAssistant": "Đã giơ tay · trợ giảng sẽ trả lời bạn trong bảng Tương tác",
       "raisedPlaceholder": "Bạn có thể viết câu hỏi trước...",
       "followUpPlaceholder": "Hỏi tiếp...",
       "referencePlaceholder": "{{type}}: bạn muốn hỏi gì về nội dung này?",
+      "mentionMenu": "Hỏi ai",
+      "mentionPlaceholder": "Nhập câu hỏi, hoặc @ để hỏi một người",
       "handLowered": "Đã hạ tay"
     },
     "handRaise": {
@@ -400,15 +432,28 @@
       "aheadOfDiscussion": "Bạn đã giơ tay, phần thảo luận của {{name}} xếp sau bạn",
       "calledBy": "{{name}} mời bạn phát biểu",
       "pendingQuestion": "Đang chờ · sẽ trả lời khi hết câu này",
-      "pendingQuestionStep": "Đang chờ · sẽ trả lời khi xong bước này"
+      "pendingQuestionStep": "Đang chờ · sẽ trả lời khi xong bước này",
+      "assistantPrompt": "Hãy nói câu hỏi của bạn, mình sẽ giúp bạn.",
+      "assistantAnswering": "Trợ giảng đang trả lời…",
+      "agentAnswering": "{{name}} đang trả lời…",
+      "askedBy": "{{name}} hỏi bạn: {{prompt}}",
+      "handBack": "{{name}} nhường lời cho bạn",
+      "cueReplies": {
+        "think": "Để mình nghĩ đã…",
+        "unsure": "Mình không chắc lắm",
+        "hint": "Cho mình gợi ý nhé"
+      }
     },
     "participants": {
       "label": "Thành viên",
       "online": "{{count}} người trực tuyến",
       "speaking": "Đang nói",
+      "answering": "Đang trả lời",
       "wantsToSpeak": "Muốn phát biểu",
       "handRaised": "Đang giơ tay",
-      "more": "Thêm {{count}} thành viên"
+      "more": "Thêm {{count}} thành viên",
+      "cardLabel": "{{name}}, {{status}}",
+      "askThem": "Hỏi {{name}}"
     },
     "generating": "Đang tạo…",
     "paused": "Đã tạm dừng",
@@ -422,7 +467,12 @@
     "exitFullscreen": "Thoát toàn màn hình",
     "editCourse": "Sửa bài học",
     "doneEditing": "Sửa xong",
-    "proModeDisabledHint": "Trang này không sửa được — hãy mở một slide bài học để dùng chế độ Pro."
+    "proModeDisabledHint": "Trang này không sửa được — hãy mở một slide bài học để dùng chế độ Pro.",
+    "ownClassmates": {
+      "title": "Khóa học này có bạn học riêng",
+      "description": "Các bạn học cài sẵn của bạn được giữ lại cho khóa học mới và cho khóa học không có bạn học riêng.",
+      "alwaysPreset": "Luôn dùng bạn học cài sẵn của tôi"
+    }
   },
   "edit": {
     "proMode": "Pro",
@@ -815,7 +865,7 @@
       "count": "{{count}} thành viên",
       "editHint": "Bấm vào một thành viên để sửa",
       "personaLabel": "Nhân vật",
-      "personaPlaceholder": "Mô tả tính cách, phong cách giảng dạy và nhiệm vụ của vai này...",
+      "personaPlaceholder": "Mô tả người này: tính cách, cách nói chuyện, đã biết gì và chưa biết gì, khi nào thì lên tiếng.",
       "noPersona": "Chưa có mô tả nhân vật",
       "unnamed": "Chưa đặt tên",
       "teacherBadge": "Chủ trì",
@@ -824,7 +874,29 @@
       "removeFromClass": "Bỏ khỏi lớp",
       "aiClassmates": "Bạn học AI · {{count}}",
       "addRole": "Thêm vai",
-      "shortTitle": "Danh sách nhân vật"
+      "upgrade": {
+        "action": "Viết lại thành người thật",
+        "actionHint": "Viết lại mỗi mô tả nhân vật thành một người đáng tin: tính cách, cách nói, những gì họ biết. Bạn xem trước mọi thay đổi trước khi áp dụng.",
+        "loading": "Đang viết lại mô tả nhân vật…",
+        "previewTitle": "Xem trước mô tả nhân vật mới",
+        "previewHint": "Chỉ mô tả nhân vật thay đổi; tên, ảnh đại diện và giọng nói giữ nguyên. Có thể hoàn tác sau khi áp dụng.",
+        "now": "Hiện tại",
+        "rewritten": "Sau khi viết lại",
+        "apply": "Áp dụng",
+        "failed": "Không viết lại được mô tả nhân vật. Vui lòng thử lại.",
+        "invalid": "Không thể viết lại danh sách này. Hãy kiểm tra mỗi người đều có tên và vai trò."
+      },
+      "shortTitle": "Danh sách nhân vật",
+      "impact": {
+        "title": "Những chỗ kịch bản khóa học dùng thành viên này",
+        "moments": "Khoảnh khắc lớp học do {{name}} mở đầu: {{count}}",
+        "mentions": "Lời thoại nhắc đến {{name}}: {{count}}. Lời dẫn và giọng nói đã tạo sẽ không thay đổi.",
+        "handToTeacher": "Để giáo viên mở đầu",
+        "dropMoments": "Xóa luôn các khoảnh khắc này",
+        "removeAnyway": "Vẫn xóa khỏi lớp",
+        "renameMentions": "Lời thoại vẫn gọi “{{name}}”: {{count}}. Lời dẫn và giọng nói đã tạo vẫn giữ tên cũ.",
+        "renameAnyway": "Vẫn đổi tên"
+      }
     },
     "elementRef": {
       "remove": "移除引用 {{label}}",
@@ -1388,6 +1460,14 @@
     "agentModeAutoDesc": "AI sẽ tự sinh các vai trò phù hợp",
     "autoAgentCount": "Số tác nhân",
     "autoAgentCountDesc": "Số tác nhân sẽ tự sinh (tính cả giảng viên)",
+    "autoAgentCountAuto": "Để AI quyết định",
+    "classAtmosphere": "Không khí lớp học",
+    "classAtmosphereDesc": "Tạo ra những bạn học như thế nào",
+    "classAtmosphereOptions": {
+      "focused": "Yên tĩnh, tập trung",
+      "conversational": "Trao đổi qua lại",
+      "lively": "Sôi nổi"
+    },
     "atLeastOneAgent": "Vui lòng chọn ít nhất 1 tác nhân",
     "singleAgentMode": "Chế độ một tác nhân",
     "directAnswer": "Trả lời trực tiếp",
@@ -1414,12 +1494,12 @@
       "student": "Sinh viên"
     },
     "agentDescriptions": {
-      "default-1": "Giảng viên chính, giảng rõ ràng và có hệ thống",
-      "default-2": "Hỗ trợ học tập và làm rõ các ý quan trọng",
-      "default-3": "Mang lại tiếng cười và không khí sôi nổi cho lớp",
-      "default-4": "Luôn tò mò, thích hỏi tại sao và như thế nào",
-      "default-5": "Chăm chỉ ghi chép và sắp xếp bài học",
-      "default-6": "Suy nghĩ sâu và tìm hiểu bản chất vấn đề"
+      "default-1": "Thầy giáo điềm tĩnh, ấm áp, giảng từng bước và hay cho cả lớp đoán trước",
+      "default-2": "Trợ giảng nhiệt tình, đưa gợi ý khi bạn bị kẹt",
+      "default-3": "Cô bạn vui nhộn, hay buột miệng nói ý đầu tiên",
+      "default-4": "Cậu bạn tò mò, lúc nào cũng hỏi tại sao",
+      "default-5": "Người ghi chép cẩn thận, kiểm tra lại từng bước",
+      "default-6": "Cô bạn trầm lặng, hay hỏi \"nhưng nếu… thì sao?\""
     },
     "close": "Đóng",
     "providerNames": {
@@ -1459,6 +1539,13 @@
     "keyboardShortcuts": "Phím tắt",
     "generalSettings": "Chung",
     "systemSettings": "Hệ thống",
+    "classroomSection": "Lớp học",
+    "assistantAnswersDuringLecture": "Trợ giảng trả lời câu hỏi trong lúc giảng bài",
+    "assistantAnswersDuringLectureDesc": "Khi bật, câu hỏi trong lúc giảng bài không làm gián đoạn giáo viên: trợ giảng sẽ trả lời trong bảng Tương tác.",
+    "teacherMayCallOnLearner": "Cho phép giáo viên gọi tên tôi",
+    "teacherMayCallOnLearnerDesc": "Khi bật, giáo viên có thể gọi tên bạn để hỏi, như với các bạn cùng lớp. Khi tắt, giáo viên chỉ hỏi cả lớp và không gọi riêng bạn.",
+    "presetAgentsInGeneratedCourses": "Luôn dùng bạn học cài sẵn của tôi",
+    "presetAgentsInGeneratedCoursesDesc": "Khi bật, các khóa học có bạn học riêng cũng dùng các bạn học bạn chọn ở trang chủ. Khi tắt, các khóa học đó do bạn học riêng của khóa học tham gia.",
     "importFromClipboard": "Nhập từ bộ nhớ tạm",
     "baseUrlRegion": {
       "china": "Trung Quốc",

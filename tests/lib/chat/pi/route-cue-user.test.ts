@@ -197,6 +197,8 @@ async function readSseEvents(response: Response) {
     .map((part) => JSON.parse(part.slice('data: '.length)));
 }
 
+type SseEvent = Awaited<ReturnType<typeof readSseEvents>>[number];
+
 function expectCueUserBeforeDone(events: Array<{ type: string }>) {
   const cueUserIndex = events.findIndex((event) => event.type === 'cue_user');
   const doneIndex = events.findIndex((event) => event.type === 'done');
@@ -503,6 +505,121 @@ function mockDirectorWithFailedSceneRead() {
     };
   });
 }
+
+type ScriptStep = { tool: string; args: Record<string, unknown> };
+type ScriptCapture = {
+  results: Array<{ content?: Array<{ text?: string }>; details?: Record<string, unknown> }>;
+  childPrompts: Array<{ agentName: string; prompt: string }>;
+  childHistories: Array<{ agentName: string; history: unknown[] }>;
+  directorHistory: unknown[];
+};
+
+const SCRIPTED_CHILD_TEXT: Record<string, string> = {
+  Teacher: 'Cool roofs reflect more sunlight.',
+  Student: 'So a darker roof would be cooler?',
+  Assistant: 'Think of a white T-shirt on a sunny day.',
+};
+
+/** The director runs the given tool calls in order; each child says its scripted line */
+function mockScriptedDirector(steps: ScriptStep[], captured: ScriptCapture) {
+  mocks.buildAgent.mockImplementation((agentOpts: MockAgentOptions & { history?: unknown[] }) => {
+    const isDirector = agentOpts.tools.some((tool) => tool.name === 'cue_user');
+    if (isDirector) {
+      captured.directorHistory = agentOpts.history ?? [];
+      return {
+        prompt: async () => {
+          for (const step of steps) {
+            const tool = agentOpts.tools.find((candidate) => candidate.name === step.tool);
+            captured.results.push(
+              ((await tool?.execute(`${step.tool}-${captured.results.length}`, step.args)) as
+                | ScriptCapture['results'][number]
+                | undefined) ?? {},
+            );
+          }
+        },
+        waitForIdle: async () => {},
+        subscribe: () => () => {},
+        state: { messages: [] },
+      };
+    }
+
+    const agentName = /^You are ([^.]+)\./.exec(agentOpts.systemPrompt)?.[1] ?? '';
+    captured.childHistories.push({ agentName, history: agentOpts.history ?? [] });
+    return {
+      subscribe: () => () => {},
+      prompt: async (prompt: string) => {
+        captured.childPrompts.push({ agentName, prompt });
+      },
+      waitForIdle: async () => {},
+      state: {
+        messages: [
+          {
+            role: 'assistant',
+            content: [{ type: 'text', text: SCRIPTED_CHILD_TEXT[agentName] ?? 'Hmm.' }],
+          },
+        ],
+      },
+    };
+  });
+}
+
+function makeScriptCapture(): ScriptCapture {
+  return { results: [], childPrompts: [], childHistories: [], directorHistory: [] };
+}
+
+/** A teacher, a student and an assistant, on the first of two pages */
+function makeClassroomBody(
+  overrides: { piMaxAgentTurns?: number; messages?: Array<Record<string, unknown>> } = {},
+) {
+  const body = makeBody();
+  return {
+    ...body,
+    ...(overrides.messages ? { messages: overrides.messages } : {}),
+    storeState: {
+      ...body.storeState,
+      scenes: [
+        {
+          id: 'scene-1',
+          title: 'Cooling',
+          order: 1,
+          type: 'slide',
+          content: { type: 'slide', canvas: { elements: [] } },
+        },
+        {
+          id: 'scene-2',
+          title: 'Cool roofs',
+          order: 2,
+          type: 'slide',
+          content: { type: 'slide', canvas: { elements: [] } },
+        },
+      ],
+      currentSceneId: 'scene-1',
+    },
+    config: {
+      ...body.config,
+      agentIds: ['default-1', 'student-1', 'assistant-1'],
+      agentConfigs: [
+        body.config.agentConfigs[0],
+        makeAgentConfig({ id: 'student-1', name: 'Student', role: 'student' }),
+        makeAgentConfig({ id: 'assistant-1', name: 'Assistant', role: 'assistant' }),
+      ],
+      ...(overrides.piMaxAgentTurns ? { piMaxAgentTurns: overrides.piMaxAgentTurns } : {}),
+    },
+  };
+}
+
+const callTeacher: ScriptStep = {
+  tool: 'call_agent',
+  args: { agentId: 'default-1', instruction: 'The learner asked why; answer it.' },
+};
+const callStudent: ScriptStep = {
+  tool: 'call_agent',
+  args: { agentId: 'student-1', instruction: 'The student is unsure; they may say so.' },
+};
+const callAssistant: ScriptStep = {
+  tool: 'call_agent',
+  args: { agentId: 'assistant-1', instruction: 'An everyday example would help.' },
+};
 
 describe('POST /api/chat/pi cue_user', () => {
   beforeEach(() => {
@@ -1117,5 +1234,430 @@ describe('POST /api/chat/pi cue_user', () => {
           record.params?.content === 'from a previous turn',
       ),
     ).toBe(false);
+  });
+});
+
+describe('POST /api/chat/pi persona-driven turn endings', () => {
+  beforeEach(() => {
+    originalPiChatFlag = process.env[PI_CHAT_FLAG];
+    originalCoursewareReferenceFlag = process.env[COURSEWARE_REFERENCE_FLAG];
+    process.env[PI_CHAT_FLAG] = 'true';
+    process.env[COURSEWARE_REFERENCE_FLAG] = 'false';
+    vi.resetModules();
+    mocks.resolveModel.mockReset();
+    mocks.buildAgent.mockReset();
+    mocks.createCallLlmStreamFn.mockReset();
+    mocks.resolveModel.mockResolvedValue({
+      model: { id: 'language-model' },
+      apiKey: 'resolved-key',
+      providerId: 'test-provider',
+      modelInfo: { outputWindow: 4096 },
+      thinkingConfig: { mode: 'disabled', enabled: false },
+    });
+    mocks.createCallLlmStreamFn.mockReturnValue(vi.fn());
+  });
+
+  afterEach(() => {
+    if (originalPiChatFlag === undefined) delete process.env[PI_CHAT_FLAG];
+    else process.env[PI_CHAT_FLAG] = originalPiChatFlag;
+    if (originalCoursewareReferenceFlag === undefined) {
+      delete process.env[COURSEWARE_REFERENCE_FLAG];
+    } else {
+      process.env[COURSEWARE_REFERENCE_FLAG] = originalCoursewareReferenceFlag;
+    }
+  });
+
+  async function run(
+    steps: ScriptStep[],
+    body: Record<string, unknown> = makeClassroomBody(),
+  ): Promise<{ captured: ScriptCapture; events: SseEvent[] }> {
+    const captured = makeScriptCapture();
+    mockScriptedDirector(steps, captured);
+    const { POST } = await import('@/app/api/chat/pi/route');
+    const response = await POST(makeRequest(body));
+    expect(response.status).toBe(200);
+    return { captured, events: await readSseEvents(response) };
+  }
+
+  const speakers = (events: SseEvent[]) =>
+    events.filter((event) => event.type === 'agent_start').map((event) => event.data.agentId);
+
+  it('reminds the director once when a student has the last word, then the teacher takes it up', async () => {
+    const { captured, events } = await run([
+      callTeacher,
+      callStudent,
+      { tool: 'cue_user', args: {} },
+      callTeacher,
+      { tool: 'cue_user', args: {} },
+    ]);
+
+    expect(captured.results[2]?.details).toEqual({
+      emitted: false,
+      skipped: true,
+      reason: 'student_last_word',
+    });
+    expect(captured.results[2]?.content?.[0]?.text).toContain('came from Student, a student');
+    expect(speakers(events)).toEqual(['default-1', 'student-1', 'default-1']);
+    expect(events.filter((event) => event.type === 'cue_user')).toEqual([
+      { type: 'cue_user', data: { fromAgentId: 'default-1' } },
+    ]);
+  });
+
+  it('lets a student who asks the learner a question end the turn after the reminder', async () => {
+    const { captured, events } = await run([
+      callTeacher,
+      callStudent,
+      { tool: 'cue_user', args: { prompt: '你觉得呢？' } },
+      { tool: 'cue_user', args: { prompt: '你觉得呢？' } },
+    ]);
+
+    expect(captured.results[2]?.details).toMatchObject({ reason: 'student_last_word' });
+    expect(captured.results[3]?.details).toEqual({ emitted: true });
+    expect(events.filter((event) => event.type === 'cue_user')).toEqual([
+      { type: 'cue_user', data: { fromAgentId: 'student-1', prompt: '你觉得呢？' } },
+    ]);
+  });
+
+  it('gives close_session after a student the same one-time reminder', async () => {
+    const { captured, events } = await run([
+      callTeacher,
+      callStudent,
+      { tool: 'close_session', args: { endReason: 'user_done' } },
+      { tool: 'close_session', args: { endReason: 'user_done' } },
+    ]);
+
+    expect(captured.results[2]?.details).toMatchObject({ reason: 'student_last_word' });
+    const done = events.find((event) => event.type === 'done');
+    expect(done?.data).toMatchObject({ sessionClosed: true, endReason: 'user_done' });
+  });
+
+  it('gives the teacher one closing turn past the limit, right after a student', async () => {
+    const { captured, events } = await run(
+      [
+        callTeacher,
+        callStudent,
+        callStudent,
+        callTeacher,
+        callAssistant,
+        { tool: 'cue_user', args: {} },
+      ],
+      makeClassroomBody({ piMaxAgentTurns: 2 }),
+    );
+
+    expect(captured.results[2]?.details).toEqual({
+      skipped: true,
+      reason: 'agent_turn_limit',
+      maxAgentTurns: 2,
+      closingTurnOpenTo: ['teacher', 'assistant'],
+    });
+    expect(captured.results[3]?.details).toMatchObject({ agentId: 'default-1' });
+    expect(captured.results[4]?.details).toEqual({
+      skipped: true,
+      reason: 'agent_turn_limit',
+      maxAgentTurns: 2,
+    });
+    expect(speakers(events)).toEqual(['default-1', 'student-1', 'default-1']);
+    expect(events.find((event) => event.type === 'done')?.data.totalAgents).toBe(3);
+  });
+
+  it("rolls back the persona turn mechanics in castingMode 'legacy'", async () => {
+    const previous = process.env.OPENMAIC_PI_PERSONA_CASTING;
+    process.env.OPENMAIC_PI_PERSONA_CASTING = 'legacy';
+    try {
+      // No student-last-word reminder: the first cue_user after a student goes out
+      const nudge = await run([callTeacher, callStudent, { tool: 'cue_user', args: {} }]);
+      expect(nudge.captured.results[2]?.details).toEqual({ emitted: true });
+
+      // No closing turn past the limit after a student
+      const limit = await run(
+        [callTeacher, callStudent, callTeacher, { tool: 'cue_user', args: {} }],
+        makeClassroomBody({ piMaxAgentTurns: 2 }),
+      );
+      expect(limit.captured.results[2]?.details).toEqual({
+        skipped: true,
+        reason: 'agent_turn_limit',
+        maxAgentTurns: 2,
+      });
+
+      // A student's question to the learner does not replace the teaching turn
+      const studentOnly = await run([
+        callStudent,
+        { tool: 'cue_user', args: { prompt: '你能用自己的话讲讲吗？' } },
+        callTeacher,
+        { tool: 'cue_user', args: {} },
+      ]);
+      expect(studentOnly.captured.results[1]?.details).toMatchObject({
+        skipped: true,
+        reason: 'no_substantive_teaching_turn',
+      });
+    } finally {
+      if (previous === undefined) delete process.env.OPENMAIC_PI_PERSONA_CASTING;
+      else process.env.OPENMAIC_PI_PERSONA_CASTING = previous;
+    }
+  });
+
+  it('lets a student who asks the learner hand back with no teacher turn (I31)', async () => {
+    const { captured, events } = await run([
+      callStudent,
+      { tool: 'cue_user', args: {} },
+      { tool: 'cue_user', args: { prompt: '你能用自己的话讲讲吗？' } },
+      { tool: 'cue_user', args: { prompt: '你能用自己的话讲讲吗？' } },
+    ]);
+
+    // Without a question to the learner, a student-only turn still needs the teacher or assistant
+    expect(captured.results[1]?.details).toMatchObject({
+      skipped: true,
+      reason: 'no_substantive_teaching_turn',
+    });
+    expect(captured.results[2]?.details).toMatchObject({ reason: 'student_last_word' });
+    expect(captured.results[3]?.details).toEqual({ emitted: true });
+    expect(events.filter((event) => event.type === 'cue_user')).toEqual([
+      { type: 'cue_user', data: { fromAgentId: 'student-1', prompt: '你能用自己的话讲讲吗？' } },
+    ]);
+  });
+
+  it("gives the opener the card line on the moment's opening request only (I01)", async () => {
+    const classroom = makeClassroomBody({ messages: [] });
+    const discussion = {
+      ...classroom,
+      config: {
+        ...classroom.config,
+        sessionType: 'discussion',
+        triggerAgentId: 'student-1',
+        discussionTopic: 'Wait, why would a white roof stay cooler?',
+        discussionPrompt: 'Let them guess before the teacher explains reflectance.',
+      },
+    };
+    const { captured } = await run(
+      [callStudent, callTeacher, callStudent, { tool: 'cue_user', args: {} }],
+      discussion,
+    );
+
+    const [opener, teacher, again] = captured.childPrompts;
+    expect(opener?.agentName).toBe('Student');
+    expect(opener?.prompt).toContain('# Your opening line');
+    expect(opener?.prompt).toContain('«Wait, why would a white roof stay cooler?»');
+    expect(teacher?.prompt).not.toContain('# Your opening line');
+    expect(again?.prompt).not.toContain('# Your opening line');
+
+    // A follow-up of the same session: the line is context only
+    const followUp = await run([callStudent, callTeacher, { tool: 'cue_user', args: {} }], {
+      ...discussion,
+      messages: [
+        {
+          id: 'a1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Wait, why would a white roof stay cooler?' }],
+          metadata: { agentId: 'student-1' },
+        },
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Because it reflects?' }] },
+      ],
+    });
+    expect(followUp.captured.childPrompts[0]?.prompt).not.toContain('# Your opening line');
+  });
+
+  it('introduces the class to each child by name and role (I08)', async () => {
+    const { captured } = await run([callStudent, callTeacher, { tool: 'cue_user', args: {} }]);
+    const studentSystem = mocks.buildAgent.mock.calls
+      .map(([options]) => (options as MockAgentOptions).systemPrompt)
+      .find((prompt) => prompt.startsWith('You are Student.'));
+
+    expect(captured.childPrompts).toHaveLength(2);
+    expect(studentSystem).toContain('# Your classroom');
+    expect(studentSystem).toContain('- Teacher (teacher): <persona name="Teacher">');
+    expect(studentSystem).toContain('- Assistant (teaching assistant)');
+  });
+
+  it('hands back automatically after a student with no reminder and no prompt', async () => {
+    const { events } = await run([callTeacher, callStudent]);
+
+    expect(events.filter((event) => event.type === 'cue_user')).toEqual([
+      { type: 'cue_user', data: { fromAgentId: 'student-1' } },
+    ]);
+  });
+
+  it('tells a student the learner asked by name, on their first turn only (I03)', async () => {
+    const classroom = makeClassroomBody();
+    const { captured } = await run(
+      [callStudent, callTeacher, callStudent, { tool: 'cue_user', args: {} }],
+      {
+        ...classroom,
+        config: { ...classroom.config, addressedAgentIds: ['student-1'] },
+      },
+    );
+
+    const [first, teacher, again] = captured.childPrompts;
+    expect(first?.agentName).toBe('Student');
+    expect(first?.prompt).toContain('# The learner asked you directly');
+    expect(teacher?.prompt).not.toContain('# The learner asked you directly');
+    expect(again?.prompt).not.toContain('# The learner asked you directly');
+  });
+
+  it('keeps upcoming-page evidence from a student and gives it to the next teacher', async () => {
+    const { captured } = await run([
+      { tool: 'read_scene', args: { sceneId: 'scene-2' } },
+      callStudent,
+      callTeacher,
+      { tool: 'cue_user', args: {} },
+    ]);
+
+    const [studentPrompt, teacherPrompt] = captured.childPrompts;
+    expect(studentPrompt?.agentName).toBe('Student');
+    expect(studentPrompt?.prompt).not.toContain('Runtime-attached course scene evidence');
+    expect(captured.results[1]?.content?.[0]?.text).toContain(
+      'Scene evidence for upcoming "Cool roofs" was not given to Student',
+    );
+    expect(captured.results[1]?.details).toMatchObject({
+      withheldSceneEvidence: [expect.objectContaining({ sceneId: 'scene-2' })],
+    });
+    expect(captured.results[1]?.details).not.toHaveProperty('sceneEvidence');
+    expect(teacherPrompt?.prompt).toContain('Scene evidence (sceneId=scene-2');
+    expect(captured.results[2]?.details).toMatchObject({
+      sceneEvidence: [expect.objectContaining({ sceneId: 'scene-2' })],
+    });
+    expect(captured.results[2]?.details).not.toHaveProperty('withheldSceneEvidence');
+  });
+
+  it('still gives a student evidence of the current page', async () => {
+    const { captured } = await run([
+      { tool: 'read_scene', args: { sceneId: 'scene-1' } },
+      callStudent,
+      callTeacher,
+      { tool: 'cue_user', args: {} },
+    ]);
+
+    expect(captured.childPrompts[0]?.prompt).toContain('Scene evidence (sceneId=scene-1');
+    expect(captured.results[1]?.details).toMatchObject({
+      sceneEvidence: [expect.objectContaining({ sceneId: 'scene-1' })],
+    });
+  });
+
+  it("keeps the graded quiz (answer key, the learner's results) from a student opener", async () => {
+    const classroom = makeClassroomBody();
+    const quiz = {
+      id: 'quiz-1',
+      title: 'Roof check',
+      order: 3,
+      type: 'quiz',
+      content: {
+        type: 'quiz',
+        questions: [
+          {
+            id: 'q1',
+            type: 'single',
+            question: 'Which roof stays cooler?',
+            options: [
+              { value: 'A', label: 'Black' },
+              { value: 'B', label: 'White' },
+            ],
+            answer: ['B'],
+          },
+        ],
+      },
+    };
+    const body = {
+      ...classroom,
+      storeState: {
+        ...classroom.storeState,
+        scenes: [...classroom.storeState.scenes, quiz],
+        currentSceneId: 'quiz-1',
+        quizResults: {
+          sceneId: 'quiz-1',
+          answers: { q1: 'A' },
+          results: [{ questionId: 'q1', correct: false, status: 'incorrect', earned: 0 }],
+        },
+      },
+      config: { ...classroom.config, sessionType: 'discussion', momentKind: 'quiz-review' },
+    };
+    const { captured } = await run(
+      [
+        { tool: 'read_scene', args: { sceneId: 'quiz-1' } },
+        callStudent,
+        callTeacher,
+        { tool: 'cue_user', args: {} },
+      ],
+      body,
+    );
+
+    const [studentPrompt, teacherPrompt] = captured.childPrompts;
+    expect(studentPrompt?.agentName).toBe('Student');
+    expect(studentPrompt?.prompt).not.toContain('Correct answer');
+    expect(studentPrompt?.prompt).not.toContain('Runtime-attached course scene evidence');
+    expect(captured.results[1]?.content?.[0]?.text).toContain(
+      'Scene evidence for the graded quiz "Roof check"',
+    );
+    expect(captured.results[1]?.details).toMatchObject({
+      withheldSceneEvidence: [expect.objectContaining({ sceneId: 'quiz-1' })],
+    });
+    expect(captured.results[1]?.details).not.toHaveProperty('sceneEvidence');
+    expect(teacherPrompt?.prompt).toContain('Scene evidence (sceneId=quiz-1');
+    expect(teacherPrompt?.prompt).toContain('Correct answer: B');
+    expect(captured.results[2]?.details).toMatchObject({
+      sceneEvidence: [expect.objectContaining({ sceneId: 'quiz-1' })],
+    });
+  });
+
+  it('labels the history by speaker: each child owns only its own lines', async () => {
+    const messages = [
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Why do roofs matter?' }] },
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Roofs take most of the sun.' }],
+        metadata: { agentId: 'default-1', senderName: 'Teacher' },
+      },
+      {
+        id: 'a2',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Even in winter?' }],
+        metadata: { agentId: 'student-1', senderName: 'Student' },
+      },
+      { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'And white paint?' }] },
+    ];
+    const { captured } = await run(
+      [callStudent, callTeacher, { tool: 'cue_user', args: {} }],
+      makeClassroomBody({ messages }),
+    );
+
+    expect(captured.directorHistory).toEqual([
+      expect.objectContaining({ role: 'user', content: 'Why do roofs matter?' }),
+      expect.objectContaining({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Teacher (teacher): Roofs take most of the sun.' }],
+      }),
+      expect.objectContaining({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Student (student): Even in winter?' }],
+      }),
+      expect.objectContaining({ role: 'user', content: 'And white paint?' }),
+    ]);
+
+    const studentHistory = captured.childHistories.find((entry) => entry.agentName === 'Student');
+    expect(studentHistory?.history).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: expect.stringContaining('Teacher (teacher): Roofs take most of the sun.'),
+      }),
+      expect.objectContaining({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Even in winter?' }],
+      }),
+      expect.objectContaining({
+        role: 'user',
+        content: expect.stringContaining('The learner: And white paint?'),
+      }),
+    ]);
+    const teacherHistory = captured.childHistories.find((entry) => entry.agentName === 'Teacher');
+    expect(teacherHistory?.history).toEqual([
+      expect.objectContaining({ role: 'user', content: expect.stringContaining('Why do roofs') }),
+      expect.objectContaining({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Roofs take most of the sun.' }],
+      }),
+      expect.objectContaining({
+        role: 'user',
+        content: expect.stringContaining('Student (student): Even in winter?'),
+      }),
+    ]);
   });
 });

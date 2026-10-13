@@ -2,10 +2,12 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AssistantAsideStreamStatus,
   ConversationStream,
   HandRaiseStreamStatus,
   buildConversationStream,
   type ConversationStreamItem,
+  resolveCueSpeaker,
 } from '@/components/chat/conversation-stream';
 import type { ChatSession } from '@/lib/types/chat';
 import type { Scene } from '@/lib/types/stage';
@@ -241,5 +243,200 @@ describe('HandRaiseStreamStatus', () => {
     const html = render({ cueSpeaker: { name: 'Ms. Li', avatar: '/avatars/teacher.png' } });
     expect(html).toContain('data-testid="stream-cue"');
     expect(html).toContain('stage.handRaise.calledBy:Ms. Li');
+  });
+
+  it("shows the director's question to the learner with light replies (I10.4)", () => {
+    const onQuickReply = vi.fn();
+    const html = render({
+      cueSpeaker: { name: 'Mia', avatar: '/avatars/mia.png' },
+      directorCue: { prompt: ' What would you predict? ' },
+      quickReplies: ['Let me think…', "I'm not sure"],
+      onQuickReply,
+    });
+    expect(html).toContain('data-cue="asked"');
+    expect(html).toContain('stage.handRaise.askedBy:Mia');
+    expect(html.match(/data-testid="stream-cue-reply"/g)).toHaveLength(2);
+    expect(html).toContain('Let me think…');
+    // Without a name, just the question
+    expect(
+      render({
+        cueSpeaker: { name: '', avatar: '/a.png' },
+        directorCue: { prompt: 'Why?' },
+      }),
+    ).toContain('>Why?<');
+  });
+
+  it('offers "let me think" first, apart from the replies that are sent', () => {
+    const html = render({
+      cueSpeaker: { name: 'Mia', avatar: '/avatars/mia.png' },
+      directorCue: { prompt: 'Why?' },
+      quickReplies: ["I'm not sure"],
+      onQuickReply: vi.fn(),
+      thinkReply: 'Let me think…',
+      onThink: vi.fn(),
+    });
+    expect(html.indexOf('stream-cue-think')).toBeLessThan(html.indexOf('stream-cue-reply'));
+    expect(html.match(/data-testid="stream-cue-reply"/g)).toHaveLength(1);
+    // Not without a question
+    expect(
+      render({
+        cueSpeaker: { name: 'Mia', avatar: '/a.png' },
+        directorCue: {},
+        thinkReply: 'Let me think…',
+        onThink: vi.fn(),
+      }),
+    ).not.toContain('stream-cue-think');
+  });
+
+  it("hands the floor back neutrally when the director's cue asks nothing", () => {
+    const html = render({
+      cueSpeaker: { name: 'Ms. Li', avatar: '/avatars/teacher.png' },
+      directorCue: {},
+      quickReplies: ['Let me think…'],
+      onQuickReply: vi.fn(),
+    });
+    expect(html).toContain('data-cue="hand-back"');
+    expect(html).toContain('stage.handRaise.handBack:Ms. Li');
+    expect(html).not.toContain('calledBy');
+    expect(html).not.toContain('stream-cue-reply');
+  });
+});
+
+describe('the teaching assistant aside in the stream', () => {
+  const aside = (overrides: Partial<ChatSession> = {}) =>
+    session('aside', {
+      createdAt: 1,
+      sceneId: 'scene-a',
+      status: 'active',
+      config: { agentIds: ['default-2'], aside: true },
+      messages: [
+        {
+          id: 'ta-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'Chlorophyll reflects green.' }],
+          metadata: { originalRole: 'agent', agentId: 'default-2', senderName: 'AI助教' },
+        },
+      ],
+      ...overrides,
+    });
+
+  it('labels the aside 助教答疑 and streams it on its own flag', () => {
+    const render = (props: { isStreaming: boolean; isAsideStreaming: boolean }) =>
+      renderToStaticMarkup(
+        createElement(ConversationStream, {
+          sessions: [aside()],
+          scenes,
+          asideSessionId: 'aside',
+          onEndSession: vi.fn(),
+          onContinueSession: vi.fn(),
+          ...props,
+        }),
+      );
+    const streaming = render({ isStreaming: false, isAsideStreaming: true });
+    expect(streaming).toContain('data-aside="true"');
+    expect(streaming).toContain('chat.badge.aside');
+    expect(streaming).not.toContain('chat.badge.qa');
+    expect(streaming).toContain('bg-success-soft');
+    expect(streaming).toContain('aria-busy="true"');
+    // The live dot on its last bubble follows the aside, not the Q&A flag
+    expect(streaming).toContain('animate-pulse');
+    expect(render({ isStreaming: true, isAsideStreaming: false })).not.toContain(
+      'animate-pulse ml-1',
+    );
+  });
+
+  it('keeps a plain Q&A badge for a session without the flag', () => {
+    const html = renderToStaticMarkup(
+      createElement(ConversationStream, {
+        sessions: [aside({ config: { agentIds: ['default-1'] } })],
+        scenes,
+        isStreaming: false,
+        onEndSession: vi.fn(),
+        onContinueSession: vi.fn(),
+      }),
+    );
+    expect(html).toContain('chat.badge.qa');
+    expect(html).not.toContain('data-aside');
+  });
+
+  it("shows the assistant's local invitation and its answering row", () => {
+    const assistant = { name: 'AI助教', avatar: '/avatars/assist.png' };
+    const prompt = renderToStaticMarkup(
+      createElement(AssistantAsideStreamStatus, { assistant, status: 'prompt' }),
+    );
+    expect(prompt).toContain('data-testid="stream-assistant-prompt"');
+    expect(prompt).toContain('AI助教');
+    expect(prompt).toContain('settings.agentRoles.assistant');
+    expect(prompt).toContain('stage.handRaise.assistantPrompt');
+
+    const answering = renderToStaticMarkup(
+      createElement(AssistantAsideStreamStatus, { assistant, status: 'answering' }),
+    );
+    expect(answering).toContain('data-testid="stream-assistant-answering"');
+    expect(answering).toContain('stage.handRaise.assistantAnswering');
+  });
+});
+
+describe('resolveCueSpeaker', () => {
+  const participants = [
+    { id: 't', name: 'Ms. Li', avatar: '/t.png', role: 'teacher' },
+    { id: 'mia', name: 'Mia', avatar: '/m.png', role: 'student' },
+  ];
+  const fallback = { name: 'roundtable.teacher', avatar: '/default-teacher.png' };
+
+  it('names the classmate whose question handed the floor to the learner (I31)', () => {
+    expect(
+      resolveCueSpeaker({
+        cued: true,
+        handCalled: false,
+        cueAgentId: 'mia',
+        participants,
+        fallback,
+      }),
+    ).toEqual({ name: 'Mia', avatar: '/m.png' });
+    // Not in the participants block: the registry still knows them
+    expect(
+      resolveCueSpeaker({
+        cued: true,
+        handCalled: false,
+        cueAgentId: 'leo',
+        participants,
+        getAgent: (id) => (id === 'leo' ? { name: 'Leo' } : undefined),
+        fallback,
+      }),
+    ).toEqual({ name: 'Leo', avatar: '/default-teacher.png' });
+  });
+
+  it('gives a called hand, or an unknown speaker, to the teacher; nothing without a cue', () => {
+    expect(
+      resolveCueSpeaker({
+        cued: true,
+        handCalled: true,
+        cueAgentId: 'mia',
+        participants,
+        fallback,
+      }),
+    ).toEqual({ name: 'Ms. Li', avatar: '/t.png' });
+    expect(
+      resolveCueSpeaker({
+        cued: true,
+        handCalled: false,
+        cueAgentId: 'gone',
+        participants,
+        fallback,
+      }),
+    ).toEqual({ name: 'Ms. Li', avatar: '/t.png' });
+    expect(
+      resolveCueSpeaker({ cued: true, handCalled: false, participants: [], fallback }),
+    ).toEqual(fallback);
+    expect(
+      resolveCueSpeaker({
+        cued: false,
+        handCalled: false,
+        cueAgentId: 'mia',
+        participants,
+        fallback,
+      }),
+    ).toBeNull();
   });
 });

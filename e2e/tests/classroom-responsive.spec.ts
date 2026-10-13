@@ -455,7 +455,7 @@ for (const board of [
 
       const textarea = page
         .getByTestId('classroom-composer')
-        .getByPlaceholder('Type your message...', { exact: true });
+        .getByRole('textbox', { name: 'Text input', exact: true });
       await expect(textarea).toBeHidden();
       await page.keyboard.press('T');
       await expect(interactionTab).toHaveAttribute('aria-selected', 'true');

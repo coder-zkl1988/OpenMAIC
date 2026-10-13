@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import { personaIntro } from '@/lib/classroom/classmate-intro';
 
 interface AgentRevealModalProps {
   agents: Array<{
@@ -284,10 +285,11 @@ export function AgentRevealModal({ agents, open, onClose, onAllRevealed }: Agent
                             />
                           </div>
 
-                          {/* Persona text — fills remaining space */}
+                          {/* Who they are — the persona's opening only: its level and
+                              misconceptions are for the model, not a spoiler (I24) */}
                           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 pt-1.5 pb-3">
                             <p className="text-left text-[10.5px] leading-[1.65] text-zinc-600 dark:text-zinc-400">
-                              {agent.persona}
+                              {personaIntro(agent.persona)}
                             </p>
                           </div>
 

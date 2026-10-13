@@ -54,6 +54,11 @@ interface ClassroomLoadSettings {
   setAgentMode: (mode: 'preset' | 'auto') => void;
   setSelectedAgentIds: (ids: string[]) => void;
   setAgentSelectionIsUserSet: (isUserSet: boolean) => void;
+  /** The user's preset classmates parked by a course with its own classmates */
+  parkedPresetAgentIds?: string[];
+  setParkedPresetAgentIds?: (ids: string[]) => void;
+  /** Always use the preset classmates, even in a course with its own classmates */
+  presetAgentsInGeneratedCourses?: boolean;
 }
 
 interface AgentLookupResult {
@@ -206,7 +211,14 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
     const agentsKnown = agentsReady ? await agentsReady() : true;
     if (!isCurrent()) return { outcome: 'cancelled' };
     const settings = getSettings();
-    const { selection: next, isUserSet } = restoreSelection({
+    const parked = Array.isArray(settings.parkedPresetAgentIds)
+      ? settings.parkedPresetAgentIds
+      : [];
+    const {
+      selection: next,
+      isUserSet,
+      parkedPresetAgentIds: nextParked = [],
+    } = restoreSelection({
       persisted: { mode: settings.agentMode, selectedAgentIds: settings.selectedAgentIds },
       persistedIsUserSet: settings.agentSelectionIsUserSet,
       generatedAgentIds,
@@ -217,6 +229,8 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
         if (!agent) return !agentsKnown;
         return !agent.isGenerated;
       },
+      parkedPresetAgentIds: parked,
+      presetInGeneratedCourses: settings.presetAgentsInGeneratedCourses === true,
     });
 
     if (!isCurrent()) return { outcome: 'cancelled' };
@@ -226,6 +240,12 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
     }
     if (isUserSet !== settings.agentSelectionIsUserSet) {
       settings.setAgentSelectionIsUserSet(isUserSet);
+    }
+    if (
+      settings.setParkedPresetAgentIds &&
+      (nextParked.length !== parked.length || nextParked.some((id, i) => id !== parked[i]))
+    ) {
+      settings.setParkedPresetAgentIds(nextParked);
     }
     return { outcome: 'ready' };
   } catch (error) {

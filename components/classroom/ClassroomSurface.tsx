@@ -53,6 +53,8 @@ import {
   useClassroomLayoutObserver,
 } from '@/lib/hooks/use-classroom-layout';
 import { CourseGeneratingPlaceholder } from './CourseGeneratingPlaceholder';
+import { GenerationPausedNotice } from './GenerationPausedNotice';
+import { useOwnClassmatesNotice } from './use-own-classmates-notice';
 
 const log = createLogger('Classroom');
 
@@ -289,6 +291,10 @@ export function ClassroomSurface({
   // run (its scenes, media and pauses) and sends it Retry.
   const runCourse = useRunCourse({ classroomId, ready: !loading && !error });
 
+  // A course with its own classmates replaced the learner's preset ones: say
+  // so once, with the choice to always use the preset classmates
+  useOwnClassmatesNotice(!loading && !error && loadedClassroomId === classroomId);
+
   const view = resolveClassroomSurfaceView({
     variant,
     loading,
@@ -390,6 +396,9 @@ export function ClassroomSurface({
             />
           ) : (
             <ClassroomLayoutContext.Provider value={layout}>
+              {mayGenerate && runCourse.paused && (
+                <GenerationPausedNotice pause={runCourse.paused} onRetry={runCourse.retryRun} />
+              )}
               <Stage
                 classroomId={classroomId}
                 onRetryOutline={mayGenerate && runCourse.runId ? runCourse.retryOutline : undefined}

@@ -1,5 +1,6 @@
 import { produce } from 'immer';
-import type { GeneratedAgentConfig } from '@/lib/types/stage';
+import type { GeneratedAgentConfig, Scene } from '@/lib/types/stage';
+import type { Action } from '@/lib/types/action';
 import { AGENT_DEFAULT_AVATARS, AGENT_COLOR_PALETTE } from '@/lib/constants/agent-defaults';
 
 // Cap undo history so long editing sessions don't grow memory unbounded.
@@ -17,6 +18,11 @@ export interface AgentConfigPatch {
 export type AgentEditOperation =
   | { type: 'agent.add'; agent: GeneratedAgentConfig }
   | { type: 'agent.update'; id: string; patch: AgentConfigPatch }
+  /**
+   * Several members changed as one edit (one undo step): e.g. the personas
+   * the "rewrite as real people" upgrade returned (I25)
+   */
+  | { type: 'agent.updateMany'; updates: ReadonlyArray<{ id: string; patch: AgentConfigPatch }> }
   | { type: 'agent.delete'; id: string }
   | { type: 'agent.reorder'; id: string; index: number };
 
@@ -115,22 +121,11 @@ function applyOperationToRoster(roster: AgentRoster, op: AgentEditOperation): Ag
         return;
       }
       case 'agent.update': {
-        const agent = draft.find((a) => a.id === op.id);
-        if (!agent) return;
-
-        // Guard: role change that would drop teacher count to 0.
-        if (op.patch.role !== undefined && op.patch.role !== agent.role) {
-          if (agent.role === 'teacher' && teacherCount(roster) <= 1) {
-            throw new Error('LAST_TEACHER');
-          }
-        }
-
-        Object.assign(agent, op.patch);
-
-        // Recompute priority when role changes.
-        if (op.patch.role !== undefined) {
-          agent.priority = priorityForRole(agent.role);
-        }
+        updateAgent(draft, roster, op.id, op.patch);
+        return;
+      }
+      case 'agent.updateMany': {
+        for (const { id, patch } of op.updates) updateAgent(draft, roster, id, patch);
         return;
       }
       case 'agent.delete': {
@@ -159,6 +154,31 @@ function applyOperationToRoster(roster: AgentRoster, op: AgentEditOperation): Ag
   });
 }
 
+/** One member's patch, in place; a missing id is a no-op */
+function updateAgent(
+  draft: AgentRoster,
+  roster: AgentRoster,
+  id: string,
+  patch: AgentConfigPatch,
+): void {
+  const agent = draft.find((a) => a.id === id);
+  if (!agent) return;
+
+  // Guard: role change that would drop teacher count to 0.
+  if (patch.role !== undefined && patch.role !== agent.role) {
+    if (agent.role === 'teacher' && teacherCount(roster) <= 1) {
+      throw new Error('LAST_TEACHER');
+    }
+  }
+
+  Object.assign(agent, patch);
+
+  // Recompute priority when role changes.
+  if (patch.role !== undefined) {
+    agent.priority = priorityForRole(agent.role);
+  }
+}
+
 function isAgentRosterHistory(
   target: AgentRoster | AgentRosterHistory,
 ): target is AgentRosterHistory {
@@ -167,4 +187,79 @@ function isAgentRosterHistory(
 
 function capHistory(past: AgentRoster[]): AgentRoster[] {
   return past.length > MAX_HISTORY ? past.slice(past.length - MAX_HISTORY) : past;
+}
+
+// ---------------------------------------------------------------------------
+// Script references: what of the course's script points at a roster member
+// ---------------------------------------------------------------------------
+
+/** How much of the course's script refers to one roster member */
+export interface AgentScriptReferences {
+  /** Class moments (discussion actions) this member opens, by id */
+  moments: number;
+  /** Narration lines and moment openers that say this member's name */
+  mentions: number;
+}
+
+/** A shorter name is not searched for: one character matches almost any line */
+export const MIN_MENTIONED_NAME_CHARS = 2;
+
+/** The script of one scene, as the reference helpers read it */
+type ScriptScene = Pick<Scene, 'id' | 'actions'>;
+
+function saysName(text: string | undefined, name: string): boolean {
+  return !!text && text.toLocaleLowerCase().includes(name);
+}
+
+/**
+ * What a delete or rename would leave pointing at a member: the class moments
+ * they open (`discussion.agentId`; deleted, the engine skips them silently)
+ * and the lines that say their name (pre-generated narration and voice keep
+ * saying it). Names shorter than {@link MIN_MENTIONED_NAME_CHARS} count no
+ * mentions.
+ */
+export function countAgentScriptReferences(
+  scenes: readonly ScriptScene[],
+  agent: { readonly id: string; readonly name: string },
+): AgentScriptReferences {
+  const name = agent.name.trim().toLocaleLowerCase();
+  const searchName = Array.from(name).length >= MIN_MENTIONED_NAME_CHARS;
+  let moments = 0;
+  let mentions = 0;
+  for (const scene of scenes) {
+    for (const action of scene.actions ?? []) {
+      if (action.type === 'discussion') {
+        if (action.agentId === agent.id) moments++;
+        if (searchName && saysName(action.topic, name)) mentions++;
+      } else if (action.type === 'speech') {
+        if (searchName && saysName(action.text, name)) mentions++;
+      }
+    }
+  }
+  return { moments, mentions };
+}
+
+/**
+ * The scenes whose actions change when the class moments a member opens are
+ * handed to the teacher (`teacherId`), or dropped (no `teacherId`): each
+ * changed scene with its new actions, for `updateScene`. Scenes without such
+ * a moment are left out.
+ */
+export function rewriteAgentMoments(
+  scenes: readonly ScriptScene[],
+  agentId: string,
+  teacherId?: string,
+): Array<{ sceneId: string; actions: Action[] }> {
+  const changed: Array<{ sceneId: string; actions: Action[] }> = [];
+  for (const scene of scenes) {
+    const actions = scene.actions ?? [];
+    if (!actions.some((a) => a.type === 'discussion' && a.agentId === agentId)) continue;
+    const next = teacherId
+      ? actions.map((a) =>
+          a.type === 'discussion' && a.agentId === agentId ? { ...a, agentId: teacherId } : a,
+        )
+      : actions.filter((a) => !(a.type === 'discussion' && a.agentId === agentId));
+    changed.push({ sceneId: scene.id, actions: next });
+  }
+  return changed;
 }

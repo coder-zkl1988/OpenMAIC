@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Hand, MessageSquare } from 'lucide-react';
 import type { ChatSession } from '@/lib/types/chat';
 import type { Scene } from '@/lib/types/stage';
@@ -69,6 +69,12 @@ interface ConversationStreamProps {
   readonly sessions: readonly ChatSession[];
   readonly scenes: readonly Scene[];
   readonly isStreaming: boolean;
+  /**
+   * The teaching assistant's aside (it answers while the lecture plays): it
+   * streams on its own, so its session shows its own live state
+   */
+  readonly asideSessionId?: string | null;
+  readonly isAsideStreaming?: boolean;
   readonly activeBubbleId?: string | null;
   readonly onEndSession: (sessionId: string) => Promise<void> | void;
   readonly onContinueSession: (sessionId: string) => void;
@@ -98,6 +104,8 @@ export function ConversationStream({
   sessions,
   scenes,
   isStreaming,
+  asideSessionId,
+  isAsideStreaming = false,
   activeBubbleId,
   onEndSession,
   onContinueSession,
@@ -177,7 +185,7 @@ export function ConversationStream({
       // history scrolls with the keyboard.
       role="log"
       aria-label={t('chat.conversationLog')}
-      aria-busy={isStreaming || undefined}
+      aria-busy={isStreaming || isAsideStreaming || undefined}
       tabIndex={0}
       data-testid="conversation-stream"
       className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-page scrollbar-hide outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
@@ -205,12 +213,15 @@ export function ConversationStream({
           }
           const { session } = item;
           const isActive = session.status === 'active' || session.status === 'soft-closing';
+          // The aside streams on its own channel; the shared flag is the Q&A's
+          const sessionStreaming =
+            asideSessionId && session.id === asideSessionId ? isAsideStreaming : isStreaming;
           return (
             <ChatSessionComponent
               key={item.key}
               session={session}
               isActive={isActive}
-              isStreaming={isStreaming && isActive}
+              isStreaming={sessionStreaming && isActive}
               activeBubbleId={activeBubbleId}
               onEndSession={onEndSession}
               onContinueSession={onContinueSession}
@@ -235,23 +246,95 @@ interface HandRaiseStreamStatusProps {
   readonly deferredDiscussionAgentName?: string;
   /** Who handed the floor to the learner (a called hand, or the director's cue) */
   readonly cueSpeaker?: { readonly name: string; readonly avatar: string } | null;
+  /**
+   * The floor came from the director, not a called hand: its question to the
+   * learner (`prompt`, as the speaker put it) or, without one, a plain
+   * hand-back. Absent: a called hand ('X 请你发言').
+   */
+  readonly directorCue?: { readonly prompt?: string } | null;
+  /**
+   * Light replies to the director's question, sent as the learner's message
+   * (shown only with a prompt)
+   */
+  readonly quickReplies?: readonly string[];
+  readonly onQuickReply?: (text: string) => void;
+  /**
+   * The "let me think" chip, shown first: it sends nothing. The learner gets
+   * the composer and their time, the chips go away and the question stays
+   * open (sending "我想想…" would set the class talking again at once).
+   */
+  readonly thinkReply?: string;
+  readonly onThink?: () => void;
 }
+
+/**
+ * Who handed the floor to the learner, for the stream's cue row: a called
+ * hand is the teacher's call; the director's cue names its last speaker —
+ * a classmate asking the learner too (I31), found among the participants
+ * or, failing that, in the registry — and only then falls back to the
+ * teacher. Null without a cue.
+ */
+export function resolveCueSpeaker({
+  cued,
+  handCalled,
+  cueAgentId,
+  participants,
+  getAgent,
+  fallback,
+}: {
+  readonly cued: boolean;
+  readonly handCalled: boolean;
+  readonly cueAgentId?: string | null;
+  readonly participants: ReadonlyArray<{ id: string; name: string; avatar?: string; role: string }>;
+  readonly getAgent?: (id: string) => { name?: string; avatar?: string } | undefined;
+  readonly fallback: { readonly name: string; readonly avatar: string };
+}): { name: string; avatar: string } | null {
+  if (!cued) return null;
+  if (!handCalled && cueAgentId) {
+    const speaker = participants.find((p) => p.id === cueAgentId) ?? getAgent?.(cueAgentId);
+    if (speaker?.name) {
+      return { name: speaker.name, avatar: speaker.avatar || fallback.avatar };
+    }
+  }
+  const teacher = participants.find((p) => p.role === 'teacher');
+  return {
+    name: teacher?.name || fallback.name,
+    avatar: teacher?.avatar || fallback.avatar,
+  };
+}
+
+const cueReplyClass =
+  'h-7 rounded-full border border-line bg-background px-2.5 text-xs font-medium text-fg-secondary transition-colors hover:bg-subtle hover:text-fg cursor-pointer';
 
 /**
  * The stream's hand-raise rows (HandRaiseFlow.dc.html, Classroom.dc.html),
  * after the latest session: '你举手了' (or '你举手了，X 的讨论排在你之后'
  * when the hand jumped ahead of a discussion), the dashed pending bubble of a
  * queued question ('排队中 · 老师讲完这句就回答') and the call
- * ('AI教师 请你发言'). Visual only: the composer's live region announces the
- * same transitions.
+ * ('AI教师 请你发言'). The director's cue reads as what it is: its question
+ * ('小思 问你：…', with a few quick replies) or a neutral hand-back. Visual
+ * only: the composer's live region announces the same transitions (the quick
+ * replies are buttons).
  */
 export function HandRaiseStreamStatus({
   handState,
   pendingQuestion,
   deferredDiscussionAgentName,
   cueSpeaker,
+  directorCue,
+  quickReplies = [],
+  onQuickReply,
+  thinkReply,
+  onThink,
 }: HandRaiseStreamStatusProps) {
   const { t } = useI18n();
+  const cuePrompt = directorCue?.prompt?.trim();
+  // The question the learner chose to think about: its chips stay hidden (a
+  // new question brings them back)
+  const [thinkingAbout, setThinkingAbout] = useState<string | null>(null);
+  const showReplies = !!cuePrompt && thinkingAbout !== cuePrompt;
+  const showThink = showReplies && !!thinkReply && !!onThink;
+  const showQuickReplies = showReplies && !!onQuickReply && quickReplies.length > 0;
   return (
     <>
       {handState && (
@@ -279,17 +362,129 @@ export function HandRaiseStreamStatus({
           </span>
         </div>
       )}
-      {cueSpeaker && (
+      {cueSpeaker && cuePrompt ? (
         <div
           data-testid="stream-cue"
-          className="flex items-center justify-center gap-1.5 text-xs font-semibold text-fg-secondary"
+          data-cue="asked"
+          className="flex flex-col items-start gap-1.5"
         >
-          <span className="relative size-[18px] shrink-0 overflow-hidden rounded-full">
-            <AvatarDisplay src={cueSpeaker.avatar} alt="" />
-          </span>
-          {t('stage.handRaise.calledBy', { name: cueSpeaker.name })}
+          <div className="flex min-w-0 items-start gap-1.5 text-xs font-semibold text-fg-secondary">
+            <span className="relative mt-px size-[18px] shrink-0 overflow-hidden rounded-full">
+              <AvatarDisplay src={cueSpeaker.avatar} alt="" />
+            </span>
+            <span className="min-w-0 whitespace-pre-wrap break-words">
+              {cueSpeaker.name
+                ? t('stage.handRaise.askedBy', { name: cueSpeaker.name, prompt: cuePrompt })
+                : cuePrompt}
+            </span>
+          </div>
+          {(showThink || showQuickReplies) && (
+            <div className="flex flex-wrap gap-1.5 pl-6">
+              {showThink && (
+                <button
+                  type="button"
+                  data-testid="stream-cue-think"
+                  onClick={() => {
+                    setThinkingAbout(cuePrompt ?? null);
+                    onThink?.();
+                  }}
+                  className={cueReplyClass}
+                >
+                  {thinkReply}
+                </button>
+              )}
+              {showQuickReplies &&
+                quickReplies.map((reply) => (
+                  <button
+                    key={reply}
+                    type="button"
+                    data-testid="stream-cue-reply"
+                    onClick={() => onQuickReply?.(reply)}
+                    className={cueReplyClass}
+                  >
+                    {reply}
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
+      ) : (
+        cueSpeaker && (
+          <div
+            data-testid="stream-cue"
+            data-cue={directorCue ? 'hand-back' : 'called'}
+            className="flex items-center justify-center gap-1.5 text-xs font-semibold text-fg-secondary"
+          >
+            <span className="relative size-[18px] shrink-0 overflow-hidden rounded-full">
+              <AvatarDisplay src={cueSpeaker.avatar} alt="" />
+            </span>
+            {t(directorCue ? 'stage.handRaise.handBack' : 'stage.handRaise.calledBy', {
+              name: cueSpeaker.name,
+            })}
+          </div>
+        )
       )}
     </>
+  );
+}
+
+interface AssistantAsideStreamStatusProps {
+  /**
+   * Who answers on the side while the lecture plays: the teaching assistant
+   * (isAssistant), or a classmate the learner named (@)
+   */
+  readonly assistant: {
+    readonly name: string;
+    readonly avatar: string;
+    readonly isAssistant?: boolean;
+  };
+  /**
+   * `prompt`: the learner raised a hand to the assistant, who invites the
+   * question (a local row, no request); `answering`: the assistant's answer
+   * is on its way
+   */
+  readonly status: 'prompt' | 'answering';
+}
+
+/**
+ * The stream's rows for the teaching assistant's aside, after the latest
+ * session: its invitation once the learner raises a hand while the lecture
+ * plays ('请说出你的问题，我来帮你解答', drawn like an agent row), and
+ * '助教正在回答…' until its bubble starts. Visual only.
+ */
+export function AssistantAsideStreamStatus({ assistant, status }: AssistantAsideStreamStatusProps) {
+  const { t } = useI18n();
+  if (status === 'answering') {
+    return (
+      <div
+        data-testid="stream-assistant-answering"
+        className="flex items-center justify-center gap-1.5 text-xs font-semibold text-fg-secondary"
+      >
+        <span className="relative size-[18px] shrink-0 overflow-hidden rounded-full">
+          <AvatarDisplay src={assistant.avatar} alt="" />
+        </span>
+        {assistant.isAssistant === false
+          ? t('stage.handRaise.agentAnswering', { name: assistant.name })
+          : t('stage.handRaise.assistantAnswering')}
+      </div>
+    );
+  }
+  return (
+    <div data-testid="stream-assistant-prompt" className="flex items-start gap-2">
+      <span className="size-7 shrink-0 overflow-hidden rounded-full bg-subtle ring-1 ring-line">
+        <AvatarDisplay src={assistant.avatar} alt="" className="text-xs" />
+      </span>
+      <div className="flex min-w-0 max-w-[85%] flex-col gap-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-xs font-semibold text-fg-secondary">{assistant.name}</span>
+          <span className="shrink-0 rounded-full bg-success-soft px-1.5 text-[10px] font-semibold leading-4 text-success">
+            {t('settings.agentRoles.assistant')}
+          </span>
+        </div>
+        <p className="w-fit max-w-full whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] border border-line bg-background px-3 py-2 text-[14px] leading-[1.6] text-fg">
+          {t('stage.handRaise.assistantPrompt')}
+        </p>
+      </div>
+    </div>
   );
 }

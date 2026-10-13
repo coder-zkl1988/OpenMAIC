@@ -63,15 +63,32 @@ export interface PresentationDockProps extends Omit<
   /** A question waits for the current line (its status shows in the card) */
   readonly hasRaisedHand?: boolean;
   /**
+   * The director's question to the learner, with its light replies, shown in
+   * the card above the composer while the floor is theirs: the overlay's
+   * line is gone once the turn ends, and fullscreen has no stream
+   */
+  readonly cueQuestion?: ReactNode;
+  /**
    * Composing — the card is open, or the composer records or holds a draft:
    * the shell keeps the controls up, holds auto-advance and lets Escape close
    * the card instead of leaving fullscreen
    */
   readonly onInteractionChange?: (active: boolean) => void;
   readonly discussionRequest?: DiscussionAction | null;
-  readonly discussionAgent?: { name?: string; avatar?: string };
+  /** The moment's opener, as the registry knows them (`role` 'teacher': the teacher asks) */
+  readonly discussionAgent?: { name?: string; avatar?: string; role?: string };
   readonly onDiscussionStart?: (request: DiscussionAction) => void;
+  /** A teacher's whole-class question: the learner answers first (我来答) */
+  readonly onDiscussionAnswer?: () => void;
+  /** The offer's own kind (a whole-class question, a quiz review); see ProactiveCard */
+  readonly discussionOffer?: 'ask-learner' | 'quiz-review';
+  /** The card skips itself when its countdown runs out (default true) */
+  readonly discussionAutoSkip?: boolean;
   readonly onDiscussionSkip?: () => void;
+  /** The card's countdown ran out (defaults to onDiscussionSkip) */
+  readonly onDiscussionAutoSkip?: () => void;
+  /** The card's countdown waits: its opener is still reading it out */
+  readonly discussionCountdownHeld?: boolean;
   /** The fullscreen element: the discussion card portals into the top layer */
   readonly portalContainerRef: RefObject<HTMLElement | null>;
 }
@@ -96,11 +113,17 @@ export function PresentationDock({
   composerRef,
   isComposing,
   hasRaisedHand,
+  cueQuestion,
   onInteractionChange,
   discussionRequest,
   discussionAgent,
   onDiscussionStart,
+  onDiscussionAnswer,
+  discussionOffer,
+  discussionAutoSkip,
   onDiscussionSkip,
+  onDiscussionAutoSkip,
+  discussionCountdownHeld,
   portalContainerRef,
   ...captionInput
 }: PresentationDockProps) {
@@ -284,6 +307,11 @@ export function PresentationDock({
               : 'sr-only [&_[data-composer-body]]:hidden',
           )}
         >
+          {isCardVisible && isCueUser && cueQuestion && (
+            <div data-testid="presentation-cue-question" className="px-2 pt-1 pb-2">
+              {cueQuestion}
+            </div>
+          )}
           {composerSlot}
         </div>
       </div>
@@ -387,8 +415,14 @@ export function PresentationDock({
                     align="right"
                     agentName={offerAgent?.name}
                     agentAvatar={offerAgent?.avatar}
+                    openedByTeacher={discussionAgent?.role === 'teacher'}
+                    offer={discussionOffer}
+                    autoSkip={discussionAutoSkip}
+                    countdownHeld={discussionCountdownHeld}
                     onSkip={() => onDiscussionSkip?.()}
+                    onAutoSkip={() => (onDiscussionAutoSkip ?? onDiscussionSkip)?.()}
                     onListen={() => onDiscussionStart?.(discussionRequest)}
+                    onAnswer={onDiscussionAnswer}
                   />
                 )}
               </AnimatePresence>

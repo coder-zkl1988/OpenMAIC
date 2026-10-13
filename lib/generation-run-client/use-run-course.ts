@@ -13,17 +13,16 @@
  * writer.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
 import { hasLearnerSceneChange, setServerGeneratingStage, useStageStore } from '@/lib/store/stage';
 import { useModelCapabilities } from '@/lib/model-settings/use-model-settings';
 import { fetchScenesByIds, fetchStageManifest } from '@/lib/workbench/stage-freshness';
 import { createLogger } from '@/lib/logger';
-import { getClientTranslation } from '@/lib/i18n';
 import type { SceneOutline } from '@/lib/types/generation';
 
-import { RunApiError } from './api';
 import { retryPausedRun, retryRunMedia } from './commands';
+import { runFailureText, type FailureText } from './failure-message';
+import { reportRunRetryFailure } from './retry-feedback';
 import { applyRunMedia, registerRunMediaRetry } from './run-media';
 import { courseFenced, mergeServerScenes, RunCourseSceneSync } from './run-course';
 import { isFinishedRunState, type RunView } from './types';
@@ -55,6 +54,25 @@ export function failedOutlinesOfRun(
     .flatMap((index) => (outlines[index] ? [outlines[index]!] : []));
 }
 
+/** Where a paused run stopped, as the classroom says it. */
+export interface RunPause {
+  /** The scene the run stopped at: its 1-based page number and outline title, when a scene step failed. */
+  scene: { number: number; title: string } | null;
+  /** Why it stopped. */
+  failure: FailureText | null;
+}
+
+/** What a paused run stopped at, or null for a run that is not paused. */
+export function runPauseOf(view: RunView, outlines: readonly SceneOutline[]): RunPause | null {
+  if (view.state !== 'paused') return null;
+  const index = sceneIndexOfStep(view.error?.step);
+  const outline = index === null ? undefined : outlines[index];
+  return {
+    scene: index === null ? null : { number: index + 1, title: outline?.title ?? '' },
+    failure: view.error ? runFailureText(view.error) : null,
+  };
+}
+
 /** The classroom's generation status for a run state. */
 export function generationStatusOfRun(
   state: RunView['state'],
@@ -84,6 +102,10 @@ export function useRunCourse(input: { classroomId: string; ready: boolean }): {
   generation: { status: CourseRunStatus; href: string } | null;
   /** Retry the failed scene of a paused run. */
   retryOutline: (outlineId: string) => Promise<void>;
+  /** What the run stopped at, while it is paused. */
+  paused: RunPause | null;
+  /** Retry a paused run at the step it stopped at. */
+  retryRun: () => Promise<void>;
 } {
   const producer = useStageStore((s) => s.outlineProducer);
   const producerRef = useStageStore((s) => s.outlineProducerRef);
@@ -225,6 +247,20 @@ export function useRunCourse(input: { classroomId: string; ready: boolean }): {
     });
   }, [runId, input.classroomId, refresh]);
 
+  const retryRun = useCallback(async () => {
+    const current = viewRef.current;
+    if (!current || current.state !== 'paused') return;
+    try {
+      await retryPausedRun(current);
+      // Queued until the run picks it up (after a media item in flight).
+      useStageStore.setState({ failedOutlines: [], generationStatus: 'generating' });
+    } catch (error) {
+      log.warn('Retrying the run failed:', error);
+      reportRunRetryFailure(error);
+    }
+    await refresh();
+  }, [refresh]);
+
   const retryOutline = useCallback(
     async (outlineId: string) => {
       const current = viewRef.current;
@@ -233,25 +269,14 @@ export function useRunCourse(input: { classroomId: string; ready: boolean }): {
       if (!failedOutlinesOfRun(current, outlines).some((outline) => outline.id === outlineId)) {
         return;
       }
-      try {
-        await retryPausedRun(current);
-        // Queued until the run picks it up (after a media item in flight).
-        useStageStore.setState({ failedOutlines: [], generationStatus: 'generating' });
-      } catch (error) {
-        log.warn('Retrying the run failed:', error);
-        if (error instanceof RunApiError && error.errorCode === 'ACTIVE_RUN_LIMIT') {
-          // A paused run does not count against the limit; its Retry does.
-          toast.error(getClientTranslation('generation.activeRunLimit'));
-        } else if (error instanceof RunApiError && error.errorCode === 'RUN_STATE_CONFLICT') {
-          toast.info(getClientTranslation('generation.runChangedElsewhere'));
-        }
-      }
-      await refresh();
+      await retryRun();
     },
-    [refresh],
+    [retryRun],
   );
 
   const runStatus = view && !finished ? courseRunStatus(view) : null;
+  const storeOutlines = useStageStore((s) => s.outlines);
+  const paused = view ? runPauseOf(view, view.outline?.outlines ?? storeOutlines) : null;
   return {
     runId: view ? runId : null,
     generation:
@@ -262,5 +287,7 @@ export function useRunCourse(input: { classroomId: string; ready: boolean }): {
           }
         : null,
     retryOutline,
+    paused,
+    retryRun,
   };
 }

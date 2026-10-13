@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import {
   BookOpen,
   MessageSquare,
@@ -15,6 +15,17 @@ import {
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import type { LectureNoteEntry } from '@/lib/types/chat';
+import type { DiscussionOutcome } from '@/lib/playback/types';
+import { isMissedMoment, type LectureNoteMoment } from '@/lib/chat/lecture-notes';
+import { AvatarDisplay } from '@/components/ui/avatar-display';
+
+/** How a class moment ended, as its note says it */
+const MOMENT_OUTCOME_KEYS: Record<DiscussionOutcome, string> = {
+  joined: 'chat.lectureNotes.momentOutcome.joined',
+  skipped: 'chat.lectureNotes.momentOutcome.skipped',
+  auto_skipped: 'chat.lectureNotes.momentOutcome.autoSkipped',
+  not_shown: 'chat.lectureNotes.momentOutcome.notShown',
+};
 
 const ACTION_ICON_ONLY: Record<string, { Icon: typeof Flashlight; style: string }> = {
   spotlight: {
@@ -60,6 +71,14 @@ interface LectureNotesViewProps {
   currentActionIndex?: number | null;
   canJumpToAction?: (sceneId: string, actionIndex: number) => boolean;
   onJumpToAction?: (sceneId: string, actionIndex: number) => void;
+  /** The class moments by action id: their opener and how they ended */
+  moments?: ReadonlyMap<string, LectureNoteMoment>;
+  /** Who an agent is (no id: the teacher, who opens a legacy moment) */
+  describeAgent?: (agentId?: string) => { name: string; avatar?: string } | undefined;
+  /** 现在聊聊: open a moment the learner let pass */
+  onDiscussMoment?: (moment: LectureNoteMoment) => void;
+  /** Whether it can be opened now (nothing else is live) */
+  canDiscussMoment?: boolean;
 }
 
 export function LectureNotesView({
@@ -68,9 +87,15 @@ export function LectureNotesView({
   currentActionIndex,
   canJumpToAction,
   onJumpToAction,
+  moments,
+  describeAgent,
+  onDiscussMoment,
+  canDiscussMoment = true,
 }: LectureNotesViewProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
+  // Each 现在聊聊 is described by its own moment (and, while disabled, why)
+  const idBase = useId();
 
   // Auto-scroll to the current scene note
   useEffect(() => {
@@ -203,15 +228,69 @@ export function LectureNotesView({
                 }
                 return rows.map((row, i) => {
                   if (row.kind === 'discussion') {
+                    // A class moment: who opened it, how it ended, and 现在聊聊
+                    // when the learner let it pass
+                    const moment = moments?.get(row.actionId);
+                    const opener = moment ? describeAgent?.(moment.agentId) : undefined;
+                    const outcome = moment?.outcome;
+                    const canDiscuss = !!onDiscussMoment && !!moment && isMissedMoment(outcome);
+                    const topicId = `${idBase}-${note.sceneId}-${i}-topic`;
+                    const busyId = `${idBase}-${note.sceneId}-${i}-busy`;
                     return (
                       <div
                         key={i}
+                        data-testid="lecture-note-moment"
+                        data-outcome={outcome ?? 'pending'}
                         className="my-1.5 flex items-start gap-1.5 rounded-md border border-amber-200/60 dark:border-amber-700/30 bg-amber-50/60 dark:bg-amber-900/10 px-2 py-1.5"
                       >
-                        <MessageSquare className="w-3 h-3 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
-                        <span className="text-[11px] leading-snug text-amber-800 dark:text-amber-300">
-                          {row.label}
-                        </span>
+                        {opener?.avatar ? (
+                          <span className="mt-0.5 size-4 shrink-0 overflow-hidden rounded-full bg-background ring-1 ring-amber-200 dark:ring-amber-500/40">
+                            <AvatarDisplay src={opener.avatar} alt="" />
+                          </span>
+                        ) : (
+                          <MessageSquare className="w-3 h-3 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          {(opener || outcome) && (
+                            <div className="flex min-w-0 items-center gap-1.5 text-[10px] leading-4">
+                              {opener && (
+                                <span className="truncate font-semibold text-amber-800 dark:text-amber-300">
+                                  {opener.name}
+                                </span>
+                              )}
+                              {outcome && (
+                                <span className="shrink-0 text-fg-tertiary">
+                                  {t(MOMENT_OUTCOME_KEYS[outcome])}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <span
+                            id={topicId}
+                            className="block text-[11px] leading-snug text-amber-800 dark:text-amber-300"
+                          >
+                            {row.label}
+                          </span>
+                        </div>
+                        {canDiscuss && (
+                          <button
+                            type="button"
+                            disabled={!canDiscussMoment}
+                            aria-describedby={canDiscussMoment ? topicId : `${topicId} ${busyId}`}
+                            title={
+                              canDiscussMoment ? undefined : t('chat.lectureNotes.discussNowBusy')
+                            }
+                            onClick={() => onDiscussMoment?.(moment!)}
+                            className="shrink-0 rounded-md border border-line bg-background px-1.5 py-0.5 text-[10px] font-semibold text-accent-text transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                          >
+                            {t('chat.lectureNotes.discussNow')}
+                          </button>
+                        )}
+                        {canDiscuss && !canDiscussMoment && (
+                          <span id={busyId} className="sr-only">
+                            {t('chat.lectureNotes.discussNowBusy')}
+                          </span>
+                        )}
                       </div>
                     );
                   }

@@ -285,12 +285,22 @@
       "pageLabel": "第 {{n}} 頁",
       "currentPage": "目前頁面",
       "jumpToLine": "Jump to this line",
-      "jumpUnavailable": "Jump unavailable for this line"
+      "jumpUnavailable": "Jump unavailable for this line",
+      "discussNow": "現在聊聊",
+      "discussNowBusy": "先結束目前的對話",
+      "momentOutcome": {
+        "joined": "已加入",
+        "skipped": "已略過",
+        "autoSkipped": "錯過了",
+        "notShown": "未出場"
+      }
     },
     "badge": {
       "qa": "Q&A",
       "discussion": "討論",
-      "lecture": "授課"
+      "lecture": "授課",
+      "aside": "助教答疑",
+      "asideClassmate": "小聲交流"
     }
   },
   "actions": {
@@ -336,7 +346,22 @@
     "join": "加入討論",
     "skip": "略過",
     "offerLabel": "{{name}} 發起討論",
-    "autoSkipHint": "{{seconds}} 秒後自動略過"
+    "autoSkipHint": "{{seconds}} 秒後自動略過",
+    "countdownPaused": "倒數已暫停，準備好再選擇",
+    "question": "提問",
+    "joinTeacher": "一起想想",
+    "teacherOfferLabel": "{{name}} 提了一個問題",
+    "review": "檢討",
+    "joinReview": "一起檢討",
+    "reviewOfferLabel": "測驗檢討",
+    "answerFirst": "我來答",
+    "listenFirst": "先聽聽大家"
+  },
+  "quizReview": {
+    "topic": "一起看看沒做對的題：{{questions}}",
+    "question": "第 {{n}} 題「{{text}}」",
+    "separator": "、",
+    "more": "，還有 {{count}} 題"
   },
   "voice": {
     "startListening": "語音輸入",
@@ -381,18 +406,25 @@
     "composer": {
       "raiseHand": "舉手",
       "raiseHandHint": "舉手提問：老師講完目前這句後請你發言",
+      "raiseHandHintAssistant": "舉手提問：助教會在互動面板裡回答，老師繼續講課",
       "raiseHandInLiveSession": "問答中可直接發言",
       "lowerHand": "放下",
       "lowerHandHint": "放下手，撤回提問",
       "cuePlaceholder": "說出或輸入你的問題",
+      "answerPlaceholder": "說出或輸入你的回答",
       "cueStatus": "輪到你發言了 · 課堂已暫停",
+      "cueAsked": "{{name}} 在等你的回答",
+      "cueHandBack": "輪到你了 · 想到什麼都可以說",
       "send": "傳送",
       "cancelRecording": "取消錄音",
       "handRaised": "已舉手 · 講完這句就請你發言",
       "handRaisedStep": "已舉手 · 這一步結束就請你發言",
+      "handRaisedAssistant": "已舉手 · 助教會在互動面板裡回答你",
       "raisedPlaceholder": "可以先寫下問題...",
       "followUpPlaceholder": "繼續追問...",
       "referencePlaceholder": "關於這個{{type}}，你想問什麼？",
+      "mentionMenu": "點名問誰",
+      "mentionPlaceholder": "輸入你的問題，或用 @ 點名問某個人",
       "handLowered": "已放下手"
     },
     "handRaise": {
@@ -400,15 +432,28 @@
       "aheadOfDiscussion": "你舉手了，{{name}} 的討論排在你之後",
       "calledBy": "{{name}} 請你發言",
       "pendingQuestion": "排隊中 · 老師講完這句就回答",
-      "pendingQuestionStep": "排隊中 · 老師完成目前步驟就回答"
+      "pendingQuestionStep": "排隊中 · 老師完成目前步驟就回答",
+      "assistantPrompt": "請說出你的問題，我來幫你解答",
+      "assistantAnswering": "助教正在回答…",
+      "agentAnswering": "{{name}}正在回答…",
+      "askedBy": "{{name}} 問你：{{prompt}}",
+      "handBack": "{{name}} 把話交給了你",
+      "cueReplies": {
+        "think": "我想想…",
+        "unsure": "我不太確定",
+        "hint": "給我一點提示吧"
+      }
     },
     "participants": {
       "label": "課堂成員",
       "online": "{{count}} 人在線",
       "speaking": "講解中",
+      "answering": "回答中",
       "wantsToSpeak": "想發言",
       "handRaised": "舉手中",
-      "more": "另外 {{count}} 位成員"
+      "more": "另外 {{count}} 位成員",
+      "cardLabel": "{{name}}，{{status}}",
+      "askThem": "問問 {{name}}"
     },
     "generating": "生成中...",
     "paused": "已暫停",
@@ -422,7 +467,12 @@
     "exitFullscreen": "離開全螢幕",
     "editCourse": "編輯課程",
     "doneEditing": "完成編輯",
-    "proModeDisabledHint": "此頁面無法編輯——開啟課程投影片以使用 Pro 模式編輯。"
+    "proModeDisabledHint": "此頁面無法編輯——開啟課程投影片以使用 Pro 模式編輯。",
+    "ownClassmates": {
+      "title": "這堂課由本課自己的同學出場",
+      "description": "你在首頁選的預設同學會保留，用於新課程和沒有自帶同學的課程。",
+      "alwaysPreset": "始終使用我的預設同學"
+    }
   },
   "edit": {
     "proMode": "專業模式",
@@ -743,7 +793,7 @@
       "count": "{{count}} 位",
       "editHint": "點擊一位展開編輯",
       "personaLabel": "人設描述",
-      "personaPlaceholder": "描述角色的性格、教學風格與任務…",
+      "personaPlaceholder": "描述這個人：性格、說話方式、已經懂什麼和還不懂什麼、什麼時候會開口。",
       "noPersona": "暫無人設",
       "unnamed": "未命名",
       "teacherBadge": "主講",
@@ -752,7 +802,29 @@
       "removeFromClass": "移出課堂",
       "aiClassmates": "AI 同學 · {{count}}",
       "addRole": "新增角色",
-      "shortTitle": "陣容"
+      "upgrade": {
+        "action": "把同學寫成真實的人",
+        "actionHint": "把每個人設改寫成可信的人：性格、說話方式、懂什麼。每處改動都先預覽再套用。",
+        "loading": "正在改寫人設…",
+        "previewTitle": "預覽新的人設",
+        "previewHint": "只改人設，名字、頭像和聲音不變；套用後可以復原。",
+        "now": "現在",
+        "rewritten": "改寫後",
+        "apply": "套用",
+        "failed": "人設改寫失敗，請重試。",
+        "invalid": "這份名單無法改寫，請檢查每個人都有名字和角色。"
+      },
+      "shortTitle": "陣容",
+      "impact": {
+        "title": "課程腳本中對此成員的引用",
+        "moments": "由{{name}}開場的課堂時刻：{{count}} 個",
+        "mentions": "提到{{name}}的旁白或開場白：{{count}} 句。已生成的旁白和配音不會跟著改。",
+        "handToTeacher": "改由老師開場",
+        "dropMoments": "連同這些時刻一起刪除",
+        "removeAnyway": "仍然移出",
+        "renameMentions": "仍在使用「{{name}}」的旁白或開場白：{{count}} 句。已生成的旁白和配音會保留舊名字。",
+        "renameAnyway": "仍然改名"
+      }
     },
     "line": {
       "toolbar": "線條工具列",
@@ -1373,6 +1445,14 @@
     "agentModeAutoDesc": "AI 將依據課程內容自動生成合適的課堂角色",
     "autoAgentCount": "生成數量",
     "autoAgentCountDesc": "自動生成的角色數量（包含教師）",
+    "autoAgentCountAuto": "由 AI 決定",
+    "classAtmosphere": "班風",
+    "classAtmosphereDesc": "生成什麼樣的同學",
+    "classAtmosphereOptions": {
+      "focused": "安靜專注",
+      "conversational": "有來有往",
+      "lively": "熱鬧"
+    },
     "atLeastOneAgent": "請至少選擇1個智能體",
     "singleAgentMode": "單智能體模式",
     "directAnswer": "直接回答",
@@ -1399,12 +1479,12 @@
       "student": "學生"
     },
     "agentDescriptions": {
-      "default-1": "主講教師，清晰有條理地講解知識",
-      "default-2": "輔助講解，幫助同學理解重點",
-      "default-3": "活躍氣氛，用幽默讓課堂更有趣",
-      "default-4": "充滿好奇心，總愛追問為什麼",
-      "default-5": "認真記錄，整理課堂重點筆記",
-      "default-6": "深入思考，喜歡探討問題本質"
+      "default-1": "沉穩溫和的老師，一步步講，常讓大家先猜一猜",
+      "default-2": "熱心的助教，你卡住時遞上一個提示",
+      "default-3": "活潑愛逗樂，常搶先說出第一個想法",
+      "default-4": "好奇心強，總愛問為什麼",
+      "default-5": "細心的筆記員，每一步都要核對清楚",
+      "default-6": "安靜的思考者，常問「如果……會怎樣」"
     },
     "close": "關閉",
     "providerNames": {
@@ -1444,6 +1524,13 @@
     "keyboardShortcuts": "鍵盤快速鍵",
     "generalSettings": "一般設定",
     "systemSettings": "系統設定",
+    "classroomSection": "課堂",
+    "assistantAnswersDuringLecture": "講課時由助教回答提問",
+    "assistantAnswersDuringLectureDesc": "開啟後，講課中提問不打斷老師，由助教在互動面板裡回答",
+    "teacherMayCallOnLearner": "允許老師點我的名",
+    "teacherMayCallOnLearnerDesc": "開啟後，老師可能會像點同學一樣直接點你回答。關閉時，老師只向全班提問，不會單獨點你。",
+    "presetAgentsInGeneratedCourses": "始終使用我的預設同學",
+    "presetAgentsInGeneratedCoursesDesc": "開啟後，自帶同學的課程也換成你在首頁選的預設同學；關閉時，這類課程由本課自己的同學出場。",
     "importFromClipboard": "從剪貼簿匯入",
     "baseUrlRegion": {
       "china": "中國",

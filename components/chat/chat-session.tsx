@@ -7,6 +7,7 @@ import type { UIMessage } from 'ai';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { AvatarDisplay } from '@/components/ui/avatar-display';
+import { ClassmateCard } from '@/components/classroom/interaction/classmate-card';
 import { CircleStop } from 'lucide-react';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
 import { InlineActionTag, isWhiteboardAction } from './inline-action-tag';
@@ -37,10 +38,15 @@ const AVATARS = {
   user: '/avatars/user.png',
 };
 
-/** Session badge colours (Classroom.dc.html): Q&A on the accent, 讨论 on warning */
+/**
+ * Session badge colours (Classroom.dc.html): Q&A on the accent, 讨论 on
+ * warning, the assistant's aside (答疑 while the lecture plays) on success
+ */
 const SESSION_BADGE_STYLES: Record<string, string> = {
   qa: 'bg-accent-soft text-accent-text',
   discussion: 'bg-warning-soft text-warning',
+  aside: 'bg-success-soft text-success',
+  asideClassmate: 'bg-success-soft text-success',
 };
 
 /** Role chip colours next to an agent's name */
@@ -202,6 +208,14 @@ export function ChatSessionComponent({
   const { t } = useI18n();
   const isDiscussion = session.type === 'discussion';
   const isQA = session.type === 'qa';
+  // Someone answered on the side while the lecture played: the teaching
+  // assistant (助教答疑), or a classmate the learner named (小声交流)
+  const isAside = isQA && session.config?.aside === true;
+  const asideWithClassmate =
+    isAside &&
+    !!session.config?.defaultAgentId &&
+    useAgentRegistry.getState().getAgent(session.config.defaultAgentId)?.role === 'student';
+  const badgeKind = isAside ? (asideWithClassmate ? 'asideClassmate' : 'aside') : session.type;
   const isEnded = session.status === 'completed' && (isDiscussion || isQA);
   const isSoftClosing = session.status === 'soft-closing' && (isDiscussion || isQA);
   const remainingSoftCloseSeconds = useSoftCloseCountdown(session.softCloseDeadline);
@@ -250,6 +264,7 @@ export function ChatSessionComponent({
     <section
       data-testid="chat-session"
       data-session-type={session.type}
+      data-aside={isAside || undefined}
       data-status={session.status}
       className="flex flex-col gap-3"
     >
@@ -257,12 +272,13 @@ export function ChatSessionComponent({
       {(isQA || isDiscussion) && (
         <div className="flex justify-center">
           <span
+            data-testid="chat-session-badge"
             className={cn(
               'inline-flex h-5 items-center rounded-full px-2 text-[11px] font-semibold',
-              SESSION_BADGE_STYLES[session.type],
+              SESSION_BADGE_STYLES[badgeKind],
             )}
           >
-            {t(`chat.badge.${session.type}`)}
+            {t(`chat.badge.${badgeKind}`)}
           </span>
         </div>
       )}
@@ -299,6 +315,19 @@ export function ChatSessionComponent({
         }
 
         const role = senderRole(message.metadata);
+        const name = senderName(message.metadata);
+        const avatar = (
+          <span className="block size-7 shrink-0 overflow-hidden rounded-full bg-subtle ring-1 ring-line">
+            <AvatarDisplay
+              src={message.metadata?.senderAvatar || AVATARS.teacher}
+              alt=""
+              className="text-xs"
+            />
+          </span>
+        );
+        // A speaker of this class opens their classmate card (I24)
+        const speakerId = message.metadata?.agentId;
+        const speaker = speakerId ? getAgentConfig(speakerId) : undefined;
         return (
           <motion.div
             key={message.id}
@@ -309,18 +338,27 @@ export function ChatSessionComponent({
             transition={{ duration: 0.3 }}
             className="flex items-start gap-2"
           >
-            <span className="size-7 shrink-0 overflow-hidden rounded-full bg-subtle ring-1 ring-line">
-              <AvatarDisplay
-                src={message.metadata?.senderAvatar || AVATARS.teacher}
-                alt=""
-                className="text-xs"
-              />
-            </span>
+            {speakerId && speaker ? (
+              <ClassmateCard
+                person={{
+                  id: speakerId,
+                  name,
+                  avatar: message.metadata?.senderAvatar || speaker.avatar,
+                }}
+                triggerLabel={t('stage.participants.cardLabel', {
+                  name,
+                  status: t(`settings.agentRoles.${role}`),
+                })}
+                triggerClassName="shrink-0 rounded-full"
+              >
+                {avatar}
+              </ClassmateCard>
+            ) : (
+              avatar
+            )}
             <div className="flex min-w-0 max-w-[85%] flex-col gap-1">
               <div className="flex min-w-0 items-center gap-1.5">
-                <span className="truncate text-xs font-semibold text-fg-secondary">
-                  {senderName(message.metadata)}
-                </span>
+                <span className="truncate text-xs font-semibold text-fg-secondary">{name}</span>
                 <span
                   className={cn(
                     'shrink-0 rounded-full px-1.5 text-[10px] font-semibold leading-4',

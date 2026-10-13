@@ -4,15 +4,15 @@ import { Hand } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { AvatarDisplay } from '@/components/ui/avatar-display';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ClassmateCard } from './classmate-card';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
 import { DEFAULT_USER_AVATAR } from '@/lib/constants/avatar-fallbacks';
 import type { PlaybackView } from '@/lib/playback';
 import type { Participant } from '@/lib/types/roundtable';
 
 /** What a participant's tile says under the name */
-export type ParticipantStatus = 'speaking' | 'wantsToSpeak' | 'handRaised' | 'role';
+export type ParticipantStatus = 'speaking' | 'answering' | 'wantsToSpeak' | 'handRaised' | 'role';
 
 /** The grid holds five tiles; past that the last agent slot becomes a "+N" tile */
 export const PARTICIPANT_GRID_COLUMNS = 5;
@@ -46,23 +46,27 @@ export function resolveSpeakingParticipantId({
 }
 
 /**
- * The status line of one tile: speaking wins, then the agent asking to start
- * a discussion (想发言), then the learner's raised hand (举手中); otherwise
- * the role label.
+ * The status line of one tile: speaking wins, then the teaching assistant
+ * answering on the side while the lecture plays (回答中), then the agent
+ * asking to start a discussion (想发言), then the learner's raised hand
+ * (举手中); otherwise the role label.
  */
 export function resolveParticipantStatus(
   participant: Pick<Participant, 'id' | 'role'>,
   {
     speakingId,
+    answeringAgentId,
     discussionAgentId,
     userHandRaised,
   }: {
     readonly speakingId?: string | null;
+    readonly answeringAgentId?: string | null;
     readonly discussionAgentId?: string | null;
     readonly userHandRaised?: boolean;
   },
 ): ParticipantStatus {
   if (speakingId && participant.id === speakingId) return 'speaking';
+  if (answeringAgentId && participant.id === answeringAgentId) return 'answering';
   if (discussionAgentId && participant.id === discussionAgentId) return 'wantsToSpeak';
   if (participant.role === 'user' && userHandRaised) return 'handRaised';
   return 'role';
@@ -91,6 +95,7 @@ export function layoutParticipantGrid(participants: readonly Participant[]): {
 
 const STATUS_LABEL_KEYS: Record<Exclude<ParticipantStatus, 'role'>, string> = {
   speaking: 'stage.participants.speaking',
+  answering: 'stage.participants.answering',
   wantsToSpeak: 'stage.participants.wantsToSpeak',
   handRaised: 'stage.participants.handRaised',
 };
@@ -118,8 +123,15 @@ interface ParticipantsProps {
   readonly isLivePaused?: boolean;
   /** The director is preparing this agent's turn (agent_loading spinner) */
   readonly thinkingState?: { stage: string; agentId?: string } | null;
+  /** The teaching assistant answering in the chat while the lecture plays (回答中) */
+  readonly answeringAgentId?: string | null;
   /** The agent offering a discussion (想发言) */
   readonly discussionAgentId?: string | null;
+  /**
+   * The agent reading its class moment's card out loud: its tile speaks (讲解中)
+   * while it does, whatever the playback phase
+   */
+  readonly announcingAgentId?: string | null;
   /** The learner's question waits for the current line (举手中) */
   readonly userHandRaised?: boolean;
   /**
@@ -149,8 +161,10 @@ const BADGE_SIZE = {
  * and a five-column grid of 44px avatars (40px below the classroom's
  * desktop width, TabletLandscape.dc.html) with name and status — 讲解中 for
  * the speaker, 想发言 for the agent offering a discussion, 举手中 for the
- * learner's raised hand, else the role. Hovering an agent shows its persona.
- * The stacked and phone layouts drop the count line (see `layout`).
+ * learner's raised hand, else the role. An agent's tile is a button: a click,
+ * a tap or Enter opens their classmate card (who they are, never their
+ * level or misconceptions; "ask them"). The stacked and phone layouts drop
+ * the count line (see `layout`).
  */
 export function Participants({
   participants,
@@ -158,7 +172,9 @@ export function Participants({
   speakingAgentId,
   isLivePaused,
   thinkingState,
+  answeringAgentId,
   discussionAgentId,
+  announcingAgentId,
   userHandRaised,
   layout = 'panel',
 }: ParticipantsProps) {
@@ -166,12 +182,14 @@ export function Participants({
   const phone = layout === 'phone';
   const avatarSize = AVATAR_SIZE[layout];
   const onlineCount = participants.filter((p) => p.isOnline).length;
-  const speakingId = resolveSpeakingParticipantId({
-    playbackView,
-    speakingAgentId,
-    participants,
-    isLivePaused,
-  });
+  const speakingId =
+    announcingAgentId ||
+    resolveSpeakingParticipantId({
+      playbackView,
+      speakingAgentId,
+      participants,
+      isLivePaused,
+    });
   const { visible, overflow } = layoutParticipantGrid(participants);
   // Intentionally non-reactive: agent metadata is immutable during a classroom session
   const getAgentConfig = (id: string) => useAgentRegistry.getState().getAgent(id);
@@ -182,6 +200,7 @@ export function Participants({
   const describe = (participant: Participant) => {
     const status = resolveParticipantStatus(participant, {
       speakingId,
+      answeringAgentId,
       discussionAgentId,
       userHandRaised,
     });
@@ -202,6 +221,7 @@ export function Participants({
       className={cn(
         'max-w-full truncate text-[11px]',
         status === 'speaking' && 'font-semibold text-accent-text',
+        status === 'answering' && 'font-semibold text-success',
         (status === 'wantsToSpeak' || status === 'handRaised') && 'font-semibold text-warning',
         status === 'role' && 'text-fg-tertiary',
       )}
@@ -221,9 +241,11 @@ export function Participants({
             avatarSize,
             status === 'speaking'
               ? 'ring-2 ring-primary'
-              : status === 'wantsToSpeak' || status === 'handRaised'
-                ? 'ring-2 ring-amber-500'
-                : 'ring-1 ring-line',
+              : status === 'answering'
+                ? 'ring-2 ring-success'
+                : status === 'wantsToSpeak' || status === 'handRaised'
+                  ? 'ring-2 ring-amber-500'
+                  : 'ring-1 ring-line',
           )}
         >
           <AvatarDisplay
@@ -266,16 +288,7 @@ export function Participants({
   };
 
   const tile = (participant: Participant) => {
-    const { status, label, config } = describe(participant);
-    const i18nDescription = t(`settings.agentDescriptions.${participant.id}`);
-    const description =
-      i18nDescription !== `settings.agentDescriptions.${participant.id}`
-        ? i18nDescription
-        : config?.persona || '';
-    // A custom role has no translation: show no chip rather than the raw key
-    const roleChipKey = `settings.agentRoles.${config?.role}`;
-    const roleChip = config ? t(roleChipKey) : '';
-    const showRoleChip = !!roleChip && roleChip !== roleChipKey;
+    const { status, label } = describe(participant);
     const body = (
       <div
         data-testid="participant-tile"
@@ -304,38 +317,18 @@ export function Participants({
       );
     return (
       <li key={participant.id} className={tileClass}>
-        <HoverCard openDelay={300} closeDelay={100}>
-          <HoverCardTrigger asChild>
-            <div className="cursor-default">{body}</div>
-          </HoverCardTrigger>
-          <HoverCardContent
-            side="bottom"
-            align="center"
-            className="w-64 p-3 max-h-[300px] overflow-y-auto"
-          >
-            <div className="flex items-center gap-2">
-              <span className="size-8 shrink-0 overflow-hidden rounded-full bg-subtle">
-                <AvatarDisplay src={participant.avatar || DEFAULT_USER_AVATAR} alt="" />
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{participant.name}</p>
-                {showRoleChip && (
-                  <span
-                    className="mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[10px] leading-tight text-white"
-                    style={{ backgroundColor: config?.color || 'var(--icon-muted)' }}
-                  >
-                    {roleChip}
-                  </span>
-                )}
-              </div>
-            </div>
-            {description && (
-              <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                {description}
-              </p>
-            )}
-          </HoverCardContent>
-        </HoverCard>
+        <ClassmateCard
+          person={participant}
+          // The name, and the role or what they are doing, in one label
+          triggerLabel={t('stage.participants.cardLabel', {
+            name: participant.name,
+            status: label,
+          })}
+          triggerClassName="block w-full min-w-0"
+          compact={phone}
+        >
+          {body}
+        </ClassmateCard>
       </li>
     );
   };
@@ -366,20 +359,30 @@ export function Participants({
           <ul className="flex flex-col gap-1">
             {overflow.map((participant) => {
               const { status, label } = describe(participant);
+              // Each row opens the same classmate card as a tile ("ask them")
               return (
                 <li
                   key={participant.id}
                   data-testid="participant-overflow-row"
                   data-status={status}
-                  className="flex items-center gap-2 rounded-lg px-2 py-1.5"
                 >
-                  <span className="size-7 shrink-0 overflow-hidden rounded-full bg-subtle ring-1 ring-line">
-                    <AvatarDisplay src={participant.avatar || DEFAULT_USER_AVATAR} alt="" />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-fg">
-                    {participant.name}
-                  </span>
-                  {statusText(status, label)}
+                  <ClassmateCard
+                    person={participant}
+                    triggerLabel={t('stage.participants.cardLabel', {
+                      name: participant.name,
+                      status: label,
+                    })}
+                    triggerClassName="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-subtle"
+                    compact={phone}
+                  >
+                    <span className="size-7 shrink-0 overflow-hidden rounded-full bg-subtle ring-1 ring-line">
+                      <AvatarDisplay src={participant.avatar || DEFAULT_USER_AVATAR} alt="" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-fg">
+                      {participant.name}
+                    </span>
+                    {statusText(status, label)}
+                  </ClassmateCard>
                 </li>
               );
             })}

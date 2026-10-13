@@ -18,7 +18,15 @@ import type { ThinkingConfig } from '@/lib/types/provider';
 import type { ChildRuntimeMode } from '../child-runtime';
 import type { DirectorSceneEvidenceMetadata } from './read-scene';
 import { buildNativeWebSearchTool, type NativeWebSearchConfig } from './web-search';
-import type { ParsedAction, StatelessChatRequest } from '@/lib/types/chat';
+import {
+  CAST_REASONS,
+  isCastReason,
+  type CastReason,
+  type ParsedAction,
+  type PiCastingMode,
+  type PiChildTurnStub,
+  type StatelessChatRequest,
+} from '@/lib/types/chat';
 import {
   buildChildPrompt,
   buildChildTurnPrompt,
@@ -26,10 +34,15 @@ import {
   buildNativeChildTurnPrompt,
   createVisibleSpeechDeltaSanitizer,
   extractLastAssistantText,
+  getCoursePageStatus,
+  getOpeningLineFor,
   sanitizeVisibleSpeech,
   toHistoryMessages,
 } from '../prompts';
 import type { SendEvent } from '../types';
+import { isAsideToLecture } from '../config';
+import { sumAssistantUsage, type ChildTurnMeta, type ChildTurnUsage } from '../casting-log';
+import { PI_PROMPT_CACHE_OPTIONS } from '../prompt-cache';
 import {
   buildChildActionTools,
   createPiWhiteboardRuntimeState,
@@ -40,14 +53,34 @@ import { buildNativeWhiteboardTools } from './native-whiteboard';
 import type { WhiteboardRuntimeService } from '@/lib/whiteboard/runtime/store';
 import type { ElementReferenceEvidence } from '../element-reference';
 
-const CallAgentParams = Type.Object({
-  agentId: Type.String({
-    description: 'ID of the classroom agent that should speak next.',
-  }),
-  instruction: Type.String({
-    description: 'Specific instruction and context for the selected agent response.',
-  }),
-});
+function buildCallAgentParams(instructionDescription: string) {
+  return Type.Object({
+    agentId: Type.String({
+      description: 'ID of the classroom agent that should speak next.',
+    }),
+    instruction: Type.String({ description: instructionDescription }),
+    // A plain string, so an unknown value never fails the call; it is normalized below
+    castReason: Type.Optional(
+      Type.String({
+        description: `Optional: why this person speaks now, one of: ${CAST_REASONS.join(', ')}. Recorded for analysis only; the agent never sees it.`,
+      }),
+    ),
+  });
+}
+
+const CallAgentParams = buildCallAgentParams(
+  'The situation and your intent for this turn, in a sentence or two (e.g. "小思 is still unsure about phase; she can voice that confusion"). Do not write their lines or pick their words, and never hand a student a term or fact the lesson has not taught yet: what they say, and how, comes from their own persona and level.',
+);
+/** castingMode 'legacy': the pre-persona wording (castReason is kept for the A/B comparison) */
+const LegacyCallAgentParams = buildCallAgentParams(
+  'Specific instruction and context for the selected agent response.',
+);
+
+/** A valid castReason, or undefined (an unknown or missing value is ignored) */
+export function normalizeCastReason(value: unknown): CastReason | undefined {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : value;
+  return isCastReason(normalized) ? normalized : undefined;
+}
 
 type CallAgentParams = Static<typeof CallAgentParams>;
 
@@ -528,12 +561,62 @@ async function processParseResult(opts: {
   }
 }
 
+type StudentWithheldReason = 'upcoming' | 'graded-quiz';
+
+/**
+ * Why a student may not be handed a read_scene packet: a page the lesson has
+ * not reached, or the quiz the learner just submitted (its packet holds the
+ * answer key, the learner's answers and score). Undefined when they may.
+ */
+export function studentWithheldEvidenceReason(
+  body: StatelessChatRequest,
+  metadata: DirectorSceneEvidenceMetadata,
+): StudentWithheldReason | undefined {
+  if (getCoursePageStatus(body, metadata.sceneId) === 'upcoming') return 'upcoming';
+  const quizResults = body.storeState.quizResults;
+  if (
+    metadata.sceneType === 'quiz' &&
+    quizResults?.sceneId === metadata.sceneId &&
+    quizResults.results.length > 0
+  ) {
+    return 'graded-quiz';
+  }
+  return undefined;
+}
+
+function withheldStudentEvidenceNote(
+  withheld: readonly DirectorSceneEvidenceMetadata[],
+  reasonOf: (metadata: DirectorSceneEvidenceMetadata) => StudentWithheldReason | undefined,
+  agentName: string,
+): string {
+  const titlesFor = (reason: StudentWithheldReason) =>
+    withheld
+      .filter((metadata) => reasonOf(metadata) === reason)
+      .map((metadata) => `"${metadata.title ?? metadata.sceneId}"`)
+      .join(', ');
+  const upcoming = titlesFor('upcoming');
+  const gradedQuiz = titlesFor('graded-quiz');
+  const notes = [
+    upcoming
+      ? `Scene evidence for upcoming ${upcoming} was not given to ${agentName}, a student who has not been taught it yet.`
+      : '',
+    gradedQuiz
+      ? `Scene evidence for the graded quiz ${gradedQuiz} (answer key, the learner's answers and score) was not given to ${agentName}, a student: a classmate speaks from their own understanding.`
+      : '',
+  ].filter(Boolean);
+  return notes.length > 0
+    ? `\n(${notes.join(' ')} It stays pending for the next teacher or teaching assistant you call.)`
+    : '';
+}
+
 export function buildCallAgentTool(opts: {
   body: StatelessChatRequest;
   agentConfigs: AgentConfig[];
   send: SendEvent;
   languageModel: LanguageModel;
   onAgentDone: (summary: AgentTurnSummary) => void;
+  /** Called right before onAgentDone with what the casting log records of the turn */
+  onAgentTurnMeta?: (turn: ChildTurnMeta) => void;
   onActionDone: (record?: WhiteboardActionRecord) => void;
   thinkingConfig: ThinkingConfig;
   maxOutputTokens?: number;
@@ -554,14 +637,37 @@ export function buildCallAgentTool(opts: {
   requestStartCurrentScene?: RequestStartCurrentScene;
   isUserCued?: () => boolean;
   isSessionClosed?: () => boolean;
-  takeSceneEvidence?: () => RuntimeEvidenceAttachment<DirectorSceneEvidenceMetadata[]> | undefined;
+  /**
+   * The student who spoke the last visible line of this loop, if a student
+   * did: at the turn limit the teacher or assistant may still take one turn
+   * to respond, so a student's wrong or open idea is not the last word.
+   */
+  getStudentLastWord?: () => { agentId: string; agentName: string } | undefined;
+  /**
+   * Take the pending read_scene evidence (take-once). With `accept`, only the
+   * packets it accepts are taken; the rest stay pending for a later child.
+   */
+  takeSceneEvidence?: (
+    accept?: (metadata: DirectorSceneEvidenceMetadata) => boolean,
+  ) => RuntimeEvidenceAttachment<DirectorSceneEvidenceMetadata[]> | undefined;
+  /** The read_scene evidence still pending, without taking it */
+  peekSceneEvidence?: () => readonly DirectorSceneEvidenceMetadata[];
   // `metadata` is absent when only area state travels, so no element identity and
   // no Spotlight authorization can be derived from it.
   elementReferenceEvidence?: Readonly<{
     content: string;
     metadata?: Readonly<ElementReferenceEvidence>;
   }>;
+  /**
+   * Eval-only: scripted speech instead of the child LLM run. The turn still
+   * emits agent_start, text_delta and agent_end and is recorded; '' is an
+   * empty turn. Never set by the route.
+   */
+  childTurnStub?: PiChildTurnStub;
+  /** 'legacy': the pre-persona tool wording and no closing turn past the limit */
+  castingMode?: PiCastingMode;
 }): AgentTool<typeof CallAgentParams> {
+  const legacy = opts.castingMode === 'legacy';
   // Loop-guard (model-agnostic): an empty/errored child turn used to bypass onAgentDone,
   // so the completed-turn count never advanced and the maxAgentTurns guard was defeated — a model
   // that returns empty completions (e.g. reasoning eats the output budget) could then trigger
@@ -571,6 +677,23 @@ export function buildCallAgentTool(opts: {
   let consecutiveEmptyTurns = 0;
   let totalAgentAttempts = 0;
   let whiteboardState: PiWhiteboardRuntimeState | undefined;
+  // The opener says the card line once: on their first turn of the opening request
+  let openingLineGiven = false;
+  const takeOpeningLine = (agentId: string): string | undefined => {
+    if (openingLineGiven) return undefined;
+    const line = getOpeningLineFor(opts.body, opts.agentConfigs, agentId);
+    if (line) openingLineGiven = true;
+    return line;
+  };
+  // Someone the learner asked by name answers them on their first turn of the
+  // loop (I03), whatever their role; later turns are ordinary ones
+  const addressedAnswered = new Set<string>();
+  const takeAddressed = (agentId: string): boolean => {
+    if (isAsideToLecture(opts.body) || addressedAnswered.has(agentId)) return false;
+    if (!opts.body.config.addressedAgentIds?.includes(agentId)) return false;
+    addressedAnswered.add(agentId);
+    return true;
+  };
   const getLegacyWhiteboardState = () => {
     whiteboardState ??= createPiWhiteboardRuntimeState(opts.body);
     return whiteboardState;
@@ -578,8 +701,10 @@ export function buildCallAgentTool(opts: {
   return {
     name: 'call_agent',
     label: 'Call classroom agent',
-    description: `Ask one classroom agent to produce the next in-class response. Use this before giving your final director decision. Hard limit: at most ${opts.maxAgentTurns} classroom agent turns in this server-side loop. Once the limit is reached, finish with cue_user or close_session.`,
-    parameters: CallAgentParams,
+    description: legacy
+      ? `Ask one classroom agent to produce the next in-class response. Use this before giving your final director decision. Hard limit: at most ${opts.maxAgentTurns} classroom agent turns in this server-side loop. Once the limit is reached, finish with cue_user or close_session.`
+      : `Ask one classroom agent to produce the next in-class response. Use this before giving your final director decision. Hard limit: at most ${opts.maxAgentTurns} classroom agent turns in this server-side loop; when the limit is reached right after a student spoke, the teacher or teaching assistant may take one more turn to respond to that student. Once the limit is reached, finish with cue_user or close_session.`,
+    parameters: legacy ? LegacyCallAgentParams : CallAgentParams,
     executionMode: 'sequential',
     execute: async (_toolCallId: string, params: CallAgentParams, signal?: AbortSignal) => {
       if (totalAgentAttempts >= maxAgentAttempts) {
@@ -639,19 +764,32 @@ export function buildCallAgentTool(opts: {
       }
 
       if (opts.getAgentTurnCount() >= opts.maxAgentTurns) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Agent turn limit (${opts.maxAgentTurns}) reached. Finish the director loop with cue_user or close_session.`,
+        // One closing turn past the limit, only for the teacher or assistant
+        // and only right after a student: a student's wrong or open idea must
+        // not be the last word of the turn
+        const studentLastWord =
+          !legacy && opts.getAgentTurnCount() === opts.maxAgentTurns
+            ? opts.getStudentLastWord?.()
+            : undefined;
+        const isStaff = agent.role === 'teacher' || agent.role === 'assistant';
+        if (!studentLastWord || !isStaff) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: studentLastWord
+                  ? `Agent turn limit (${opts.maxAgentTurns}) reached. The last line came from ${studentLastWord.agentName}, a student: only the teacher or teaching assistant may take one more turn to respond to it. Otherwise finish the director loop with cue_user or close_session.`
+                  : `Agent turn limit (${opts.maxAgentTurns}) reached. Finish the director loop with cue_user or close_session.`,
+              },
+            ],
+            details: {
+              skipped: true,
+              reason: 'agent_turn_limit',
+              maxAgentTurns: opts.maxAgentTurns,
+              ...(studentLastWord ? { closingTurnOpenTo: ['teacher', 'assistant'] } : {}),
             },
-          ],
-          details: {
-            skipped: true,
-            reason: 'agent_turn_limit',
-            maxAgentTurns: opts.maxAgentTurns,
-          },
-        };
+          };
+        }
       }
 
       if (consecutiveEmptyTurns >= MAX_CONSECUTIVE_EMPTY_TURNS) {
@@ -669,7 +807,26 @@ export function buildCallAgentTool(opts: {
       // read_scene evidence remains pending/take-once. Selected-element evidence is
       // immutable request context and is attached to every valid child delegation,
       // including retries and handoffs after an earlier child failure.
-      const sceneEvidence = opts.takeSceneEvidence?.();
+      // A student has not been taught the upcoming pages, and never sees the
+      // learner's graded quiz (answer key, the learner's answers, the score),
+      // so that evidence waits for the next teacher or assistant instead.
+      const withheldReason =
+        agent.role === 'student'
+          ? (metadata: DirectorSceneEvidenceMetadata) =>
+              studentWithheldEvidenceReason(opts.body, metadata)
+          : undefined;
+      const isWithheldFromStudent = withheldReason
+        ? (metadata: DirectorSceneEvidenceMetadata) => withheldReason(metadata) !== undefined
+        : undefined;
+      const sceneEvidence = opts.takeSceneEvidence?.(
+        isWithheldFromStudent ? (metadata) => !isWithheldFromStudent(metadata) : undefined,
+      );
+      const withheldSceneEvidence = isWithheldFromStudent
+        ? (opts.peekSceneEvidence?.() ?? []).filter(isWithheldFromStudent)
+        : [];
+      const withheldEvidenceNote = withheldReason
+        ? withheldStudentEvidenceNote(withheldSceneEvidence, withheldReason, agent.name)
+        : '';
       const elementReferenceEvidence = opts.elementReferenceEvidence;
       const capturedScene = opts.requestStartCurrentScene;
       const hasMatchingCurrentSceneEvidence = Boolean(
@@ -691,6 +848,10 @@ export function buildCallAgentTool(opts: {
       ) {
         spotlightElementIds.push(elementReferenceEvidence.metadata.elementId);
       }
+
+      const openingLine = takeOpeningLine(agent.id);
+      const addressed = takeAddressed(agent.id);
+      const castReason = normalizeCastReason(params.castReason);
 
       const childAbort = new AbortController();
       const abortFromRequest = () => childAbort.abort(opts.abortSignal.reason);
@@ -733,8 +894,70 @@ export function buildCallAgentTool(opts: {
           agentName: agent.name,
           agentAvatar: agent.avatar,
           agentColor: agent.color,
+          ...(castReason ? { castReason } : {}),
         },
       });
+      const startedAt = Date.now();
+      const turnMeta = (visibleText: string, usage?: ChildTurnUsage): ChildTurnMeta => ({
+        role: agent.role,
+        ...(castReason ? { castReason } : {}),
+        chars: Array.from(visibleText).length,
+        durationMs: Date.now() - startedAt,
+        ...(usage ? { usage } : {}),
+      });
+
+      if (opts.childTurnStub) {
+        let stubText: string;
+        try {
+          stubText = await opts.childTurnStub({
+            agentId: agent.id,
+            agentName: agent.name,
+            role: agent.role,
+            instruction: params.instruction,
+            ...(castReason ? { castReason } : {}),
+            turnIndex: opts.getAgentTurnCount(),
+            evidenceSceneIds: sceneEvidence?.metadata.map((metadata) => metadata.sceneId) ?? [],
+          });
+        } finally {
+          opts.abortSignal.removeEventListener('abort', abortFromRequest);
+          signal?.removeEventListener('abort', abortFromTool);
+        }
+        if (opts.abortSignal.aborted || signal?.aborted) {
+          throw abortChildError(opts.abortSignal, signal);
+        }
+        const finalText = sanitizeVisibleSpeech(stubText ?? '').trim();
+        if (finalText) {
+          await opts.send({ type: 'text_delta', data: { content: finalText, messageId } });
+        }
+        consecutiveEmptyTurns = finalText ? 0 : consecutiveEmptyTurns + 1;
+        await opts.send({ type: 'agent_end', data: { messageId, agentId: agent.id } });
+        opts.onAgentTurnMeta?.(turnMeta(finalText));
+        opts.onAgentDone({
+          agentId: agent.id,
+          agentName: agent.name,
+          contentPreview: finalText.slice(0, 300),
+          actionCount: 0,
+          whiteboardActions: [],
+          actionWarnings: [],
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `${agent.name}: ${finalText || '(no visible response)'}${withheldEvidenceNote}`,
+            },
+          ],
+          details: {
+            agentId: agent.id,
+            agentName: agent.name,
+            text: finalText,
+            runtimeMode: 'stub',
+            ...(castReason ? { castReason } : {}),
+            ...(sceneEvidence ? { sceneEvidence: sceneEvidence.metadata } : {}),
+            ...(withheldSceneEvidence.length > 0 ? { withheldSceneEvidence } : {}),
+          },
+        };
+      }
 
       const childRuntimeMode = opts.childRuntimeMode ?? 'legacy';
       if (childRuntimeMode === 'native') {
@@ -782,6 +1005,7 @@ export function buildCallAgentTool(opts: {
               thinkingConfig: opts.thinkingConfig,
               maxOutputTokens: opts.maxOutputTokens,
               abortSignal: childAbort.signal,
+              ...PI_PROMPT_CACHE_OPTIONS,
             }),
             systemPrompt: buildNativeChildPrompt(
               opts.body,
@@ -789,15 +1013,25 @@ export function buildCallAgentTool(opts: {
               opts.getAgentResponses(),
               availableToolNames,
               capturedScene,
+              opts.agentConfigs,
             ),
-            prompt: buildNativeChildTurnPrompt(params.instruction, agent.role, {
-              scene: sceneEvidence?.content,
-              element: elementReferenceEvidence?.content,
-              spotlightElementIds,
-            }),
+            prompt: buildNativeChildTurnPrompt(
+              params.instruction,
+              agent.role,
+              {
+                scene: sceneEvidence?.content,
+                element: elementReferenceEvidence?.content,
+                spotlightElementIds,
+              },
+              { aside: isAsideToLecture(opts.body), openingLine, addressed },
+            ),
             tools: nativeTools,
             allowedToolNames: new Set(availableToolNames),
-            history: toHistoryMessages(opts.body.messages),
+            history: toHistoryMessages(opts.body.messages, 12, {
+              viewerAgentId: agent.id,
+              agents: opts.agentConfigs,
+              learnerName: opts.body.userProfile?.nickname,
+            }),
             abortSignal: childAbort.signal,
             timeoutMs: 60_000,
             maxProviderTransports: 5,
@@ -824,6 +1058,7 @@ export function buildCallAgentTool(opts: {
         const isCompleted = nativeResult.status === 'completed';
         consecutiveEmptyTurns = isCompleted ? 0 : consecutiveEmptyTurns + 1;
         await opts.send({ type: 'agent_end', data: { messageId, agentId: agent.id } });
+        opts.onAgentTurnMeta?.(turnMeta(finalText));
         opts.onAgentDone({
           agentId: agent.id,
           agentName: agent.name,
@@ -837,7 +1072,7 @@ export function buildCallAgentTool(opts: {
           content: [
             {
               type: 'text',
-              text: `${agent.name}: ${finalText || '(no visible response)'}`,
+              text: `${agent.name}: ${finalText || '(no visible response)'}${withheldEvidenceNote}`,
             },
           ],
           details: {
@@ -845,9 +1080,11 @@ export function buildCallAgentTool(opts: {
             agentName: agent.name,
             text: finalText,
             runtimeMode: childRuntimeMode,
+            ...(castReason ? { castReason } : {}),
             availableToolNames,
             nativeChildRun: nativeResult,
             ...(sceneEvidence ? { sceneEvidence: sceneEvidence.metadata } : {}),
+            ...(withheldSceneEvidence.length > 0 ? { withheldSceneEvidence } : {}),
             ...(elementReferenceEvidence?.metadata
               ? {
                   elementReferenceEvidence: elementReferenceEvidence.metadata,
@@ -884,6 +1121,7 @@ export function buildCallAgentTool(opts: {
           thinkingConfig: opts.thinkingConfig,
           maxOutputTokens: opts.maxOutputTokens,
           abortSignal: childAbort.signal,
+          ...PI_PROMPT_CACHE_OPTIONS,
         }),
         systemPrompt: buildChildPrompt(
           opts.body,
@@ -891,10 +1129,15 @@ export function buildCallAgentTool(opts: {
           opts.getAgentResponses(),
           opts.getWhiteboardLedger(),
           childTools.map((tool) => tool.name),
+          opts.agentConfigs,
         ),
         tools: [],
         allowedToolNames: new Set(),
-        history: toHistoryMessages(opts.body.messages),
+        history: toHistoryMessages(opts.body.messages, 12, {
+          viewerAgentId: agent.id,
+          agents: opts.agentConfigs,
+          learnerName: opts.body.userProfile?.nickname,
+        }),
       });
 
       const parserState = createParserState();
@@ -919,10 +1162,15 @@ export function buildCallAgentTool(opts: {
       let childErrored = false;
       try {
         await child.prompt(
-          buildChildTurnPrompt(params.instruction, agent.role, {
-            scene: sceneEvidence?.content,
-            element: elementReferenceEvidence?.content,
-          }),
+          buildChildTurnPrompt(
+            params.instruction,
+            agent.role,
+            {
+              scene: sceneEvidence?.content,
+              element: elementReferenceEvidence?.content,
+            },
+            { aside: isAsideToLecture(opts.body), openingLine, addressed },
+          ),
         );
         await child.waitForIdle();
       } catch (error) {
@@ -976,6 +1224,7 @@ export function buildCallAgentTool(opts: {
       const isEmptyTurn = childErrored || (!hasVisibleText && actionCount === 0);
       consecutiveEmptyTurns = isEmptyTurn ? consecutiveEmptyTurns + 1 : 0;
       await opts.send({ type: 'agent_end', data: { messageId, agentId: agent.id } });
+      opts.onAgentTurnMeta?.(turnMeta(finalText, sumAssistantUsage(child.state?.messages)));
       opts.onAgentDone({
         agentId: agent.id,
         agentName: agent.name,
@@ -989,15 +1238,17 @@ export function buildCallAgentTool(opts: {
         content: [
           {
             type: 'text',
-            text: `${agent.name}: ${finalText || '(no visible response)'}`,
+            text: `${agent.name}: ${finalText || '(no visible response)'}${withheldEvidenceNote}`,
           },
         ],
         details: {
           agentId: agent.id,
           agentName: agent.name,
           text: finalText,
+          ...(castReason ? { castReason } : {}),
           actionWarnings,
           ...(sceneEvidence ? { sceneEvidence: sceneEvidence.metadata } : {}),
+          ...(withheldSceneEvidence.length > 0 ? { withheldSceneEvidence } : {}),
           ...(elementReferenceEvidence?.metadata
             ? {
                 elementReferenceEvidence: elementReferenceEvidence.metadata,

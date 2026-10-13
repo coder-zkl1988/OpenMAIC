@@ -25,6 +25,7 @@ import { useUserProfileStore } from '@/lib/store/user-profile';
 import { toast } from 'sonner';
 import { createLogger } from '@/lib/logger';
 import { runClearCache } from './clear-cache-workflow';
+import { ClassroomSettings } from './classroom-settings';
 
 const log = createLogger('GeneralSettings');
 
@@ -101,6 +102,9 @@ export function GeneralSettings() {
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Classroom: who answers questions asked during the lecture */}
+      <ClassroomSettings />
+
       {/* Usage statistics dashboard */}
       <UsageDashboard />
 

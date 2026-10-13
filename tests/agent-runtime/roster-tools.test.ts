@@ -27,6 +27,7 @@ import {
   type CourseStore,
 } from '@/lib/server/agent-runtime/roster-tools';
 import { withOwnerStageAuthorization } from '@/lib/server/agent-runtime/course-tools';
+import { PERSONA_GUIDE } from '@/lib/orchestration/persona-guide';
 
 const mocks = vi.hoisted(() => ({
   enabledServerTTSProviderIds: vi.fn(),
@@ -154,15 +155,23 @@ describe('set_roster', () => {
           id: 'named-teacher',
           name: 'Prof. Lin',
           role: 'teacher',
-          persona: 'A patient mentor.',
+          persona: 'A patient mentor who builds every idea from what the class already knows.',
           voiceDesign: {
             identity: 'middle-aged male teacher',
             texture: 'warm low',
             delivery: 'calm',
           },
         },
-        { name: 'Sam', role: 'student', persona: 'Curious.' },
-        { name: 'Ada', role: 'student', persona: 'Diligent.' },
+        {
+          name: 'Sam',
+          role: 'student',
+          persona: 'A curious student who asks why as soon as something surprises him.',
+        },
+        {
+          name: 'Ada',
+          role: 'student',
+          persona: 'A diligent student who takes careful notes and rarely speaks unless sure.',
+        },
       ],
     });
 
@@ -184,7 +193,13 @@ describe('set_roster', () => {
     const store = makeStore(makeDoc());
     const result = await runTool(store, 'set_roster', {
       stageId: 'stage-test',
-      agents: [{ name: 'Only', role: 'teacher', persona: 'solo' }],
+      agents: [
+        {
+          name: 'Only',
+          role: 'teacher',
+          persona: 'A patient mentor who builds every idea from what the class already knows.',
+        },
+      ],
     });
     expect(result.isError).toBe(true);
     expect(result.details?.error).toBe('at-least-2-agents');
@@ -195,13 +210,111 @@ describe('set_roster', () => {
     const result = await runTool(store, 'set_roster', {
       stageId: 'stage-test',
       agents: [
-        { name: 'A', role: 'student', persona: 'a' },
-        { name: 'B', role: 'student', persona: 'b' },
-        { name: 'C', role: 'student', persona: 'c' },
+        {
+          name: 'A',
+          role: 'student',
+          persona: 'A curious student who asks why as soon as something surprises him.',
+        },
+        {
+          name: 'B',
+          role: 'student',
+          persona: 'A diligent student who takes careful notes and rarely speaks unless sure.',
+        },
+        {
+          name: 'C',
+          role: 'student',
+          persona: 'A quiet student who follows closely and only speaks when she is asked.',
+        },
       ],
     });
     expect(result.isError).toBe(true);
     expect(result.details?.error).toBe('teacher-count');
+  });
+
+  it('normalizes localized roles, as a generated roster does', async () => {
+    const store = makeStore(makeDoc());
+    const result = await runTool(store, 'set_roster', {
+      stageId: 'stage-test',
+      agents: [
+        {
+          name: '王老师',
+          role: '老师',
+          persona:
+            '王老师四十来岁，说话慢条斯理。讲课喜欢先抛一个生活里的问题，再请同学们猜一猜。答错了也不急，会追问一句“你是怎么想的”。',
+        },
+        {
+          name: '小禾',
+          role: 'TA',
+          persona:
+            '小禾是助教，研究生二年级，热心细致，看到有人卡住会轻声递上一个小提示，从不抢老师的话。',
+        },
+        {
+          name: '小思',
+          role: '学生',
+          persona:
+            '小思是个安静的女生，基础扎实但不太自信，只有被点到或很有把握时才开口，常把正负号弄混。',
+        },
+      ],
+    });
+    expect(result.isError).toBeUndefined();
+    const roster = (await store.loadDocument('stage-test'))?.stage?.generatedAgentConfigs ?? [];
+    expect(roster.map((agent) => agent.role)).toEqual(['teacher', 'assistant', 'student']);
+  });
+
+  it('refuses a roster a person could not be, with every problem listed, and writes nothing', async () => {
+    const store = makeStore(makeDoc());
+    const result = await runTool(store, 'set_roster', {
+      stageId: 'stage-test',
+      agents: [
+        {
+          name: 'Prof. Lin',
+          role: 'teacher',
+          persona: 'A patient mentor who builds every idea from what the class already knows.',
+        },
+        { name: 'Sam', role: 'student', persona: 'Curious.' },
+        {
+          name: 'sam',
+          role: 'student',
+          persona: 'A diligent student who takes careful notes and rarely speaks unless sure.',
+        },
+      ],
+    });
+    expect(result.isError).toBe(true);
+    expect(result.details?.error).toBe('duplicate-name');
+    expect(result.details?.issues).toEqual([
+      { code: 'duplicate-name', agentIndex: 2 },
+      { code: 'persona-too-short', agentIndex: 1 },
+    ]);
+    expect(result.content[0].text).toContain('Agent 3 ("sam") has the same name as agent 2');
+    expect(result.content[0].text).toContain('Agent 2 ("Sam")\'s persona is 8 characters');
+    expect((await store.loadDocument('stage-test'))?.stage?.generatedAgentConfigs).toBeUndefined();
+  });
+
+  it('keeps students who read alike, and says so', async () => {
+    const store = makeStore(makeDoc());
+    const twin = 'A curious student who asks why as soon as something surprises him.';
+    const result = await runTool(store, 'set_roster', {
+      stageId: 'stage-test',
+      agents: [
+        {
+          name: 'Prof. Lin',
+          role: 'teacher',
+          persona: 'A patient mentor who builds every idea from what the class already knows.',
+        },
+        { name: 'Sam', role: 'student', persona: twin },
+        { name: 'Max', role: 'student', persona: twin.replace('him', 'them') },
+      ],
+    });
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain(
+      'Note: Agent 3 ("Max") reads almost like Agent 2 ("Sam")',
+    );
+  });
+
+  it('describes a persona as a real person, with the one shared guide', () => {
+    const tool = buildTools().find((candidate) => candidate.name === 'set_roster')!;
+    expect(tool.description).toContain(PERSONA_GUIDE);
+    expect(tool.description).not.toContain('2-3 concrete sentences');
   });
 
   it('refuses when no stage document exists', async () => {
@@ -209,8 +322,16 @@ describe('set_roster', () => {
     const result = await runTool(store, 'set_roster', {
       stageId: 'stage-missing',
       agents: [
-        { name: 'T', role: 'teacher', persona: 't' },
-        { name: 'S', role: 'student', persona: 's' },
+        {
+          name: 'T',
+          role: 'teacher',
+          persona: 'A patient mentor who builds every idea from what the class already knows.',
+        },
+        {
+          name: 'S',
+          role: 'student',
+          persona: 'A curious student who asks why as soon as something surprises him.',
+        },
       ],
     });
     expect(result.isError).toBe(true);
@@ -229,7 +350,11 @@ describe('set_roster', () => {
           persona: 'Explains supervised learning from first principles.',
           voice: 'qwen-tts::enda',
         },
-        { name: 'Leo', role: 'student', persona: 'Asks basic questions.' },
+        {
+          name: 'Leo',
+          role: 'student',
+          persona: 'A curious student who asks why as soon as something surprises him.',
+        },
       ],
     });
 
@@ -251,7 +376,11 @@ describe('set_roster', () => {
           persona: 'Explains supervised learning from first principles.',
           voice: 'doubao-tts::zh_female_vv_uranus_bigtts',
         },
-        { name: 'Leo', role: 'student', persona: 'Asks basic questions.' },
+        {
+          name: 'Leo',
+          role: 'student',
+          persona: 'A curious student who asks why as soon as something surprises him.',
+        },
       ],
     });
 
@@ -289,7 +418,11 @@ describe('set_roster', () => {
             persona: 'Explains supervised learning from first principles.',
             voice: 'qwen-tts::enda',
           },
-          { name: 'Leo', role: 'student', persona: 'Asks basic questions.' },
+          {
+            name: 'Leo',
+            role: 'student',
+            persona: 'A curious student who asks why as soon as something surprises him.',
+          },
         ],
       },
       { registeredVoices },
@@ -307,8 +440,16 @@ describe('set_roster', () => {
     const result = await runTool(store, 'set_roster', {
       stageId: 'stage-test',
       agents: [
-        { name: 'Prof. Lin', role: 'teacher', persona: 'Mentor.' },
-        { name: 'Sam', role: 'student', persona: 'Curious.' },
+        {
+          name: 'Prof. Lin',
+          role: 'teacher',
+          persona: 'A patient mentor who builds every idea from what the class already knows.',
+        },
+        {
+          name: 'Sam',
+          role: 'student',
+          persona: 'A curious student who asks why as soon as something surprises him.',
+        },
       ],
     });
 
@@ -327,10 +468,14 @@ describe('set_roster', () => {
         {
           name: 'Teacher',
           role: 'teacher',
-          persona: 'p',
+          persona: 'A patient mentor who builds every idea from what the class already knows.',
           voice: 'some-other-provider::enda',
         },
-        { name: 'Student', role: 'student', persona: 'p' },
+        {
+          name: 'Student',
+          role: 'student',
+          persona: 'A curious student who asks why as soon as something surprises him.',
+        },
       ],
     });
 
@@ -354,10 +499,14 @@ describe('set_roster', () => {
         {
           name: 'Teacher',
           role: 'teacher',
-          persona: 'p',
+          persona: 'A patient mentor who builds every idea from what the class already knows.',
           voice: 'qwen-tts::enda',
         },
-        { name: 'Student', role: 'student', persona: 'p' },
+        {
+          name: 'Student',
+          role: 'student',
+          persona: 'A curious student who asks why as soon as something surprises him.',
+        },
       ],
     });
 

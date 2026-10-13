@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { memo, useState, useMemo, useCallback, useContext, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { answerIncludesOption } from '@/lib/quiz/grading';
 import {
@@ -30,6 +30,7 @@ import {
   QuizRetryProgressedError,
   type QuizAttemptWriter,
 } from '@/lib/quiz/runtime';
+import { QuizReviewContext, quizReviewMisses } from '@/lib/quiz/review-moment';
 import {
   createQuizViewLifetime,
   isQuizRuntimeReady,
@@ -707,6 +708,14 @@ export function QuizView({ questions, sceneId, stageId }: QuizViewProps) {
     onError: (error) => log.warn('Failed to persist quiz runtime:', error),
   });
   const runtimeWriter = runtimeWriterRef.current;
+  // The classroom hears of a fresh grading with wrong answers: it offers a
+  // review moment (I11). Read through a ref, so the grading effect does not
+  // re-run when the provider's callback changes.
+  const onQuizReviewed = useContext(QuizReviewContext);
+  const onQuizReviewedRef = useRef(onQuizReviewed);
+  useEffect(() => {
+    onQuizReviewedRef.current = onQuizReviewed;
+  });
 
   useEffect(() => {
     return () => {
@@ -830,6 +839,9 @@ export function QuizView({ questions, sceneId, stageId }: QuizViewProps) {
       if (cancelled) return;
       setResults(ordered);
       setPhase('reviewing');
+      // Only this transition: a reviewed quiz reopened later offers nothing
+      const misses = quizReviewMisses(questions, ordered);
+      if (misses.length > 0) onQuizReviewedRef.current?.({ stageId, sceneId, misses });
     })();
 
     return () => {

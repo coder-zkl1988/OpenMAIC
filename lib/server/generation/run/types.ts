@@ -10,6 +10,7 @@
  */
 import type { AgentInfo } from '@openmaic/generation';
 
+import type { ClassAtmosphere } from '@/lib/orchestration/persona-guide';
 import type { AgentConfig } from '@/lib/orchestration/registry/types';
 import type { SceneOutline } from '@/lib/types/generation';
 import type { GeneratedAgentConfig } from '@/lib/types/stage';
@@ -64,8 +65,19 @@ export type GenerationRunAgents =
    * Generate course-specific agents (the agent-profiles step). When that
    * fails, the course is taught by `presetAgentIds`, the learner's selected
    * preset agents (as the browser falls back to its selection).
+   *
+   * `count` is the class size the learner chose, teacher included
+   * (`AUTO_AGENT_COUNT_MIN`..`AUTO_AGENT_COUNT_MAX`); without it the model
+   * decides. `atmosphere` is the kind of class the learner chose; it only
+   * describes the people the personas are written for, and is not stored
+   * with the course.
    */
-  | { mode: 'auto'; presetAgentIds?: string[] }
+  | {
+      mode: 'auto';
+      presetAgentIds?: string[];
+      count?: number;
+      atmosphere?: ClassAtmosphere;
+    }
   /**
    * These agents, by id: built-in ones or the owner's custom ones; none is the
    * default presets (what the learner's selection starts out as).
@@ -304,6 +316,12 @@ export const GENERATION_RUN_EVENT_TYPES = [
    * (ISO) unless held; a held run waits for `confirm-outline` (`wait`, null).
    */
   'outline_review',
+  /**
+   * `{ reason, agentIds }`: the generated agents gave way to the preset ones
+   * (`agentIds`). `reason` is the agent-profiles refusal (`unparseable`,
+   * `teacher-count`, `persona-too-short`, ...), `timeout` or `error`.
+   */
+  'agents_fallback',
   /** `{ agents }`: the agents the course teaches with. */
   'agents',
   /** `{ stageId }`: the course document exists (its first scene is ready). */

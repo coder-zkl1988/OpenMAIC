@@ -4,7 +4,13 @@ export type {
   GeneratedSlideData,
   GenerationResult,
   SceneGenerationContext,
+  ClassActivity,
+  ClassActivityKind,
+  ClassDiscussionMoment,
+  ClassMoment,
 } from './pipeline-types.js';
+export { classMomentOf, classMomentsFromScenes, summarizeClassMoments } from './class-moments.js';
+export type { ClassMomentScene, ClassMomentsSummary } from './class-moments.js';
 
 export {
   extractInteractiveElements,
@@ -30,6 +36,7 @@ export {
 } from './generation-retry.js';
 export type { GenerationRetryEvent, GenerationRetryOptions } from './generation-retry.js';
 export { parseActionsFromStructuredOutput } from './action-parser.js';
+export { normalizeLectureWhiteboard, repairLatexControlChars } from './lecture-whiteboard.js';
 export { postProcessInteractiveHtml } from './interactive-post-processor.js';
 export { generatePBLV2ProjectSingleCall } from './pbl/planner-single-call.js';
 export type { PlannerSingleCallFn } from './pbl/planner-single-call.js';
@@ -93,13 +100,16 @@ export type { JsonParsingOptions } from './json-repair.js';
 export { noopGenerationLogger } from './logger.js';
 export type { GenerationLogger } from './logger.js';
 export {
+  buildClassMoments,
   buildCourseContext,
+  buildEarlierKeyPoints,
   buildLanguageText,
   buildVisionUserContent,
   formatAgentsForPrompt,
   formatImageDescription,
   formatImagePlaceholder,
   formatTeacherPersonaForPrompt,
+  formatTeacherVoiceForPrompt,
 } from './prompt-formatters.js';
 export type {
   ImageMapping,

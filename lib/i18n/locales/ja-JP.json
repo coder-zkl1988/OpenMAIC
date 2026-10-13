@@ -285,12 +285,22 @@
       "pageLabel": "ページ {{n}}",
       "currentPage": "現在",
       "jumpToLine": "Jump to this line",
-      "jumpUnavailable": "Jump unavailable for this line"
+      "jumpUnavailable": "Jump unavailable for this line",
+      "discussNow": "今話してみる",
+      "discussNowBusy": "いまの会話を終えてから話せます",
+      "momentOutcome": {
+        "joined": "参加した",
+        "skipped": "スキップした",
+        "autoSkipped": "見逃した",
+        "notShown": "このクラスにいない"
+      }
     },
     "badge": {
       "qa": "Q&A",
       "discussion": "議論",
-      "lecture": "講義"
+      "lecture": "講義",
+      "aside": "アシスタントQ&A",
+      "asideClassmate": "ひそひそ話"
     }
   },
   "actions": {
@@ -336,7 +346,22 @@
     "join": "参加する",
     "skip": "スキップ",
     "offerLabel": "{{name}} がディスカッションを始めようとしています",
-    "autoSkipHint": "{{seconds}} 秒後に自動的にスキップします"
+    "autoSkipHint": "{{seconds}} 秒後に自動的にスキップします",
+    "countdownPaused": "カウントダウンは止まっています。準備ができたら選んでください",
+    "question": "質問",
+    "joinTeacher": "一緒に考える",
+    "teacherOfferLabel": "{{name}}が質問しています",
+    "review": "振り返り",
+    "joinReview": "一緒に振り返る",
+    "reviewOfferLabel": "小テストの振り返り",
+    "answerFirst": "答えてみる",
+    "listenFirst": "まずみんなの意見を聞く"
+  },
+  "quizReview": {
+    "topic": "間違えた問題を一緒に見てみよう：{{questions}}",
+    "question": "第{{n}}問「{{text}}」",
+    "separator": "、",
+    "more": "、ほか{{count}}問"
   },
   "voice": {
     "startListening": "音声入力",
@@ -381,18 +406,25 @@
     "composer": {
       "raiseHand": "挙手",
       "raiseHandHint": "挙手：先生がこの文を話し終えたらあなたを指名します",
+      "raiseHandHintAssistant": "挙手：アシスタントが交流パネルで回答し、先生は講義を続けます",
       "raiseHandInLiveSession": "Q&A 中はそのまま発言できます",
       "lowerHand": "手を下ろす",
       "lowerHandHint": "手を下ろして質問を取り消す",
       "cuePlaceholder": "質問を話すか入力してください",
+      "answerPlaceholder": "話すか入力して答えましょう",
       "cueStatus": "あなたの番です · 授業は一時停止中",
+      "cueAsked": "{{name}}があなたの答えを待っています",
+      "cueHandBack": "あなたの番です · 思ったことを自由にどうぞ",
       "send": "送信",
       "cancelRecording": "録音をキャンセル",
       "handRaised": "挙手中 · この文が終わったら指名されます",
       "handRaisedStep": "挙手中 · このステップが終わったら指名されます",
+      "handRaisedAssistant": "挙手中 · アシスタントが交流パネルで回答します",
       "raisedPlaceholder": "先に質問を書いておけます...",
       "followUpPlaceholder": "続けて質問する...",
       "referencePlaceholder": "この{{type}}について、何を聞きたいですか？",
+      "mentionMenu": "誰に聞く？",
+      "mentionPlaceholder": "質問を入力、または @ で相手を指名",
       "handLowered": "手を下ろしました"
     },
     "handRaise": {
@@ -400,15 +432,28 @@
       "aheadOfDiscussion": "手を挙げました。{{name}} のディスカッションはあなたの後です",
       "calledBy": "{{name}} があなたを指名しました",
       "pendingQuestion": "待機中 · この文が終わったら回答します",
-      "pendingQuestionStep": "待機中 · このステップが終わったら回答します"
+      "pendingQuestionStep": "待機中 · このステップが終わったら回答します",
+      "assistantPrompt": "質問をどうぞ。お手伝いします",
+      "assistantAnswering": "アシスタントが回答中…",
+      "agentAnswering": "{{name}}が答えています…",
+      "askedBy": "{{name}}からの質問：{{prompt}}",
+      "handBack": "{{name}}があなたに話を振りました",
+      "cueReplies": {
+        "think": "ちょっと考えさせて…",
+        "unsure": "よくわかりません",
+        "hint": "ヒントをください"
+      }
     },
     "participants": {
       "label": "参加者",
       "online": "{{count}} 人がオンライン",
       "speaking": "説明中",
+      "answering": "回答中",
       "wantsToSpeak": "発言したい",
       "handRaised": "挙手中",
-      "more": "ほか {{count}} 人の参加者"
+      "more": "ほか {{count}} 人の参加者",
+      "cardLabel": "{{name}}、{{status}}",
+      "askThem": "{{name}}に聞く"
     },
     "generating": "生成中...",
     "paused": "一時停止中",
@@ -422,7 +467,12 @@
     "exitFullscreen": "全画面表示を終了",
     "editCourse": "コースを編集",
     "doneEditing": "編集を完了",
-    "proModeDisabledHint": "このページでは編集できません。コースのスライドを開くと Pro モードで編集できます。"
+    "proModeDisabledHint": "このページでは編集できません。コースのスライドを開くと Pro モードで編集できます。",
+    "ownClassmates": {
+      "title": "このコースには専用のクラスメイトがいます",
+      "description": "ホームで選んだプリセットのクラスメイトは、新しいコースや専用のクラスメイトがいないコースで使われます。",
+      "alwaysPreset": "常にプリセットのクラスメイトを使う"
+    }
   },
   "edit": {
     "proMode": "プロモード",
@@ -815,7 +865,7 @@
       "count": "{{count}}人",
       "editHint": "メンバーをクリックして編集",
       "personaLabel": "ペルソナ",
-      "personaPlaceholder": "役割の性格、指導スタイル、タスクを説明…",
+      "personaPlaceholder": "この人について書いてください：性格、話し方、すでに分かっていることとまだ分からないこと、どんなときに発言するか。",
       "noPersona": "ペルソナ未設定",
       "unnamed": "無題",
       "teacherBadge": "主担当",
@@ -824,7 +874,29 @@
       "removeFromClass": "クラスから削除",
       "aiClassmates": "AIクラスメイト · {{count}}",
       "addRole": "役割を追加",
-      "shortTitle": "編成"
+      "upgrade": {
+        "action": "実在の人のように書き直す",
+        "actionHint": "各ペルソナを、性格・話し方・知っていることを備えた実在しそうな人として書き直します。適用前にすべての変更をプレビューできます。",
+        "loading": "ペルソナを書き直しています…",
+        "previewTitle": "新しいペルソナのプレビュー",
+        "previewHint": "変わるのはペルソナだけで、名前・アバター・声はそのままです。適用後に元に戻せます。",
+        "now": "現在",
+        "rewritten": "書き直し後",
+        "apply": "適用",
+        "failed": "ペルソナを書き直せませんでした。もう一度お試しください。",
+        "invalid": "この名簿は書き直せません。全員に名前と役割があるか確認してください。"
+      },
+      "shortTitle": "編成",
+      "impact": {
+        "title": "コースの台本でのこのメンバーへの参照",
+        "moments": "{{name}}が始める授業の場面：{{count}}",
+        "mentions": "{{name}}に触れているセリフ：{{count}}。生成済みのナレーションと音声は変わりません。",
+        "handToTeacher": "先生が始めるようにする",
+        "dropMoments": "これらの場面も削除",
+        "removeAnyway": "それでも外す",
+        "renameMentions": "まだ「{{name}}」と呼んでいるセリフ：{{count}}。生成済みのナレーションと音声は旧名のままです。",
+        "renameAnyway": "それでも名前を変更"
+      }
     },
     "elementRef": {
       "remove": "移除引用 {{label}}",
@@ -1388,6 +1460,14 @@
     "agentModeAutoDesc": "AIが適切な役割を自動的に生成します",
     "autoAgentCount": "エージェント数",
     "autoAgentCountDesc": "自動生成するエージェント数（教師を含む）",
+    "autoAgentCountAuto": "AIにおまかせ",
+    "classAtmosphere": "クラスの雰囲気",
+    "classAtmosphereDesc": "どんなクラスメイトを生成するか",
+    "classAtmosphereOptions": {
+      "focused": "静かで集中",
+      "conversational": "活発なやりとり",
+      "lively": "にぎやか"
+    },
     "atLeastOneAgent": "少なくとも1つのエージェントを選択してください",
     "singleAgentMode": "シングルエージェントモード",
     "directAnswer": "直接回答",
@@ -1414,12 +1494,12 @@
       "student": "生徒"
     },
     "agentDescriptions": {
-      "default-1": "明確で体系的な説明を行うメイン教師",
-      "default-2": "学習をサポートし、重要なポイントを明確にします",
-      "default-3": "ユーモアと活気を教室にもたらします",
-      "default-4": "いつも好奇心いっぱいで、理由や仕組みを聞きたがります",
-      "default-5": "授業のノートを丁寧に記録・整理します",
-      "default-6": "じっくり考え、物事の本質を探求します"
+      "default-1": "落ち着いた温かい先生。一歩ずつ説明し、よくみんなに予想させる",
+      "default-2": "頼れるアシスタント。つまずいたときにヒントをくれる",
+      "default-3": "明るいお調子者。最初の思いつきをすぐ口にする",
+      "default-4": "好奇心旺盛で、いつも「なぜ？」と聞く",
+      "default-5": "几帳面なノート係。一つひとつ確かめる",
+      "default-6": "物静かな思索家。「でも、もし…なら？」とよく聞く"
     },
     "close": "閉じる",
     "providerNames": {
@@ -1459,6 +1539,13 @@
     "keyboardShortcuts": "ショートカット",
     "generalSettings": "一般",
     "systemSettings": "システム",
+    "classroomSection": "授業",
+    "assistantAnswersDuringLecture": "講義中の質問はアシスタントが回答",
+    "assistantAnswersDuringLectureDesc": "オンにすると、講義中の質問で先生を中断せず、アシスタントが交流パネルで回答します",
+    "teacherMayCallOnLearner": "先生に指名されてもよい",
+    "teacherMayCallOnLearnerDesc": "オンにすると、先生がクラスメイトと同じようにあなたを名指しで質問することがあります。オフのときは、先生はクラス全体に問いかけ、あなただけを指名することはありません。",
+    "presetAgentsInGeneratedCourses": "常にプリセットのクラスメイトを使う",
+    "presetAgentsInGeneratedCoursesDesc": "オンにすると、専用のクラスメイトがいるコースでも、ホームで選んだクラスメイトを使います。オフの場合、そのコースは専用のクラスメイトが担当します。",
     "importFromClipboard": "クリップボードからインポート",
     "baseUrlRegion": {
       "china": "中国",

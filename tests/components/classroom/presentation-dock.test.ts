@@ -72,6 +72,7 @@ describe('PresentationDock (fullscreen: overlay, dock, composer card, discussion
       toggleVoice: vi.fn(),
       dismiss: vi.fn(),
       toggleHand: vi.fn(),
+      mention: vi.fn(),
     };
     props = {
       dockRef,
@@ -160,6 +161,20 @@ describe('PresentationDock (fullscreen: overlay, dock, composer card, discussion
     expect(lastReported()).toBe(false);
   });
 
+  it("keeps the director's question in the card while the floor is the learner's", async () => {
+    const question = createElement('p', null, 'Mia asks you: why?');
+    await render({ cueQuestion: question });
+    // Not without the cue
+    expect(container.querySelector('[data-testid="presentation-cue-question"]')).toBeNull();
+
+    await render({ cueQuestion: question, isCueUser: true });
+    const row = container.querySelector('[data-testid="presentation-cue-question"]');
+    expect(row?.textContent).toBe('Mia asks you: why?');
+    // Above the composer, inside the shown card
+    expect(card().contains(row)).toBe(true);
+    expect(row?.nextElementSibling?.tagName).toBe('TEXTAREA');
+  });
+
   it('stops reporting interaction when it unmounts mid-composition', async () => {
     await render();
     act(() => dockRef.current!.openText());
@@ -236,6 +251,22 @@ describe('PresentationDock (fullscreen: overlay, dock, composer card, discussion
     expect(props.onDiscussionStart).toHaveBeenCalledExactlyOnceWith(request);
     act(() => (mocks.proactiveProps?.onSkip as () => void)());
     expect(props.onDiscussionSkip).toHaveBeenCalledOnce();
+    expect(mocks.proactiveProps?.openedByTeacher).toBe(false);
+  });
+
+  it("words the card as the teacher's question when the teacher opened the moment", async () => {
+    const request = {
+      type: 'discussion' as const,
+      id: 'trigger-2',
+      topic: 'Mia, what do you predict?',
+      agentId: 'teacher-1',
+    };
+    await render({
+      engineMode: 'paused',
+      discussionRequest: request,
+      discussionAgent: { name: 'Ms. Lin', role: 'teacher' },
+    });
+    expect(mocks.proactiveProps?.openedByTeacher).toBe(true);
   });
 
   it('hides the dock with the controls when nothing waits on the learner', async () => {

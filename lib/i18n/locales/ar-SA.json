@@ -285,12 +285,22 @@
       "pageLabel": "الصفحة {{n}}",
       "currentPage": "الحالية",
       "jumpToLine": "Jump to this line",
-      "jumpUnavailable": "Jump unavailable for this line"
+      "jumpUnavailable": "Jump unavailable for this line",
+      "discussNow": "ناقِشه الآن",
+      "discussNowBusy": "أنهِ المحادثة الجارية أولًا",
+      "momentOutcome": {
+        "joined": "انضممت",
+        "skipped": "تم التخطي",
+        "autoSkipped": "فاتك",
+        "notShown": "ليس في هذا الصف"
+      }
     },
     "badge": {
       "qa": "أسئلة",
       "discussion": "نقاش",
-      "lecture": "محاضرة"
+      "lecture": "محاضرة",
+      "aside": "أسئلة المساعد",
+      "asideClassmate": "حديث جانبي"
     }
   },
   "actions": {
@@ -336,7 +346,22 @@
     "join": "انضمام",
     "skip": "تخطي",
     "offerLabel": "{{name}} يريد بدء نقاش",
-    "autoSkipHint": "سيتم التخطي تلقائيًا بعد {{seconds}} ثوانٍ"
+    "autoSkipHint": "سيتم التخطي تلقائيًا بعد {{seconds}} ثوانٍ",
+    "countdownPaused": "توقف العد التنازلي: اختر عندما تكون مستعدًا",
+    "question": "سؤال",
+    "joinTeacher": "فكّر معنا",
+    "teacherOfferLabel": "{{name}} يطرح سؤالًا",
+    "review": "مراجعة",
+    "joinReview": "لنراجعها معًا",
+    "reviewOfferLabel": "مراجعة الاختبار",
+    "answerFirst": "سأجيب أنا",
+    "listenFirst": "أستمع إلى الصف أولًا"
+  },
+  "quizReview": {
+    "topic": "لنراجع الأسئلة التي أخطأت فيها: {{questions}}",
+    "question": "السؤال {{n}} «{{text}}»",
+    "separator": "؛ ",
+    "more": " و{{count}} أخرى"
   },
   "voice": {
     "startListening": "إدخال صوتي",
@@ -381,18 +406,25 @@
     "composer": {
       "raiseHand": "رفع اليد",
       "raiseHandHint": "ارفع يدك: سيمنحك المعلم الكلمة بعد انتهاء هذه الجملة",
+      "raiseHandHintAssistant": "ارفع يدك: يجيب المساعد في لوحة التفاعل بينما يواصل المعلم الشرح",
       "raiseHandInLiveSession": "يمكنك التحدث مباشرة أثناء الأسئلة",
       "lowerHand": "إنزال",
       "lowerHandHint": "أنزل يدك واسحب السؤال",
       "cuePlaceholder": "قل سؤالك أو اكتبه",
+      "answerPlaceholder": "قل إجابتك أو اكتبها",
       "cueStatus": "حان دورك للتحدث · الدرس متوقف مؤقتًا",
+      "cueAsked": "{{name}} ينتظر إجابتك",
+      "cueHandBack": "دورك · قل ما يخطر ببالك",
       "send": "إرسال",
       "cancelRecording": "إلغاء التسجيل",
       "handRaised": "يدك مرفوعة · سيأتي دورك بعد هذه الجملة",
       "handRaisedStep": "يدك مرفوعة · سيأتي دورك بعد هذه الخطوة",
+      "handRaisedAssistant": "يدك مرفوعة · سيجيبك المساعد في لوحة التفاعل",
       "raisedPlaceholder": "يمكنك كتابة سؤالك مسبقًا...",
       "followUpPlaceholder": "اطرح سؤال متابعة...",
       "referencePlaceholder": "{{type}}: ماذا تريد أن تسأل عنه؟",
+      "mentionMenu": "من تسأل",
+      "mentionPlaceholder": "اكتب سؤالك، أو استخدم @ لتسأل شخصًا بعينه",
       "handLowered": "تم إنزال اليد"
     },
     "handRaise": {
@@ -400,15 +432,28 @@
       "aheadOfDiscussion": "رفعت يدك، ونقاش {{name}} يأتي بعدك",
       "calledBy": "{{name}} يطلب منك التحدث",
       "pendingQuestion": "في الانتظار · سيُجاب بعد هذه الجملة",
-      "pendingQuestionStep": "في الانتظار · سيُجاب بعد هذه الخطوة"
+      "pendingQuestionStep": "في الانتظار · سيُجاب بعد هذه الخطوة",
+      "assistantPrompt": "اطرح سؤالك وسأساعدك.",
+      "assistantAnswering": "المساعد يجيب…",
+      "agentAnswering": "{{name}} يجيب…",
+      "askedBy": "يسألك {{name}}: {{prompt}}",
+      "handBack": "{{name}} يترك لك الكلمة",
+      "cueReplies": {
+        "think": "دعني أفكر…",
+        "unsure": "لست متأكدًا",
+        "hint": "أعطني تلميحًا"
+      }
     },
     "participants": {
       "label": "المشاركون",
       "online": "{{count}} متصل الآن",
       "speaking": "يتحدث",
+      "answering": "يجيب",
       "wantsToSpeak": "يريد التحدث",
       "handRaised": "رافع يده",
-      "more": "{{count}} مشاركين آخرين"
+      "more": "{{count}} مشاركين آخرين",
+      "cardLabel": "{{name}}، {{status}}",
+      "askThem": "اسأل {{name}}"
     },
     "generating": "جارٍ التوليد...",
     "paused": "متوقف مؤقتًا",
@@ -422,7 +467,12 @@
     "exitFullscreen": "الخروج من ملء الشاشة",
     "editCourse": "تحرير الدورة",
     "doneEditing": "إنهاء التحرير",
-    "proModeDisabledHint": "التحرير غير متاح في هذه الصفحة — افتح شريحة من الدورة للتحرير باستخدام وضع Pro."
+    "proModeDisabledHint": "التحرير غير متاح في هذه الصفحة — افتح شريحة من الدورة للتحرير باستخدام وضع Pro.",
+    "ownClassmates": {
+      "title": "لهذه الدورة زملاؤها الخاصون",
+      "description": "يُحتفظ بزملائك المحددين مسبقًا للدورات الجديدة وللدورات التي ليس لها زملاء خاصون.",
+      "alwaysPreset": "استخدم زملائي المحددين مسبقًا دائمًا"
+    }
   },
   "edit": {
     "proMode": "احترافي",
@@ -815,7 +865,7 @@
       "count": "{{count}} أعضاء",
       "editHint": "انقر على عضو للتعديل",
       "personaLabel": "الشخصية",
-      "personaPlaceholder": "صف شخصية الدور وأسلوب التدريس والمهام...",
+      "personaPlaceholder": "صف هذا الشخص: طبعه، وطريقة كلامه، وما يعرفه وما لا يعرفه بعد، ومتى يتكلم.",
       "noPersona": "لا توجد شخصية بعد",
       "unnamed": "بلا عنوان",
       "teacherBadge": "القائد",
@@ -824,7 +874,29 @@
       "removeFromClass": "إزالة من الفصل",
       "aiClassmates": "زملاء AI · {{count}}",
       "addRole": "إضافة دور",
-      "shortTitle": "التشكيلة"
+      "upgrade": {
+        "action": "أعد كتابتهم كأشخاص حقيقيين",
+        "actionHint": "يعيد كتابة كل شخصية كإنسان مقنع: طبعه وطريقة كلامه وما يعرفه. ستعاين كل تغيير قبل تطبيقه.",
+        "loading": "جارٍ إعادة كتابة الشخصيات…",
+        "previewTitle": "معاينة الشخصيات الجديدة",
+        "previewHint": "تتغير الشخصيات فقط؛ تبقى الأسماء والصور والأصوات كما هي. يمكنك التراجع بعد التطبيق.",
+        "now": "الآن",
+        "rewritten": "بعد إعادة الكتابة",
+        "apply": "تطبيق",
+        "failed": "تعذّرت إعادة كتابة الشخصيات. حاول مرة أخرى.",
+        "invalid": "لا يمكن إعادة كتابة هذه القائمة. تحقق من أن لكل شخص اسمًا ودورًا."
+      },
+      "shortTitle": "التشكيلة",
+      "impact": {
+        "title": "أين يستخدم نص الدورة هذا العضو",
+        "moments": "لحظات الصف التي يبدأها {{name}}: {{count}}",
+        "mentions": "الأسطر التي تذكر {{name}}: {{count}}. لن يتغير السرد والصوت المُنشآن مسبقًا.",
+        "handToTeacher": "دع المعلم يبدأها",
+        "dropMoments": "احذف هذه اللحظات أيضًا",
+        "removeAnyway": "أزِل على أي حال",
+        "renameMentions": "الأسطر التي ما زالت تقول «{{name}}»: {{count}}. يحتفظ السرد والصوت المُنشآن مسبقًا بالاسم القديم.",
+        "renameAnyway": "أعد التسمية على أي حال"
+      }
     },
     "elementRef": {
       "remove": "移除引用 {{label}}",
@@ -1388,6 +1460,14 @@
     "agentModeAutoDesc": "سيقوم الذكاء الاصطناعي بتوليد أدوار مناسبة تلقائيًا",
     "autoAgentCount": "عدد الوكلاء",
     "autoAgentCountDesc": "عدد الوكلاء للتوليد التلقائي (بما في ذلك المعلم)",
+    "autoAgentCountAuto": "يقرر الذكاء الاصطناعي",
+    "classAtmosphere": "أجواء الصف",
+    "classAtmosphereDesc": "أي نوع من الزملاء يُنشأ",
+    "classAtmosphereOptions": {
+      "focused": "هادئ ومركّز",
+      "conversational": "تبادل الأفكار",
+      "lively": "حيوي"
+    },
     "atLeastOneAgent": "يرجى اختيار وكيل واحد على الأقل",
     "singleAgentMode": "وضع الوكيل الفردي",
     "directAnswer": "إجابة مباشرة",
@@ -1402,11 +1482,11 @@
     "required": "مطلوب",
     "agentNames": {
       "default-1": "المعلم الذكي",
-      "default-2": "المساعد الذكي",
-      "default-3": "مُحيي الفصل",
+      "default-2": "المساعدة الذكية",
+      "default-3": "مُحيية الفصل",
       "default-4": "العقل الفضولي",
       "default-5": "مُدوّن الملاحظات",
-      "default-6": "المفكر العميق"
+      "default-6": "المفكرة العميقة"
     },
     "agentRoles": {
       "teacher": "معلم",
@@ -1414,12 +1494,12 @@
       "student": "طالب"
     },
     "agentDescriptions": {
-      "default-1": "المعلم الرئيسي بشروحات واضحة ومنظمة",
-      "default-2": "يدعم التعلم ويساعد في توضيح النقاط الرئيسية",
-      "default-3": "يضفي الفكاهة والحيوية على الفصل",
-      "default-4": "فضولي دائمًا، يحب السؤال عن الأسباب والكيفية",
-      "default-5": "يسجّل ملاحظات الدرس وينظمها بدقة",
-      "default-6": "يفكر بعمق ويستكشف جوهر المواضيع"
+      "default-1": "معلم هادئ ودود يشرح خطوة بخطوة ويدع الصف يخمّن أولًا",
+      "default-2": "مساعدة متعاونة تقدم لك تلميحًا عندما تتعثر",
+      "default-3": "مرحة كثيرة المزاح تقول أول فكرة تخطر لها",
+      "default-4": "طالب متحمس يسأل دائمًا لماذا",
+      "default-5": "مدوّن ملاحظات دقيق يتحقق من كل خطوة",
+      "default-6": "مفكرة هادئة تسأل «ولكن ماذا لو…؟»"
     },
     "close": "إغلاق",
     "providerNames": {
@@ -1459,6 +1539,13 @@
     "keyboardShortcuts": "اختصارات لوحة المفاتيح",
     "generalSettings": "عام",
     "systemSettings": "النظام",
+    "classroomSection": "الفصل",
+    "assistantAnswersDuringLecture": "المساعد يجيب عن الأسئلة أثناء الشرح",
+    "assistantAnswersDuringLectureDesc": "عند التفعيل، لا تقاطع الأسئلة المطروحة أثناء الشرح المعلم: يجيب عنها المساعد في لوحة التفاعل.",
+    "teacherMayCallOnLearner": "السماح للمعلم بمناداتي",
+    "teacherMayCallOnLearnerDesc": "عند التفعيل، قد يوجّه إليك المعلم سؤالًا باسمك كما يفعل مع زملائك. عند الإيقاف، يسأل المعلم الصف كله ولا يخصّك بالسؤال.",
+    "presetAgentsInGeneratedCourses": "استخدم زملائي المحددين مسبقًا دائمًا",
+    "presetAgentsInGeneratedCoursesDesc": "عند التفعيل، تستخدم الدورات التي لها زملاء خاصون أيضًا الزملاء الذين اخترتهم في الصفحة الرئيسية. عند الإيقاف، يُدرِّس هذه الدورات زملاؤها الخاصون.",
     "importFromClipboard": "استيراد من الحافظة",
     "baseUrlRegion": {
       "china": "الصين",

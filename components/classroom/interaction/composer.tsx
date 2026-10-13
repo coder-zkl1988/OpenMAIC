@@ -4,6 +4,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -25,6 +26,9 @@ import {
   type QueuedQuestionState,
 } from './use-queued-question-effects';
 import { ComposerStatusRows } from './composer-status-rows';
+import { addMention, type MentionCandidate } from '@/lib/chat/agent-mention';
+import { useAgentMention } from './use-agent-mention';
+import { AgentMentionMenu, mentionOptionId } from './agent-mention-menu';
 
 /** What the shell asks of the panel composer (shortcuts, the stream's "continue") */
 export interface ComposerHandle {
@@ -38,6 +42,11 @@ export interface ComposerHandle {
   dismiss: () => void;
   /** 举手 / 放下, as the 举手 slot does (H) */
   toggleHand: () => void;
+  /**
+   * Address the draft to someone ("ask them" on a classmate card, I23):
+   * "@Name " in front, unless already there, and focus the textarea
+   */
+  mention: (name: string) => void;
 }
 
 /**
@@ -52,6 +61,11 @@ export interface ComposerHand {
   readonly onRaise: () => boolean;
   /** False when no hand was up */
   readonly onLower: () => boolean;
+  /**
+   * Raised to the teaching assistant: the lecture keeps playing and the
+   * assistant answers in the chat (the row says so; no line to wait for)
+   */
+  readonly assistant?: boolean;
 }
 
 /** The composer reference chip: 互动白板 · 公式 · summary */
@@ -70,6 +84,8 @@ export interface ComposerProps {
   readonly onMessageSend?: (message: string) => MessageSendResult;
   /** Which input became active: voice pauses narration (the mic would record it); text does not */
   readonly onInputActivate?: (kind: 'text' | 'voice') => void;
+  /** Voice input is over (sent, cancelled, nothing heard, failed, or back into the draft) */
+  readonly onVoiceEnd?: () => void;
   readonly onUserInputActivity?: (kind: InputActivityKind) => void;
   readonly elementReferencePill?: ComposerReferenceChip;
   readonly onClearElementReference?: () => void;
@@ -84,10 +100,23 @@ export interface ComposerProps {
   readonly getSpeechProgress?: () => number | null;
   /** The director handed the floor to the learner */
   readonly isCueUser?: boolean;
+  /**
+   * The director's cue in its own words (its question to the learner, or a
+   * neutral hand-back), shown and announced instead of 轮到你发言了 · 课堂已暂停,
+   * which stays for a called hand
+   */
+  readonly cueStatusText?: string;
+  /** The director's cue asks the learner a question: the box invites an answer */
+  readonly cueAsksLearner?: boolean;
   /** A Q&A or discussion is open: the learner speaks without raising a hand */
   readonly isLiveSession?: boolean;
   /** The open session is the learner's Q&A: the box invites a follow-up */
   readonly isFollowUp?: boolean;
+  /**
+   * Questions go to the teaching assistant while the teacher keeps lecturing:
+   * 举手 says the assistant answers in the chat instead of after this line
+   */
+  readonly assistantAnswers?: boolean;
   /**
    * Composing — recording, or a focused box with a draft: the shell holds
    * auto-advance and treats Escape as closing the composer
@@ -110,8 +139,16 @@ export interface ComposerProps {
    * (TabletPortrait.dc.html), 48px on `phone` (ClassroomPhone.dc.html)
    */
   readonly layout?: 'panel' | 'stacked' | 'phone';
+  /**
+   * The people the learner may address with "@" (I23): typing "@" offers
+   * them, and a pick writes "@Name " into the draft. None: no menu.
+   */
+  readonly mentionCandidates?: readonly MentionCandidate[];
   readonly className?: string;
 }
+
+/** No @ menu: a stable empty list */
+const NO_CANDIDATES: readonly MentionCandidate[] = [];
 
 // The textarea grows from three lines (72px; fewer on the stacked layouts) and
 // scrolls past ~seven
@@ -165,6 +202,7 @@ export function Composer({
   canSendMessage,
   onMessageSend,
   onInputActivate,
+  onVoiceEnd,
   onUserInputActivity,
   elementReferencePill,
   onClearElementReference,
@@ -173,13 +211,17 @@ export function Composer({
   hand,
   getSpeechProgress,
   isCueUser,
+  cueStatusText,
+  cueAsksLearner,
   isLiveSession,
   isFollowUp,
+  assistantAnswers,
   onInteractionChange,
   onUserMessage,
   onSent,
   density = 'default',
   layout = 'panel',
+  mentionCandidates,
   className,
 }: ComposerProps) {
   const { t } = useI18n();
@@ -212,6 +254,7 @@ export function Composer({
     onUserMessage,
     onSent,
     onInputActivate,
+    onVoiceEnd,
     onUserInputActivity,
     onClearElementReference,
     onTextInputOpened: () => {
@@ -220,6 +263,13 @@ export function Composer({
     hand: hand ? { state: hand.state, onRaise: hand.onRaise, onLower: hand.onLower } : undefined,
   });
   const { voice, isSendCooldown } = controller;
+  const mentionMenuId = useId();
+  const mention = useAgentMention({
+    candidates: mentionCandidates ?? NO_CANDIDATES,
+    draft: controller.draft,
+    setDraft: controller.setDraft,
+    textareaRef,
+  });
 
   /** Focus as the user would (T): onFocus reports text activation */
   const focusAsUser = useCallback(() => {
@@ -270,7 +320,9 @@ export function Composer({
     focusTargetRef,
     handState: hand?.state,
     handWaitsFor: hand?.waitsFor,
+    handToAssistant: hand?.assistant,
     isCueUser,
+    cueStatusText,
     getSpeechProgress,
   });
   // Called hand or the director's cue: the floor is the learner's
@@ -381,6 +433,15 @@ export function Composer({
         if (isQueued || controller.hand.state) lowerHand();
         else raiseHand();
       },
+      mention: (name: string) => {
+        controller.setDraft(addMention(controller.draft, name));
+        if (voice.isOpen || voice.isProcessing) {
+          pendingFocusRef.current = 'user';
+          voice.dismiss();
+          return;
+        }
+        focusAsUser();
+      },
     }),
     // No deps: the controller (and the 举手 slot's handlers) are new each render
   );
@@ -390,7 +451,11 @@ export function Composer({
   const handRaised = isQueued || isHandRaised || isHandCalled;
   const canSend = controller.draft.trim().length > 0 && !isSendCooldown;
   const placeholder = isCued
-    ? t('stage.composer.cuePlaceholder')
+    ? t(
+        cueAsksLearner && !isHandCalled
+          ? 'stage.composer.answerPlaceholder'
+          : 'stage.composer.cuePlaceholder',
+      )
     : isHandRaised
       ? t('stage.composer.raisedPlaceholder')
       : isFollowUp
@@ -398,7 +463,9 @@ export function Composer({
         : // A referenced element frames the question (WhiteboardStates.dc.html)
           elementReferencePill
           ? t('stage.composer.referencePlaceholder', { type: elementReferencePill.elementType })
-          : t('roundtable.inputPlaceholder');
+          : mentionCandidates?.length
+            ? t('stage.composer.mentionPlaceholder')
+            : t('roundtable.inputPlaceholder');
 
   return (
     <div
@@ -435,12 +502,13 @@ export function Composer({
           onCancelQueued={isQueued ? withdrawQuestion : lowerHand}
           queuedRowRef={queuedRowRef}
           isCueUser={isCued}
+          cueText={isHandCalled ? undefined : cueStatusText}
         />
         <div
           data-testid="composer-box"
           data-state={isCued ? 'cue' : isRecordingSurface ? 'voice' : 'default'}
           className={cn(
-            'flex flex-col gap-1.5 rounded-[18px] border bg-background pb-2 pl-3.5 transition-[border-color,box-shadow]',
+            'relative flex flex-col gap-1.5 rounded-[18px] border bg-background pb-2 pl-3.5 transition-[border-color,box-shadow]',
             touch ? 'pt-2 pr-2' : 'pt-2.5 pr-2.5',
             isCued
               ? 'border-warning ring-1 ring-warning'
@@ -449,6 +517,15 @@ export function Composer({
                 : 'border-line shadow-xs focus-within:border-line-strong',
           )}
         >
+          {mention.isOpen && !isRecordingSurface && (
+            <AgentMentionMenu
+              id={mentionMenuId}
+              candidates={mention.matches}
+              activeIndex={mention.activeIndex}
+              onPick={mention.pick}
+              onHighlight={mention.setHighlight}
+            />
+          )}
           {elementReferencePill && (
             <div
               data-testid="slide-element-reference-pill"
@@ -541,7 +618,19 @@ export function Composer({
               <textarea
                 ref={setTextarea}
                 {...controller.textareaProps}
+                onChange={(event) => {
+                  controller.textareaProps.onChange(event);
+                  mention.sync(event.target.value, event.target.selectionStart);
+                }}
+                onSelect={(event) =>
+                  mention.sync(event.currentTarget.value, event.currentTarget.selectionStart)
+                }
                 aria-label={t('roundtable.textInput')}
+                aria-autocomplete={mentionCandidates?.length ? 'list' : undefined}
+                aria-controls={mention.isOpen ? mentionMenuId : undefined}
+                aria-activedescendant={
+                  mention.isOpen ? mentionOptionId(mentionMenuId, mention.activeIndex) : undefined
+                }
                 placeholder={placeholder}
                 rows={3}
                 onFocus={() => {
@@ -552,8 +641,13 @@ export function Composer({
                   }
                   controller.activateText();
                 }}
-                onBlur={() => setIsFocused(false)}
+                onBlur={() => {
+                  setIsFocused(false);
+                  mention.close();
+                }}
                 onKeyDown={(event) => {
+                  // The open @ menu owns ↑ / ↓, Enter, Tab and Escape
+                  if (mention.onKeyDown(event)) return;
                   // Escape leaves the box even when the shell does not count it
                   // as composing (an empty draft); an IME's Escape stays its own
                   if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
@@ -596,7 +690,9 @@ export function Composer({
                     title={
                       isLiveSession
                         ? t('stage.composer.raiseHandInLiveSession')
-                        : t('stage.composer.raiseHandHint')
+                        : assistantAnswers
+                          ? t('stage.composer.raiseHandHintAssistant')
+                          : t('stage.composer.raiseHandHint')
                     }
                     onClick={raiseHand}
                     className={cn(

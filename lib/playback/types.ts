@@ -29,6 +29,17 @@ export interface TriggerEvent {
 }
 
 /**
+ * How a lecture's class moment (a scene's discussion action) ended for the
+ * learner, reported once per moment by onDiscussionOutcome:
+ * - 'joined': the learner joined it (confirmDiscussion)
+ * - 'skipped': the learner dismissed the card (skipDiscussion())
+ * - 'auto_skipped': the card's countdown ran out (skipDiscussion({ auto: true }))
+ * - 'not_shown': consumed without a card, because its opener is not in this
+ *   classroom (isAgentSelected returned false)
+ */
+export type DiscussionOutcome = 'joined' | 'skipped' | 'auto_skipped' | 'not_shown';
+
+/**
  * A text-less raised hand: 'raised' waits for the next action boundary,
  * 'called' means the engine stopped and handed the floor to the learner.
  */
@@ -64,6 +75,15 @@ export interface PlaybackEngineCallbacks {
   // Proactive discussion
   onProactiveShow?: (trigger: TriggerEvent) => void;
   onProactiveHide?: () => void;
+
+  /**
+   * A class moment was consumed, with how it ended for the learner. Fires once
+   * per moment and playthrough, right after it is consumed and before
+   * onProactiveHide / onDiscussionConfirmed. Never for a moment already
+   * consumed, one a raised hand deferred (it is offered again), or one whose
+   * card was cancelled by a pause or stop before it showed.
+   */
+  onDiscussionOutcome?: (trigger: TriggerEvent, outcome: DiscussionOutcome) => void;
 
   // Discussion lifecycle
   onDiscussionConfirmed?: (topic: string, prompt?: string, agentId?: string) => void;

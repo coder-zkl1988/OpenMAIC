@@ -15,7 +15,25 @@ import {
   type PiSessionBoundaryContext,
   type StatelessEvent,
   type ElementReference,
+  type SessionConfig,
+  type DiscussionMomentKind,
+  type LearnerStance,
+  type LectureDiscussionBadgeParams,
+  type LectureProgress,
+  type CastReason,
+  PI_REQUEST_BOUNDS,
+  isCastReason,
 } from '@/lib/types/chat';
+import type { Locale } from '@/lib/i18n/types';
+import { supportedLocales } from '@/lib/i18n/locales';
+import type { DiscussionOutcome } from '@/lib/playback/types';
+import {
+  buildClassPresence,
+  upsertLectureMomentBadge,
+  withRequestMessages,
+} from '@/lib/chat/class-presence';
+import { buildClassMemory, loadQuizMisses, type QuizMissRecord } from '@/lib/chat/class-memory';
+import { mentionRoster, resolveAddressedAgentIds } from '@/lib/chat/agent-mention';
 import type { DiscussionRequest } from '@/lib/types/roundtable';
 import type { Action } from '@/lib/types/action';
 import type { Stage } from '@/lib/types/stage';
@@ -25,6 +43,8 @@ import { useCanvasStore } from '@/lib/store/canvas';
 import { useSettingsStore } from '@/lib/store/settings';
 import { useUserProfileStore } from '@/lib/store/user-profile';
 import { useAgentRegistry } from '@/lib/orchestration/registry/store';
+import type { AgentConfig } from '@/lib/orchestration/registry/types';
+import { pickClassroomTeacher } from '@/lib/orchestration/registry/agent-selection';
 import { useI18n } from '@/lib/hooks/use-i18n';
 import { classroomChatUsable, loadModelCapabilities } from '@/lib/model-settings/capabilities';
 import { USER_AVATAR } from '@/lib/types/roundtable';
@@ -143,6 +163,20 @@ interface UseChatSessionsOptions {
   ) => void;
   /** When provided and returns true, StreamBuffer holds on the current text item after reveal. */
   shouldHoldAfterReveal?: () => { holding: boolean; segmentDone: number } | boolean;
+  /**
+   * The teaching assistant's aside (it answers in the chat while the lecture
+   * keeps playing) reports on its own channel: its live text and speaker, and
+   * its thinking. It never reaches the lecture-facing callbacks above (live
+   * speech, thinking, cue, active bubble, TTS, stop / error cleanup).
+   */
+  onAsideLiveSpeech?: (text: string | null, agentId?: string | null) => void;
+  onAsideThinking?: (state: { stage: string; agentId?: string } | null) => void;
+  /**
+   * Where the lecture stands on the current scene (the playback cursor), read
+   * as each Pi request leaves: the teacher and assistant hear what was just
+   * said there (I14). Null or absent when playback has not started there.
+   */
+  getLectureProgress?: () => LectureProgress | null | undefined;
 }
 
 export type ChatRequestTemplate = {
@@ -158,11 +192,120 @@ export type ChatRequestTemplate = {
   directorState?: DirectorState;
   piSessionBoundary?: PiSessionBoundaryContext;
   elementReference?: ElementReference;
+  /** Pi: the learner's interface language (built-in agents go by the names shown) */
+  uiLocale?: Locale;
 };
 
 export interface ChatMessageSendOptions {
   elementReference?: ElementReference;
   onResponseAccepted?: (response: Response) => void;
+}
+
+/** A question for the teaching assistant's aside */
+export interface AsideMessageSendOptions extends ChatMessageSendOptions {
+  /** The assistant that answers (the only agent in the request) */
+  agentId: string;
+}
+
+/** The aside's request limits: the assistant alone, one turn, text only */
+export const ASIDE_PI_MAX_AGENT_TURNS = 1;
+
+/**
+ * A teaching-assistant aside: the assistant answered in the chat while the
+ * teacher kept lecturing. Still a 'qa' session, marked in its config.
+ */
+export function isAsideSession(session: Pick<ChatSession, 'config'>): boolean {
+  return session.config?.aside === true;
+}
+
+/**
+ * An open Q&A / discussion that is not an aside: the session the lecture-facing
+ * controls (stop, pause / resume, soft close) act on.
+ */
+export function isOpenMainLiveSession(
+  session: Pick<ChatSession, 'type' | 'status' | 'config'>,
+): boolean {
+  return isOpenLiveSession(session) && !isAsideSession(session);
+}
+
+/** The assistant as the server should run it in an aside: no classroom actions at all */
+export function toTextOnlyAgentConfig(
+  agent: AgentConfig | undefined,
+): Record<string, unknown> | undefined {
+  if (!agent) return undefined;
+  const { createdAt: _c, updatedAt: _u, isDefault: _d, ...rest } = agent;
+  return { ...rest, allowedActions: [] };
+}
+
+/**
+ * The aside's request: only the assistant (`agentIds: [assistant]`, its config
+ * sent with no actions so neither runtime can touch the stage), one agent
+ * turn, no whiteboard tools, and `asideToLecture` so the director has the
+ * assistant answer and cue the learner instead of closing.
+ */
+export function buildAsideRequestTemplate({
+  messages,
+  agentId,
+  agent,
+  userProfile,
+  directorState,
+  elementReference,
+  addressedAgentIds,
+}: {
+  messages: UIMessage<ChatMessageMetadata>[];
+  agentId: string;
+  agent?: AgentConfig;
+  userProfile?: { nickname?: string; bio?: string };
+  directorState?: DirectorState;
+  elementReference?: ElementReference;
+  /** The latest message named the assistant (@): it answers as the one addressed */
+  addressedAgentIds?: string[];
+}): ChatRequestTemplate {
+  const agentConfig = toTextOnlyAgentConfig(agent);
+  return {
+    messages,
+    config: {
+      agentIds: [agentId],
+      sessionType: 'qa',
+      ...(agentConfig ? { agentConfigs: [agentConfig] } : {}),
+      piMaxAgentTurns: ASIDE_PI_MAX_AGENT_TURNS,
+      piEnableWhiteboardTools: false,
+      asideToLecture: true,
+      ...(addressedAgentIds?.length ? { addressedAgentIds } : {}),
+    },
+    userProfile,
+    directorState,
+    ...(elementReference ? { elementReference } : {}),
+  };
+}
+
+/** A streamed answer cut short: its last text gets "..." and the interrupted mark */
+export function markLastAssistantInterrupted(
+  messages: UIMessage<ChatMessageMetadata>[],
+): UIMessage<ChatMessageMetadata>[] {
+  const next = [...messages];
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i].role !== 'assistant') continue;
+    const parts = [...next[i].parts];
+    let appended = false;
+    for (let j = parts.length - 1; j >= 0; j--) {
+      if (parts[j].type === 'text') {
+        const textPart = parts[j] as { type: 'text'; text: string };
+        parts[j] = {
+          type: 'text',
+          text: (textPart.text || '') + '...',
+        } as UIMessage<ChatMessageMetadata>['parts'][number];
+        appended = true;
+        break;
+      }
+    }
+    if (!appended) {
+      parts.push({ type: 'text', text: '...' } as UIMessage<ChatMessageMetadata>['parts'][number]);
+    }
+    next[i] = { ...next[i], parts, metadata: { ...next[i].metadata, interrupted: true } };
+    return next;
+  }
+  return messages;
 }
 
 /**
@@ -214,8 +357,16 @@ export function shouldAwaitPresentationAction(actionName: string): boolean {
 
 type LectureVisualAction = Extract<Action, { type: 'spotlight' | 'laser' | 'discussion' }>;
 
-/** Persist params for lecture action badges. Omit optional members JSON would drop as undefined. */
-export function lectureActionPersistParams(action: LectureVisualAction): Record<string, unknown> {
+/**
+ * Persist params for lecture action badges. Omit optional members JSON would
+ * drop as undefined. A discussion badge is a LectureDiscussionBadgeParams:
+ * the moment's id, and — once known — the opener actually used and how the
+ * moment ended (`moment`).
+ */
+export function lectureActionPersistParams(
+  action: LectureVisualAction,
+  moment: { agentId?: string; outcome?: DiscussionOutcome } = {},
+): Record<string, unknown> {
   if (action.type === 'spotlight') {
     return {
       elementId: action.elementId,
@@ -225,10 +376,254 @@ export function lectureActionPersistParams(action: LectureVisualAction): Record<
   if (action.type === 'laser') {
     return { elementId: action.elementId };
   }
+  return { ...lectureMomentBadgeParams(action, moment) };
+}
+
+/** A lecture moment's badge: the moment, its opener and (once known) its outcome */
+export function lectureMomentBadgeParams(
+  action: Extract<Action, { type: 'discussion' }>,
+  moment: { agentId?: string; outcome?: DiscussionOutcome } = {},
+): LectureDiscussionBadgeParams {
+  const agentId = moment.agentId ?? action.agentId;
   return {
     topic: action.topic,
     ...(action.prompt === undefined ? {} : { prompt: action.prompt }),
+    ...(action.id ? { discussionActionId: action.id } : {}),
+    ...(agentId ? { agentId } : {}),
+    ...(moment.outcome ? { outcome: moment.outcome } : {}),
   };
+}
+
+/**
+ * A request's config with the course's class presence (I06) for the
+ * requested agents: who spoke how often and where, and how the lecture
+ * moments ended. `sessions` are the loaded ones; the request's own messages
+ * replace (or add) its session's, which the list may not show yet.
+ */
+export function withClassPresence<T extends ChatRequestTemplate>(
+  requestTemplate: T,
+  sessions: readonly ChatSession[],
+  request: { sessionId: string; type: SessionType; sceneId?: string },
+): T {
+  const classPresence = buildClassPresence({
+    sessions: withRequestMessages(sessions, { ...request, messages: requestTemplate.messages }),
+    agentIds: requestTemplate.config.agentIds,
+  });
+  if (!classPresence) return requestTemplate;
+  return { ...requestTemplate, config: { ...requestTemplate.config, classPresence } };
+}
+
+/**
+ * A request's config with the course's class memory (I13): what was said in
+ * the earlier sessions (not this one: its messages travel with the request),
+ * and the learner's missed quiz concepts and repeated questions — this
+ * request's own question included.
+ */
+export function withClassMemory<T extends ChatRequestTemplate>(
+  requestTemplate: T,
+  sessions: readonly ChatSession[],
+  request: { sessionId: string; type: SessionType; sceneId?: string },
+  course: {
+    quizMisses?: readonly QuizMissRecord[];
+    scenes?: readonly { id: string }[];
+    /**
+     * Whose lines to remember, when not just the requested agents: an aside
+     * requests only the assistant, yet what the teacher and classmates said
+     * earlier still concerns it
+     */
+    classAgentIds?: readonly string[];
+  } = {},
+): T {
+  const classMemory = buildClassMemory({
+    sessions: withRequestMessages(sessions, { ...request, messages: requestTemplate.messages }),
+    agentIds: course.classAgentIds
+      ? [...new Set([...requestTemplate.config.agentIds, ...course.classAgentIds])]
+      : requestTemplate.config.agentIds,
+    excludeSessionId: request.sessionId,
+    quizMisses: course.quizMisses,
+    sceneIds: course.scenes ? new Set(course.scenes.map((scene) => scene.id)) : undefined,
+  });
+  if (!classMemory) return requestTemplate;
+  return { ...requestTemplate, config: { ...requestTemplate.config, classMemory } };
+}
+
+/**
+ * The store state with how far the lecture got on its current scene (I14):
+ * only progress on that very scene, as a whole index within the route's
+ * bound; anything else is left out.
+ */
+export function withLectureProgress<S extends AgentLoopStoreState>(
+  storeState: S,
+  progress: LectureProgress | null | undefined,
+): S {
+  if (
+    !progress ||
+    !storeState.currentSceneId ||
+    progress.sceneId !== storeState.currentSceneId ||
+    !Number.isSafeInteger(progress.actionIndex) ||
+    progress.actionIndex < 0
+  ) {
+    return storeState;
+  }
+  return {
+    ...storeState,
+    lectureProgress: {
+      sceneId: progress.sceneId,
+      actionIndex: Math.min(progress.actionIndex, PI_REQUEST_BOUNDS.lectureActionIndexMax),
+    },
+  };
+}
+
+/**
+ * A Pi request in the learner's interface language (I22): built-in agents
+ * are named as the learner sees them. Only a supported locale is sent.
+ */
+export function withUiLocale<T extends ChatRequestTemplate>(
+  requestTemplate: T,
+  locale: string | undefined,
+): T {
+  const known = supportedLocales.find((entry) => entry.code === locale);
+  return known ? { ...requestTemplate, uiLocale: known.code } : requestTemplate;
+}
+
+/**
+ * Whom the learner's message addresses by name (I23): `@` + a roster name,
+ * under the registry's name or the one the interface shows. Per request,
+ * never kept in the session; empty when nobody is named.
+ */
+export function addressedAgentIdsOf(
+  content: string,
+  agentIds: readonly string[],
+  t: (key: string) => string,
+): string[] {
+  const registry = useAgentRegistry.getState();
+  return resolveAddressedAgentIds(
+    content,
+    mentionRoster(agentIds, (id) => registry.getAgent(id), t),
+  );
+}
+
+/**
+ * The assistant message an agent_start opens: its speaker (the registry's
+ * name and avatar first) and, when the director said why it cast them, the
+ * reason (I20), kept for offline casting stats.
+ */
+export function agentStartMessage(
+  data: Pick<AgentStartItem, 'messageId' | 'agentId' | 'agentName' | 'avatar'>,
+  agentConfig: Pick<AgentConfig, 'name' | 'avatar'> | undefined,
+  now: number,
+  castReason?: CastReason,
+): UIMessage<ChatMessageMetadata> {
+  return {
+    id: data.messageId,
+    role: 'assistant',
+    parts: [],
+    metadata: {
+      senderName: agentConfig?.name || data.agentName,
+      senderAvatar: data.avatar || agentConfig?.avatar,
+      originalRole: 'agent',
+      agentId: data.agentId,
+      createdAt: now,
+      ...(castReason ? { castReason } : {}),
+    },
+  };
+}
+
+/**
+ * A discussion text trimmed and cut (by characters) to the Pi route's bound,
+ * so the route has nothing left to cut. Undefined when empty.
+ */
+function boundedDiscussionText(value: string | undefined, maxChars: number): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return Array.from(trimmed).slice(0, maxChars).join('').trimEnd() || undefined;
+}
+
+/** How a discussion's moment opened: kept in the session config, sent on every request */
+export type DiscussionMomentFields = Pick<
+  SessionConfig,
+  'discussionTopic' | 'discussionPrompt' | 'triggerAgentId' | 'momentKind' | 'learnerStance'
+>;
+
+/**
+ * The moment fields of a discussion: the opener's own words (`topic`, as the
+ * card showed them), the teacher's intent (`prompt`, director-only) and who
+ * opened it. Empty values are left out.
+ */
+export function buildDiscussionMomentFields(input: {
+  topic?: string;
+  prompt?: string;
+  triggerAgentId?: string;
+  momentKind?: DiscussionMomentKind;
+  learnerStance?: LearnerStance;
+}): DiscussionMomentFields {
+  const discussionTopic = boundedDiscussionText(
+    input.topic,
+    PI_REQUEST_BOUNDS.discussionTopicMaxChars,
+  );
+  const discussionPrompt = boundedDiscussionText(
+    input.prompt,
+    PI_REQUEST_BOUNDS.discussionPromptMaxChars,
+  );
+  return {
+    ...(discussionTopic ? { discussionTopic } : {}),
+    ...(discussionPrompt ? { discussionPrompt } : {}),
+    ...(input.triggerAgentId ? { triggerAgentId: input.triggerAgentId } : {}),
+    ...(input.momentKind ? { momentKind: input.momentKind } : {}),
+    ...(input.learnerStance ? { learnerStance: input.learnerStance } : {}),
+  };
+}
+
+/**
+ * A class moment to open: a lecture moment (its opener and words, and for a
+ * teacher's whole-class question what the learner chose on its card), or a
+ * quiz review (no opener: the director picks one).
+ */
+export type ClassMomentRequest = DiscussionRequest;
+
+/**
+ * The moment fields a follow-up or retry of this session sends: a
+ * discussion's, copied from its config (a discussion persisted before the
+ * config kept its topic falls back to its title, which is the topic), so the
+ * server still knows how the moment opened. Nothing for Q&A.
+ */
+export function discussionRequestFields(
+  session: Pick<ChatSession, 'type' | 'title' | 'config'> | undefined,
+): DiscussionMomentFields {
+  if (!session || session.type !== 'discussion') return {};
+  const { config } = session;
+  return buildDiscussionMomentFields({
+    topic: config.discussionTopic ?? session.title,
+    prompt: config.discussionPrompt,
+    triggerAgentId: config.triggerAgentId,
+    momentKind: config.momentKind,
+    learnerStance: config.learnerStance,
+  });
+}
+
+const DISCUSSION_MOMENT_FIELD_KEYS = [
+  'discussionTopic',
+  'discussionPrompt',
+  'triggerAgentId',
+  'momentKind',
+  'learnerStance',
+] as const satisfies readonly (keyof DiscussionMomentFields)[];
+
+/**
+ * The config the classic (non-Pi) loop sends. Its director dispatches the
+ * trigger agent unasked on a loop's first turn and frames any request with a
+ * topic as a freshly opened discussion, so the moment fields go only with the
+ * request that opens it (no assistant message yet). On a follow-up or resume
+ * the classic director chooses who speaks, as it always did.
+ */
+export function classicLoopConfig(
+  config: ChatRequestTemplate['config'],
+  messages: readonly Pick<UIMessage, 'role'>[],
+): ChatRequestTemplate['config'] {
+  if (!messages.some((message) => message.role === 'assistant')) return config;
+  const followUp = { ...config };
+  for (const key of DISCUSSION_MOMENT_FIELD_KEYS) delete followUp[key];
+  return followUp;
 }
 
 export async function retireLiveRequestResources<
@@ -553,6 +948,9 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   const onStopSessionRef = useRef(options.onStopSession);
   const onSegmentSealedRef = useRef(options.onSegmentSealed);
   const shouldHoldAfterRevealRef = useRef(options.shouldHoldAfterReveal);
+  const onAsideLiveSpeechRef = useRef(options.onAsideLiveSpeech);
+  const onAsideThinkingRef = useRef(options.onAsideThinking);
+  const getLectureProgressRef = useRef(options.getLectureProgress);
   useEffect(() => {
     onLiveSpeechRef.current = options.onLiveSpeech;
     onSpeechProgressRef.current = options.onSpeechProgress;
@@ -564,6 +962,9 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     onStopSessionRef.current = options.onStopSession;
     onSegmentSealedRef.current = options.onSegmentSealed;
     shouldHoldAfterRevealRef.current = options.shouldHoldAfterReveal;
+    onAsideLiveSpeechRef.current = options.onAsideLiveSpeech;
+    onAsideThinkingRef.current = options.onAsideThinking;
+    getLectureProgressRef.current = options.getLectureProgress;
   }, [
     options.onLiveSpeech,
     options.onSpeechProgress,
@@ -575,8 +976,19 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     options.onStopSession,
     options.onSegmentSealed,
     options.shouldHoldAfterReveal,
+    options.onAsideLiveSpeech,
+    options.onAsideThinking,
+    options.getLectureProgress,
   ]);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  // The interface language each Pi request is sent in (read as it leaves)
+  const localeRef = useRef<string | undefined>(locale);
+  useEffect(() => {
+    localeRef.current = locale;
+  }, [locale]);
+  // Why the director cast each speaker, from agent_start until its message
+  // opens (the buffer reveals it later)
+  const castReasonsRef = useRef<Map<string, CastReason>>(new Map());
 
   // Track current stageId for data isolation
   const stageId = useStageStore((s) => s.stage?.id);
@@ -598,6 +1010,16 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     new Map(),
   );
   const sessionsRef = useRef<ChatSession[]>(sessions);
+  // The teaching assistant's aside: its own session, request and streaming
+  // flag, never the lecture's activeSessionId or the shared abort controller
+  const [asideSessionId, setAsideSessionIdState] = useState<string | null>(null);
+  const asideSessionIdRef = useRef<string | null>(null);
+  const setAsideSessionId = useCallback((sessionId: string | null) => {
+    asideSessionIdRef.current = sessionId;
+    setAsideSessionIdState(sessionId);
+  }, []);
+  const [isAsideStreaming, setIsAsideStreaming] = useState(false);
+  const asideAbortRef = useRef<AbortController | null>(null);
   const previousLiveSessionRef = useRef<PreviousLiveSessionContext | undefined>(undefined);
   const piSessionBoundariesRef = useRef<Map<string, PiSessionBoundaryContext>>(new Map());
   useEffect(() => {
@@ -613,6 +1035,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     sessionClosed?: boolean;
     endReason?: string;
   } | null>(null);
+  // The aside's own iteration state (never shared with a Q&A / discussion turn)
+  const asideLoopDoneDataRef = useRef<typeof loopDoneDataRef.current>(null);
 
   // Reload sessions when stage changes (course switch)
   // This synchronous setState is intentional: it resets derived state from
@@ -627,9 +1051,13 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     const stored = useStageStore.getState().chats;
     setSessions(normalizeStoredSessionsForRestore(stored));
     setActiveSessionId(null);
+    asideAbortRef.current?.abort();
+    asideAbortRef.current = null;
+    setAsideSessionId(null);
+    setIsAsideStreaming(false);
     previousLiveSessionRef.current = undefined;
     piSessionBoundariesRef.current.clear();
-  }, [stageId]);
+  }, [setAsideSessionId, stageId]);
 
   useEffect(() => {
     if (currentSceneId === currentSceneIdRef.current) return;
@@ -689,6 +1117,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      asideAbortRef.current?.abort();
+      asideAbortRef.current = null;
       softCloseRegistrations.forEach(({ timer }) => clearTimeout(timer));
       softCloseRegistrations.clear();
       softCloseLifecycle.clear();
@@ -912,12 +1342,22 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   // Tracks last action index per lecture session (avoids stale closure reads)
   const lectureLastActionIndexRef = useRef<Map<string, number>>(new Map());
 
+  // Tracks the narrator (the classroom's teacher) per lecture session
+  const lectureAgentIdsRef = useRef<Map<string, string>>(new Map());
+
   /**
    * Create a StreamBuffer for a session and wire its callbacks to React state.
    * Returns the buffer instance (also stored in buffersRef).
+   *
+   * The aside channel (the assistant answering while the lecture plays) only
+   * reveals text: no classroom actions, no TTS segments or holds, no paused
+   * intent inherited from the lecture-facing Q&A, and its live text, thinking
+   * and done data go to its own callbacks and ref.
    */
   const createBufferForSession = useCallback(
-    (sessionId: string, type?: SessionType): StreamBuffer => {
+    (sessionId: string, type?: SessionType, channel: 'main' | 'aside' = 'main'): StreamBuffer => {
+      const aside = channel === 'aside';
+      const doneDataRef = aside ? asideLoopDoneDataRef : loopDoneDataRef;
       // Dispose previous buffer if any
       // Shutdown (not dispose) — avoids stale onLiveSpeech(null,null) callback
       const prev = buffersRef.current.get(sessionId);
@@ -932,18 +1372,9 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           onAgentStart(data: AgentStartItem) {
             const now = Date.now();
             const agentConfig = useAgentRegistry.getState().getAgent(data.agentId);
-            const newMsg: UIMessage<ChatMessageMetadata> = {
-              id: data.messageId,
-              role: 'assistant',
-              parts: [],
-              metadata: {
-                senderName: agentConfig?.name || data.agentName,
-                senderAvatar: data.avatar || agentConfig?.avatar,
-                originalRole: 'agent',
-                agentId: data.agentId,
-                createdAt: now,
-              },
-            };
+            const castReason = castReasonsRef.current.get(data.messageId);
+            castReasonsRef.current.delete(data.messageId);
+            const newMsg = agentStartMessage(data, agentConfig, now, castReason);
             setSessions((prev) =>
               prev.map((s) =>
                 s.id === sessionId
@@ -955,7 +1386,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
                   : s,
               ),
             );
-            onActiveBubbleRef.current?.(data.messageId);
+            // The active bubble is the lecture-facing highlight
+            if (!aside) onActiveBubbleRef.current?.(data.messageId);
           },
 
           onAgentEnd() {
@@ -1014,6 +1446,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           },
 
           async onActionReady(messageId: string, data: ActionItem, signal: AbortSignal) {
+            // An aside never touches the stage the lecture is using
+            if (aside) return;
             const actionPart = {
               type: `action-${data.actionName}`,
               actionId: data.actionId,
@@ -1059,27 +1493,39 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             // Lecture sessions: roundtable text is managed by PlaybackEngine → setLectureSpeech
             // in stage.tsx. Buffer only drives chat area pacing for lectures.
             if (type === 'lecture') return;
+            if (aside) {
+              onAsideLiveSpeechRef.current?.(text, agentId);
+              return;
+            }
             onLiveSpeechRef.current?.(text, agentId);
           },
 
           onSpeechProgress(ratio: number | null) {
+            if (aside) return;
             onSpeechProgressRef.current?.(ratio);
           },
 
           onThinking(data: { stage: string; agentId?: string } | null) {
+            if (aside) {
+              onAsideThinkingRef.current?.(data);
+              return;
+            }
             onThinkingRef.current?.(data);
           },
 
           onCueUser(fromAgentId?: string, prompt?: string) {
             // Track cue_user for agent loop
-            if (loopDoneDataRef.current) {
-              loopDoneDataRef.current.cueUserReceived = true;
+            if (doneDataRef.current) {
+              doneDataRef.current.cueUserReceived = true;
             } else {
-              loopDoneDataRef.current = {
+              doneDataRef.current = {
                 totalAgents: 0,
                 cueUserReceived: true,
               };
             }
+            // The learner's cue is lecture-facing (it reveals the composer as
+            // the floor): the aside just waits for a follow-up
+            if (aside) return;
             onCueUserRef.current?.(fromAgentId, prompt);
           },
 
@@ -1093,12 +1539,12 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             directorState?: DirectorState;
           }) {
             // Store done data for agent loop consumption
-            loopDoneDataRef.current = {
+            doneDataRef.current = {
               directorState: data.directorState,
               totalAgents: data.totalAgents,
               agentHadContent: data.agentHadContent ?? true,
               cueUserReceived:
-                data.cueUserReceived ?? loopDoneDataRef.current?.cueUserReceived ?? false,
+                data.cueUserReceived ?? doneDataRef.current?.cueUserReceived ?? false,
               sessionClosed: data.sessionClosed,
               endReason: data.endReason,
             };
@@ -1116,10 +1562,13 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             fullText: string,
             agentId: string | null,
           ) {
+            // Text only: an aside's answer is never spoken over the lecture
+            if (aside) return;
             onSegmentSealedRef.current?.(messageId, partId, fullText, agentId);
           },
 
           shouldHoldAfterReveal() {
+            if (aside) return false as const;
             return shouldHoldAfterRevealRef.current?.() ?? (false as const);
           },
         },
@@ -1131,7 +1580,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       // Inherit paused intent for discussion/QA sessions so new-turn buffers
       // don't start revealing text while the user has paused reading.
-      if (type !== 'lecture' && livePausedRef.current) {
+      if (type !== 'lecture' && !aside && livePausedRef.current) {
         buffer.pause();
       }
 
@@ -1141,23 +1590,36 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   );
 
   const createStatelessStreamConsumer = useCallback(
-    (sessionId: string, controller: AbortController, sessionType: SessionType) => {
+    (
+      sessionId: string,
+      controller: AbortController,
+      sessionType: SessionType,
+      channel: 'main' | 'aside' = 'main',
+    ) => {
+      const aside = channel === 'aside';
+      const doneDataRef = aside ? asideLoopDoneDataRef : loopDoneDataRef;
       let currentBuffer: StreamBuffer | null = null;
       let currentMessageId: string | null = null;
 
       const onEvent = (event: StatelessEvent) => {
         if (event.type === 'whiteboard') {
-          consumePiWhiteboardEvent(event.data, controller.signal);
+          // An aside leaves the board (and its visibility) to the lecture
+          if (!aside) consumePiWhiteboardEvent(event.data, controller.signal);
           return;
         }
+        // Text only: a stray classroom action is dropped, never shown or run
+        if (aside && event.type === 'action') return;
         if (!currentBuffer) {
-          currentBuffer = createBufferForSession(sessionId, sessionType);
+          currentBuffer = createBufferForSession(sessionId, sessionType, channel);
         }
 
         switch (event.type) {
           case 'agent_start': {
-            const { messageId, agentId, agentName, agentAvatar, agentColor } = event.data;
+            const { messageId, agentId, agentName, agentAvatar, agentColor, castReason } =
+              event.data;
             currentMessageId = messageId;
+            // Kept until the buffer opens the message (stats only; I20)
+            if (isCastReason(castReason)) castReasonsRef.current.set(messageId, castReason);
             currentBuffer.pushAgentStart({
               messageId,
               agentId,
@@ -1220,8 +1682,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
         currentBuffer = null;
 
-        const doneData = loopDoneDataRef.current;
-        loopDoneDataRef.current = null;
+        const doneData = doneDataRef.current;
+        doneDataRef.current = null;
 
         if (!doneData) return null;
         return {
@@ -1268,11 +1730,40 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         // Pi bypasses runAgentLoop's per-iteration getStoreState, so its single
         // request needs the snapshot built here — /api/chat/pi rejects bodies
         // without storeState.
-        const storeState = await buildFreshAgentLoopStoreState();
+        const [freshState, quizMisses] = await Promise.all([
+          buildFreshAgentLoopStoreState(),
+          loadQuizMisses(useStageStore.getState().scenes),
+        ]);
+        // What was just said on this page, read as the request leaves (I14)
+        const storeState = withLectureProgress(freshState, getLectureProgressRef.current?.());
         const firstRequestContext = getFirstPiRequestContext(sessionId);
-        const piRequestTemplate = firstRequestContext
-          ? { ...requestTemplate, storeState, piSessionBoundary: firstRequestContext }
-          : { ...requestTemplate, storeState };
+        // Who has been present in this course so far, and what was said
+        // earlier (I06, I13), read as the request leaves
+        const classRequest = {
+          sessionId,
+          type: sessionType,
+          sceneId: currentSceneIdRef.current ?? undefined,
+        };
+        const classTemplate = withClassMemory(
+          withClassPresence(requestTemplate, sessionsRef.current, classRequest),
+          sessionsRef.current,
+          classRequest,
+          { quizMisses, scenes: freshState.scenes as { id: string }[] },
+        );
+        // Off by default: nobody singles the learner out by name (I10.5)
+        const presentTemplate = useSettingsStore.getState().teacherMayCallOnLearner
+          ? {
+              ...classTemplate,
+              config: { ...classTemplate.config, teacherMayCallOnLearner: true },
+            }
+          : classTemplate;
+        // Built-in agents are named in the learner's interface language (I22)
+        const piRequestTemplate = withUiLocale(
+          firstRequestContext
+            ? { ...presentTemplate, storeState, piSessionBoundary: firstRequestContext }
+            : { ...presentTemplate, storeState },
+          localeRef.current,
+        );
         // Web search is the workspace's webSearch slot, resolved on the server.
         await runPiSingleRequest(
           sessionId,
@@ -1306,7 +1797,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       const outcome = await runAgentLoop(
         {
-          config: requestTemplate.config,
+          config: classicLoopConfig(requestTemplate.config, requestTemplate.messages),
           userProfile: requestTemplate.userProfile,
         },
         {
@@ -1444,6 +1935,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       }
       lectureMessageIds.current.delete(sessionId);
       lectureLastActionIndexRef.current.delete(sessionId);
+      lectureAgentIdsRef.current.delete(sessionId);
 
       if (isLiveSession && wasStreaming) {
         // Append "..." + interrupted marker to last assistant message
@@ -1510,6 +2002,309 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     [activeSessionId, clearSoftCloseRegistration, retireActiveLiveRequest],
   );
 
+  /**
+   * The aside failed: its error shows in the session, which closes (status
+   * 'error'), and only the aside's own state resets. Never the lecture-facing
+   * error path (onLiveSessionError → the engine's discussion error handling).
+   */
+  const clearAsideAfterError = useCallback(
+    (sessionId: string, message: string) => {
+      const now = Date.now();
+      if (asideSessionIdRef.current === sessionId) {
+        const controller = asideAbortRef.current;
+        asideAbortRef.current = null;
+        void retireLiveRequestResources(controller, sessionId, buffersRef.current);
+        setAsideSessionId(null);
+        setIsAsideStreaming(false);
+      } else {
+        void retireLiveRequestResources(null, sessionId, buffersRef.current);
+      }
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sessionId
+            ? {
+                ...s,
+                status: 'error' as SessionStatus,
+                softCloseDeadline: undefined,
+                updatedAt: nextChatUpdatedAt(s, now),
+                messages: [
+                  ...s.messages,
+                  {
+                    id: `error-${now}`,
+                    role: 'assistant' as const,
+                    parts: [{ type: 'text', text: message }],
+                    metadata: {
+                      senderName: 'System',
+                      originalRole: 'agent' as const,
+                      createdAt: now,
+                    },
+                  },
+                ],
+              }
+            : s,
+        ),
+      );
+      onAsideThinkingRef.current?.(null);
+      onAsideLiveSpeechRef.current?.(null, null);
+    },
+    [setAsideSessionId],
+  );
+
+  /**
+   * End the aside (scene switch, leaving playback, a discussion or a Q&A with
+   * the teacher taking over): it is marked completed and keeps its messages;
+   * an answer still streaming keeps its text with "...". Only the aside's own
+   * request and buffer are retired — the lecture and any other session are
+   * left alone, and no stop / cleanup callback runs.
+   */
+  const endAsideSession = useCallback(async (): Promise<void> => {
+    const sessionId = asideSessionIdRef.current;
+    const controller = asideAbortRef.current;
+    asideAbortRef.current = null;
+    setAsideSessionId(null);
+    setIsAsideStreaming(false);
+    if (!sessionId) {
+      controller?.abort();
+      return;
+    }
+    log.info(`[ChatArea] Ending aside session: ${sessionId}`);
+    const wasStreaming = !!controller;
+    await retireLiveRequestResources(controller, sessionId, buffersRef.current);
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== sessionId || !isOpenLiveSession(s)) return s;
+        return {
+          ...withChatSessionStatus(s, 'completed'),
+          messages: wasStreaming ? markLastAssistantInterrupted(s.messages) : s.messages,
+          softCloseDeadline: undefined,
+        };
+      }),
+    );
+    onAsideThinkingRef.current?.(null);
+    onAsideLiveSpeechRef.current?.(null, null);
+  }, [setAsideSessionId]);
+
+  /**
+   * One aside turn: Pi's single request, or the classic agent loop. Its
+   * outcome only settles the aside — a cue, a completion or even a close
+   * keeps the session open for follow-ups; an error closes it — and never
+   * reaches the lecture-facing stop / cleanup callbacks.
+   */
+  const runAsideRequest = useCallback(
+    async (
+      sessionId: string,
+      requestTemplate: ChatRequestTemplate,
+      controller: AbortController,
+      onResponseAccepted?: (response: Response) => void,
+    ): Promise<void> => {
+      const createAsideConsumer: StatelessStreamConsumerFactory = (id, abort, type) =>
+        createStatelessStreamConsumer(id, abort, type, 'aside');
+      const keepOpen = (id: string, data?: { directorState?: DirectorState }) =>
+        storeDirectorState(id, data?.directorState);
+
+      if (isPiChatEnabled()) {
+        const [freshState, quizMisses] = await Promise.all([
+          buildFreshAgentLoopStoreState(),
+          loadQuizMisses(useStageStore.getState().scenes),
+        ]);
+        // The assistant explains along the teacher's line of the moment (I14)
+        const storeState = withLectureProgress(freshState, getLectureProgressRef.current?.());
+        const classRequest = {
+          sessionId,
+          type: 'qa' as const,
+          sceneId: currentSceneIdRef.current ?? undefined,
+        };
+        const presentTemplate = withClassMemory(
+          withClassPresence(requestTemplate, sessionsRef.current, classRequest),
+          sessionsRef.current,
+          classRequest,
+          {
+            quizMisses,
+            scenes: freshState.scenes as { id: string }[],
+            classAgentIds: useSettingsStore.getState().selectedAgentIds ?? [],
+          },
+        );
+        await runPiSingleRequest(
+          sessionId,
+          withUiLocale({ ...presentTemplate, storeState }, localeRef.current),
+          controller,
+          'qa',
+          createAsideConsumer,
+          clearAsideAfterError,
+          keepOpen,
+          keepOpen,
+          storeDirectorState,
+          // The aside settles on its own: nothing lecture-facing is told it stopped
+          { current: undefined },
+          t,
+          onResponseAccepted,
+        );
+        return;
+      }
+
+      const streamConsumer = createStatelessStreamConsumer(sessionId, controller, 'qa', 'aside');
+      const outcome = await runAgentLoop(
+        { config: requestTemplate.config, userProfile: requestTemplate.userProfile },
+        {
+          getStoreState: buildFreshAgentLoopStoreState,
+          getMessages: () =>
+            sessionsRef.current.find((s) => s.id === sessionId)?.messages ??
+            requestTemplate.messages,
+          fetchChat: (body, signal) => fetchStatelessChat(body, signal),
+          onEvent: streamConsumer.onEvent,
+          onIterationEnd: streamConsumer.onIterationEnd,
+        },
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      if (outcome.reason === 'empty_turns') {
+        clearAsideAfterError(sessionId, t('chat.error.emptyAgentResponses'));
+      } else if (outcome.reason === 'no_done') {
+        clearAsideAfterError(sessionId, t('chat.error.streamInterrupted'));
+      } else {
+        keepOpen(sessionId, { directorState: outcome.directorState });
+      }
+    },
+    [clearAsideAfterError, createStatelessStreamConsumer, storeDirectorState, t],
+  );
+
+  /**
+   * Ask the teaching assistant on the side while the lecture keeps playing.
+   * The first question opens an aside session (a 'qa' session marked
+   * `config.aside`); follow-ups append to it until it ends. It has its own
+   * request controller and streaming flag: the lecture's session, the shared
+   * abort controller and any Q&A / discussion are never touched, and the
+   * answer is text only (no actions, no TTS).
+   */
+  const sendAsideMessage = useCallback(
+    async (content: string, options: AsideMessageSendOptions): Promise<void> => {
+      const { agentId } = options;
+      // A follow-up while the previous answer still streams interrupts it
+      const previous = asideAbortRef.current;
+      if (previous) {
+        asideAbortRef.current = null;
+        const interruptedId = asideSessionIdRef.current;
+        await retireLiveRequestResources(previous, interruptedId, buffersRef.current);
+        if (interruptedId) {
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === interruptedId
+                ? {
+                    ...s,
+                    messages: markLastAssistantInterrupted(s.messages),
+                    updatedAt: nextChatUpdatedAt(s),
+                  }
+                : s,
+            ),
+          );
+        }
+      }
+
+      const controller = new AbortController();
+      asideAbortRef.current = controller;
+      setIsAsideStreaming(true);
+
+      let sessionId: string | null = null;
+      try {
+        if (!classroomChatUsable(await loadModelCapabilities())) {
+          toast.error(t('settings.modelNotConfigured'));
+          return;
+        }
+        // Ended meanwhile (a scene switch, leaving playback)
+        if (controller.signal.aborted) return;
+
+        const now = Date.now();
+        const userMessage: UIMessage<ChatMessageMetadata> = {
+          id: `user-${now}`,
+          role: 'user',
+          parts: [{ type: 'text', text: content }],
+          metadata: {
+            senderName: t('common.you'),
+            senderAvatar: USER_AVATAR,
+            originalRole: 'user',
+            createdAt: now,
+          },
+        };
+
+        const existing = asideSessionIdRef.current
+          ? sessionsRef.current.find((s) => s.id === asideSessionIdRef.current)
+          : undefined;
+        let messages: UIMessage<ChatMessageMetadata>[];
+        let directorState: DirectorState | undefined;
+        if (existing && isOpenLiveSession(existing)) {
+          sessionId = existing.id;
+          messages = [...existing.messages, userMessage];
+          directorState = existing.directorState;
+          const followUpId = existing.id;
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === followUpId
+                ? {
+                    ...s,
+                    messages: [...s.messages, userMessage],
+                    updatedAt: nextChatUpdatedAt(s, now),
+                  }
+                : s,
+            ),
+          );
+        } else {
+          sessionId = `session-${now}-${Math.random().toString(36).slice(2)}`;
+          messages = [userMessage];
+          const newSession: ChatSession = {
+            id: sessionId,
+            type: 'qa',
+            title: 'Q&A',
+            status: 'active',
+            messages,
+            config: { agentIds: [agentId], defaultAgentId: agentId, aside: true },
+            toolCalls: [],
+            pendingToolCalls: [],
+            sceneId: currentSceneIdRef.current ?? undefined,
+            createdAt: now,
+            updatedAt: now,
+          };
+          setSessions((prev) => [...prev, newSession]);
+          setAsideSessionId(sessionId);
+          log.info(`[ChatArea] Created aside session: ${sessionId}`);
+        }
+
+        const userProfileState = useUserProfileStore.getState();
+        const requestTemplate = buildAsideRequestTemplate({
+          messages,
+          agentId,
+          agent: useAgentRegistry.getState().getAgent(agentId),
+          userProfile: {
+            nickname: userProfileState.nickname || undefined,
+            bio: userProfileState.bio || undefined,
+          },
+          directorState,
+          elementReference: options.elementReference,
+          addressedAgentIds: addressedAgentIdsOf(content, [agentId], t),
+        });
+        await runAsideRequest(sessionId, requestTemplate, controller, options.onResponseAccepted);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          log.info('[ChatArea] Aside request aborted');
+          return;
+        }
+        if (controller.signal.aborted) return;
+        log.error('[ChatArea] Aside error:', error);
+        if (sessionId) {
+          clearAsideAfterError(
+            sessionId,
+            `Error: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } finally {
+        if (asideAbortRef.current === controller) {
+          asideAbortRef.current = null;
+          setIsAsideStreaming(false);
+        }
+      }
+    },
+    [clearAsideAfterError, runAsideRequest, setAsideSessionId, t],
+  );
+
   const continueSoftClosingSession = useCallback(
     (sessionId: string): boolean => {
       if (
@@ -1551,16 +2346,18 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   );
 
   /**
-   * End the currently active QA/Discussion session (if any).
+   * End the currently active QA/Discussion session (if any), and the
+   * assistant's aside (a scene switch or leaving playback ends both).
    */
   const endActiveSession = useCallback(
     async (options: EndSessionOptions = {}): Promise<void> => {
-      const active = sessionsRef.current.find(isOpenLiveSession);
-      if (active) {
-        await endSession(active.id, options);
-      }
+      const active = sessionsRef.current.find(isOpenMainLiveSession);
+      await Promise.all([
+        active ? endSession(active.id, options) : undefined,
+        asideSessionIdRef.current || asideAbortRef.current ? endAsideSession() : undefined,
+      ]);
     },
-    [endSession],
+    [endAsideSession, endSession],
   );
 
   /**
@@ -1642,7 +2439,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
    * Soft-pause the currently active QA/Discussion session (if any).
    */
   const softPauseActiveSession = useCallback(async (): Promise<void> => {
-    const active = sessionsRef.current.find(isOpenLiveSession);
+    const active = sessionsRef.current.find(isOpenMainLiveSession);
     if (active) {
       await softPauseSession(active.id);
     }
@@ -1681,6 +2478,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             config: {
               agentIds,
               sessionType: session.type,
+              ...discussionRequestFields(session),
             },
             userProfile: {
               nickname: userProfileState.nickname || undefined,
@@ -1716,7 +2514,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
    * Resume the currently active soft-paused session (if any).
    */
   const resumeActiveSession = useCallback(async (): Promise<void> => {
-    const active = sessionsRef.current.find(isOpenLiveSession);
+    const active = sessionsRef.current.find(isOpenMainLiveSession);
     if (active) {
       await resumeSession(active.id);
     }
@@ -1769,6 +2567,9 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       // Capture the next request only after that mutation has settled.
       await pendingRetirementRef.current;
 
+      // The teacher takes over: an open aside ends first (its messages stay)
+      if (asideSessionIdRef.current || asideAbortRef.current) await endAsideSession();
+
       // Validate model configuration before sending: chat resolves the
       // workspace's classroom slot (assigned there or inherited).
       if (!classroomChatUsable(await loadModelCapabilities())) {
@@ -1784,7 +2585,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
       if (needNewSession) {
         // End all active QA/Discussion sessions before creating new one
-        const activeQAOrDiscussion = sessionsRef.current.filter(isOpenLiveSession);
+        const activeQAOrDiscussion = sessionsRef.current.filter(isOpenMainLiveSession);
         for (const session of activeQAOrDiscussion) {
           await endSession(session.id);
         }
@@ -1868,6 +2669,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         );
 
         const userProfileState = useUserProfileStore.getState();
+        // Whom this message names (@): they answer first, in character (I23)
+        const addressedAgentIds = addressedAgentIdsOf(content, agentIds, t);
 
         await runAgentLoopFn(
           sessionId!,
@@ -1876,6 +2679,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             config: {
               agentIds,
               sessionType,
+              ...discussionRequestFields(existingSession),
+              ...(addressedAgentIds.length > 0 ? { addressedAgentIds } : {}),
             },
             userProfile: {
               nickname: userProfileState.nickname || undefined,
@@ -1913,6 +2718,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       activeSessionId,
       clearLiveSessionAfterError,
       createSession,
+      endAsideSession,
       endSession,
       claimSoftCloseRegistration,
       retireActiveLiveRequest,
@@ -1925,7 +2731,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
    * Start a discussion with agent speaking first
    */
   const startDiscussion = useCallback(
-    async (request: DiscussionRequest): Promise<void> => {
+    async (request: ClassMomentRequest): Promise<void> => {
       log.info(`[ChatArea] Starting discussion: "${request.topic}"`);
       // Explicitly clear buffer-pause intent (also cleared transitively via endSession,
       // but being explicit guards against future refactors)
@@ -1935,30 +2741,58 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       // the workspace's classroom slot (assigned there or inherited).
       if (!classroomChatUsable(await loadModelCapabilities())) {
         toast.error(t('settings.modelNotConfigured'));
+        // The card already handed the engine over to the moment: undo that, so
+        // the lecture is back where it was rather than stuck in a discussion
+        // that never starts
+        if (onLiveSessionErrorRef.current) {
+          onLiveSessionErrorRef.current();
+        } else {
+          onThinkingRef.current?.(null);
+        }
         return;
       }
 
+      // A teacher discussion takes over: an open aside ends first
+      if (asideSessionIdRef.current || asideAbortRef.current) await endAsideSession();
+
       // Auto-end previous active QA/Discussion sessions to ensure only one is active
-      const activeQAOrDiscussion = sessionsRef.current.filter(isOpenLiveSession);
+      const activeQAOrDiscussion = sessionsRef.current.filter(isOpenMainLiveSession);
       for (const session of activeQAOrDiscussion) {
         await endSession(session.id);
       }
 
       const sessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const now = Date.now();
-      const agentId = request.agentId || 'default-1';
       registerFirstPiRequest(sessionId);
 
       // Read all selected agent IDs from settings store
       const settingsState = useSettingsStore.getState();
-      const agentIds: string[] =
-        settingsState.selectedAgentIds?.length > 0
-          ? [...settingsState.selectedAgentIds]
-          : [agentId];
+      const selectedAgentIds: string[] =
+        settingsState.selectedAgentIds?.length > 0 ? [...settingsState.selectedAgentIds] : [];
+      // The moment's opener: its own agent; a legacy moment without one is
+      // opened by the classroom's teacher, never a student picked at random.
+      // A quiz review names none: the director picks who opens it.
+      const registry = useAgentRegistry.getState();
+      const isQuizReview = request.momentKind === 'quiz-review';
+      const agentId =
+        request.agentId ||
+        (isQuizReview
+          ? undefined
+          : pickClassroomTeacher(selectedAgentIds, (id) => registry.getAgent(id))?.id ||
+            (selectedAgentIds.length === 0 ? 'default-1' : undefined));
+      const agentIds = selectedAgentIds.length > 0 ? selectedAgentIds : [agentId ?? 'default-1'];
       // Ensure the trigger agent is included
-      if (!agentIds.includes(agentId)) {
+      if (agentId && !agentIds.includes(agentId)) {
         agentIds.unshift(agentId);
       }
+      const moment = buildDiscussionMomentFields({
+        topic: request.topic,
+        prompt: request.prompt,
+        triggerAgentId: agentId,
+        momentKind: request.momentKind,
+        // The learner's choice belongs to a teacher's whole-class question only
+        learnerStance: request.momentKind === 'ask-learner' ? request.learnerStance : undefined,
+      });
 
       // No pre-created assistant message — agent_start events create them dynamically
       const newSession: ChatSession = {
@@ -1969,7 +2803,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         messages: [],
         config: {
           agentIds,
-          triggerAgentId: agentId,
+          ...moment,
         },
         toolCalls: [],
         pendingToolCalls: [],
@@ -1996,9 +2830,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             config: {
               agentIds,
               sessionType: 'discussion',
-              discussionTopic: request.topic,
-              discussionPrompt: request.prompt,
-              triggerAgentId: agentId,
+              ...moment,
             },
             userProfile: {
               nickname: userProfileState.nickname || undefined,
@@ -2030,7 +2862,13 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable from i18n context
-    [clearLiveSessionAfterError, endSession, registerFirstPiRequest, runAgentLoopFn],
+    [
+      clearLiveSessionAfterError,
+      endAsideSession,
+      endSession,
+      registerFirstPiRequest,
+      runAgentLoopFn,
+    ],
   );
 
   /**
@@ -2058,6 +2896,12 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           (s.status === 'active' || s.status === 'completed'),
       );
       if (existing) {
+        // Its narrator stays whoever it was created with (a lecture persisted
+        // before lectures named the classroom's teacher keeps default-1)
+        lectureAgentIdsRef.current.set(
+          existing.id,
+          existing.config.agentIds[0] ?? existing.messages[0]?.metadata?.agentId ?? 'default-1',
+        );
         // Reactivate a completed session so the chat panel shows it as active again.
         // Actions won't be re-appended because lastActionIndex already covers them.
         if (existing.status === 'completed') {
@@ -2084,7 +2928,21 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       const scene = useStageStore.getState().scenes.find((s) => s.id === sceneId);
       const title = scene?.title || t('chat.lecture');
 
-      const agentConfig = useAgentRegistry.getState().getAgent('default-1');
+      // The lecture's narrator: the classroom's teacher, as the participants
+      // block and the playback engine name them; the default teacher only
+      // when no selected agent resolves
+      const registry = useAgentRegistry.getState();
+      const teacher = pickClassroomTeacher(
+        useSettingsStore.getState().selectedAgentIds ?? [],
+        (id) => registry.getAgent(id),
+      );
+      const lectureAgentId = teacher?.id ?? 'default-1';
+      const agentConfig = teacher ?? registry.getAgent('default-1');
+      const i18nNameKey = `settings.agentNames.${lectureAgentId}`;
+      const i18nName = t(i18nNameKey);
+      const senderName =
+        (i18nName !== i18nNameKey ? i18nName : agentConfig?.name) ||
+        t('settings.agentNames.default-1');
 
       // Create session with a single assistant message (all actions append parts here)
       const lectureMessage: UIMessage<ChatMessageMetadata> = {
@@ -2092,10 +2950,10 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         role: 'assistant',
         parts: [],
         metadata: {
-          senderName: agentConfig?.name || t('settings.agentNames.default-1'),
+          senderName,
           senderAvatar: agentConfig?.avatar,
           originalRole: 'teacher',
-          agentId: 'default-1',
+          agentId: lectureAgentId,
           createdAt: now,
         },
       };
@@ -2107,7 +2965,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         status: 'active',
         messages: [lectureMessage],
         config: {
-          agentIds: ['default-1'],
+          agentIds: [lectureAgentId],
         },
         toolCalls: [],
         pendingToolCalls: [],
@@ -2118,6 +2976,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       };
 
       lectureMessageIds.current.set(sessionId, messageId);
+      lectureAgentIdsRef.current.set(sessionId, lectureAgentId);
 
       setSessions((prev) => [...prev, newSession]);
       setActiveSessionId(sessionId);
@@ -2157,9 +3016,10 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       if (!buffer || buffer.disposed) {
         buffer = createBufferForSession(sessionId, 'lecture');
       }
+      const lectureAgentId = lectureAgentIdsRef.current.get(sessionId) ?? 'default-1';
 
       if (action.type === 'speech') {
-        buffer.pushText(messageId, action.text, 'default-1');
+        buffer.pushText(messageId, action.text, lectureAgentId);
         buffer.sealText(messageId);
       } else if (
         action.type === 'spotlight' ||
@@ -2172,11 +3032,59 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
           actionId: `${action.type}-${now}`,
           actionName: action.type,
           params: lectureActionPersistParams(action),
-          agentId: 'default-1',
+          agentId: lectureAgentId,
         });
       }
     },
     [createBufferForSession],
+  );
+
+  /**
+   * Record how a lecture moment ended (I06) as a discussion badge on its
+   * page's lecture bubble: written directly (no reveal pacing — the badge is
+   * a fact, not narration), replacing an earlier badge of the same moment.
+   * The page's lecture session that is playing, else its latest one; nothing
+   * is written when the page has none (never lectured).
+   */
+  const recordLectureMoment = useCallback(
+    (
+      sceneId: string,
+      action: Extract<Action, { type: 'discussion' }>,
+      moment: { agentId?: string; outcome: DiscussionOutcome },
+    ) => {
+      if (!action.id) return;
+      const badge = {
+        ...lectureMomentBadgeParams(action, moment),
+        discussionActionId: action.id,
+      };
+      const now = Date.now();
+      // Looked up in the updater: a lecture session created a moment ago is
+      // already there, even before the session list re-renders
+      setSessions((prev) => {
+        const lectures = prev.filter(
+          (s) => s.type === 'lecture' && s.sceneId === sceneId && s.messages.length > 0,
+        );
+        const target =
+          lectures.find((s) => lectureMessageIds.current.has(s.id)) ??
+          [...lectures].sort((a, b) => b.createdAt - a.createdAt)[0];
+        if (!target) return prev;
+        const messageId = lectureMessageIds.current.get(target.id) ?? target.messages[0].id;
+        return prev.map((s) =>
+          s.id === target.id
+            ? {
+                ...s,
+                messages: s.messages.map((m) =>
+                  m.id === messageId
+                    ? { ...m, parts: upsertLectureMomentBadge(m.parts, badge, now) }
+                    : m,
+                ),
+                updatedAt: nextChatUpdatedAt(s, now),
+              }
+            : s,
+        );
+      });
+    },
+    [],
   );
 
   // Derive active session type for external consumers
@@ -2201,7 +3109,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
   /** Pause the active live (QA/Discussion) buffer and set sticky intent. Returns true if paused. */
   const pauseActiveLiveBuffer = useCallback((): boolean => {
-    const active = sessionsRef.current.find(isOpenLiveSession);
+    const active = sessionsRef.current.find(isOpenMainLiveSession);
     if (!active) return false;
     const buf = buffersRef.current.get(active.id);
     if (!buf || buf.disposed) return false;
@@ -2213,7 +3121,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
 
   /** Resume the active live (QA/Discussion) buffer and clear sticky intent. */
   const resumeActiveLiveBuffer = useCallback(() => {
-    const active = sessionsRef.current.find(isOpenLiveSession);
+    const active = sessionsRef.current.find(isOpenMainLiveSession);
     if (!active) return;
     livePausedRef.current = false;
     const buf = buffersRef.current.get(active.id);
@@ -2226,6 +3134,10 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     activeSessionId,
     activeSessionType,
     isStreaming,
+    asideSessionId,
+    isAsideStreaming,
+    sendAsideMessage,
+    endAsideSession,
     createSession,
     endSession,
     endActiveSession,
@@ -2237,6 +3149,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
     startDiscussion,
     startLecture,
     addLectureMessage,
+    recordLectureMoment,
     handleInterrupt,
     getLectureMessageId,
     pauseBuffer,

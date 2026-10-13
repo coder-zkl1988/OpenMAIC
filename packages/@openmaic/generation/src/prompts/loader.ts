@@ -13,6 +13,14 @@ import type { LoadedPrompt, PromptId, PromptVariableDefaults, SnippetId } from '
 const DEFAULT_PROMPTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const PROMPT_VARIABLE_DEFAULTS = {
+  'slide-actions': {
+    classMoments: '',
+    earlierKeyPoints: '',
+  },
+  'interactive-actions': {
+    classMoments: '',
+    userProfile: '',
+  },
   'pbl-actions': {
     projectSummary:
       '(No generated milestones are available; introduce the project topic without inventing any.)',

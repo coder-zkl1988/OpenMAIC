@@ -40,7 +40,13 @@
  * the course ends the run in the deletion's own transaction (see the
  * owner-bound document store); a worker executing it loses its lease.
  */
-import { isAbortError } from '@openmaic/generation';
+import {
+  classMomentsFromScenes,
+  isAbortError,
+  summarizeClassMoments,
+  type ClassMoment,
+  type ClassMomentScene,
+} from '@openmaic/generation';
 import type { Queryable } from '@openmaic/storage/document/pg';
 
 import { pickNarratorAgent, resolveServerAgentVoiceOptions } from '@/lib/audio/agent-voice-options';
@@ -55,8 +61,11 @@ import { createLogger } from '@/lib/logger';
 import { BUILT_IN_AGENTS } from '@/lib/orchestration/registry/built-in';
 import type { AgentConfig } from '@/lib/orchestration/registry/types';
 import { generateClassroomId } from '@/lib/server/classroom-persistence';
+import { AGENT_AVATARS } from '@/lib/server/generation/agent-avatars';
 import { normalizeSceneOutlines } from '@/lib/server/generation/outline-schema';
-import type { StepContext } from '@/lib/server/generation/steps/context';
+import { StepRefusal, type StepContext } from '@/lib/server/generation/steps/context';
+import type { AgentProfilesInput } from '@/lib/server/generation/steps/agent-profiles';
+import { learnerNamePattern } from '@/lib/orchestration/persona-guide';
 import type { OutlineEvent, OutlineResult } from '@/lib/server/generation/steps/outline';
 import type {
   SceneActionsInput,
@@ -121,7 +130,7 @@ import {
   withRouteRetry,
   type RouteRetryOptions,
 } from './retry';
-import { STEP_DEADLINES_MS, withDeadline } from './deadline';
+import { STEP_DEADLINES_MS, StepTimeoutError, withDeadline } from './deadline';
 import { runFailureCode, type RunFailureCode } from './failure-code';
 import { reportCommittedRunEvents } from './hook-events';
 import type { RunMaterialImage, RunStepServices } from './services';
@@ -151,58 +160,6 @@ import type {
 
 const log = createLogger('GenerationRun');
 
-/** The avatars the agent-profiles step may pick from, as the generation preview offers them. */
-const AGENT_AVATARS = [
-  {
-    path: '/avatars/teacher.png',
-    desc: 'Male teacher with glasses, holding a book, green background',
-  },
-  {
-    path: '/avatars/teacher-2.png',
-    desc: 'Female teacher with long dark hair, blue traditional outfit, gentle expression',
-  },
-  {
-    path: '/avatars/assist.png',
-    desc: 'Young female assistant with glasses, pink background, friendly smile',
-  },
-  {
-    path: '/avatars/assist-2.png',
-    desc: 'Young female in orange top and purple overalls, cheerful and approachable',
-  },
-  {
-    path: '/avatars/clown.png',
-    desc: 'Energetic girl with glasses pointing up, green shirt, lively and fun',
-  },
-  {
-    path: '/avatars/clown-2.png',
-    desc: 'Playful girl with curly hair doing rock gesture, blue shirt, humorous vibe',
-  },
-  {
-    path: '/avatars/curious.png',
-    desc: 'Surprised boy with glasses, hand on cheek, curious expression',
-  },
-  {
-    path: '/avatars/curious-2.png',
-    desc: 'Boy with backpack holding a book and question mark bubble, inquisitive',
-  },
-  {
-    path: '/avatars/note-taker.png',
-    desc: 'Studious boy with glasses, blue shirt, calm and organized',
-  },
-  {
-    path: '/avatars/note-taker-2.png',
-    desc: 'Active boy with yellow backpack waving, blue outfit, enthusiastic learner',
-  },
-  {
-    path: '/avatars/thinker.png',
-    desc: 'Thoughtful girl with hand on chin, purple background, contemplative',
-  },
-  {
-    path: '/avatars/thinker-2.png',
-    desc: 'Girl reading a book intently, long dark hair, intellectual and focused',
-  },
-];
-
 /** The preset agents a learner has before choosing any (the browser's settings default). */
 export const DEFAULT_PRESET_AGENT_IDS = ['default-1', 'default-2', 'default-3'];
 
@@ -216,6 +173,53 @@ function topicFromRequirement(requirement: string): string {
 export function learnerProfileText(input: GenerationRunInput): string | undefined {
   const { nickname, bio } = input.learnerProfile ?? {};
   return nickname || bio ? `Student: ${nickname || 'Unknown'}${bio ? ` — ${bio}` : ''}` : undefined;
+}
+
+/** As much of the learner's self-description as the agent profiles calibrate levels with. */
+const LEARNER_LEVEL_MAX_CHARS = 300;
+
+/**
+ * The learner's level for the agent profiles: their self-description (bio),
+ * with their name masked where the bio says it. The profiles only place the
+ * classmates' levels around it; the personas they write are persisted, so
+ * they never quote it (the step checks).
+ */
+export function learnerLevelText(input: GenerationRunInput): string | undefined {
+  let bio = input.learnerProfile?.bio?.trim();
+  const namePattern = learnerNamePattern(input.learnerProfile?.nickname);
+  if (namePattern && bio) bio = bio.replace(namePattern, '…').trim();
+  if (!bio) return undefined;
+  const chars = Array.from(bio);
+  return chars.length <= LEARNER_LEVEL_MAX_CHARS
+    ? bio
+    : `${chars.slice(0, LEARNER_LEVEL_MAX_CHARS).join('').trim()}...`;
+}
+
+/**
+ * The class the learner asked for, as the agent profiles write it: its size
+ * (teacher included) and what kind of people it is made of. Only an `auto`
+ * run has them; neither is stored with the course.
+ */
+export function requestedClass(
+  input: GenerationRunInput,
+): Pick<AgentProfilesInput, 'agentCount' | 'classAtmosphere'> {
+  if (input.agents.mode !== 'auto') return {};
+  const { count, atmosphere } = input.agents;
+  return {
+    ...(count !== undefined ? { agentCount: count } : {}),
+    ...(atmosphere ? { classAtmosphere: atmosphere } : {}),
+  };
+}
+
+/**
+ * Why generated agents gave way to the presets, as the `agents_fallback`
+ * event reports it for monitoring: the agent-profiles refusal (an unusable
+ * roster after its retry), `timeout`, or `error` for anything else.
+ */
+export function agentsFallbackReason(error: unknown): string {
+  if (error instanceof StepRefusal) return error.reason;
+  if (error instanceof StepTimeoutError) return 'timeout';
+  return 'error';
 }
 
 /** The requirements the outline and the first scene are generated with. */
@@ -659,10 +663,19 @@ async function executeClaimedRun(
         return runOutlineStep(stepId);
 
       case 'agents': {
-        const resolved = await resolveAgents();
+        const { fallbackReason, ...resolved } = await resolveAgents();
         return done(resolved, {
           patch: { agents: resolved.agents },
           events: [
+            // Generated agents gave way to the presets: a monitoring signal.
+            ...(fallbackReason
+              ? [
+                  {
+                    type: 'agents_fallback' as const,
+                    data: { reason: fallbackReason, agentIds: resolved.agents.agentIds },
+                  },
+                ]
+              : []),
             {
               type: 'agents',
               data: {
@@ -725,6 +738,7 @@ async function executeClaimedRun(
                   stageId: agents().stage.id,
                   agents: agents().agents.agents,
                   previousSpeeches: previousSpeechesFor(index),
+                  previousMoments: previousMomentsFor(index),
                   ...(userProfile ? { userProfile } : {}),
                   languageDirective,
                 },
@@ -765,6 +779,46 @@ async function executeClaimedRun(
       if (actions) return actions.previousSpeeches ?? [];
     }
     return [];
+  };
+
+  /** The generated scene at each outline index, as far as the run has one. */
+  const generatedScenes = (count: number): Array<ClassMomentScene | undefined> =>
+    Array.from(
+      { length: count },
+      (_, index) =>
+        output<SceneActionsResult>(sceneStepId(index, 'actions'))?.scene ??
+        output<NarrationOutput>(sceneStepId(index, 'narration'))?.scene,
+    );
+
+  /**
+   * The class moments of the scenes generated before this one: the
+   * discussions, named by who opened them, and the activity pages. A scene's
+   * actions are generated alone, and pace their own moments by these, and
+   * follow up the ones left open.
+   */
+  const previousMomentsFor = (index: number): ClassMoment[] =>
+    classMomentsFromScenes(generatedScenes(index), agents().agents.agents, index + 1);
+
+  /**
+   * One `class_moments_summary` line for the finished course: discussions,
+   * who opened them, the longest stretch without one. For observation and
+   * evaluation only; no prompt reads it.
+   */
+  const logClassMomentsSummary = () => {
+    try {
+      const pages = outline().outlines.length;
+      const moments = classMomentsFromScenes(
+        generatedScenes(pages),
+        agents().agents.agents,
+        pages + 1,
+      );
+      log.info('class_moments_summary', {
+        runId: run.id,
+        ...summarizeClassMoments(moments, pages),
+      });
+    } catch (error) {
+      log.warn(`run ${run.id}: class_moments_summary skipped:`, error);
+    }
   };
 
   const runOutlineStep = async (stepId: string): Promise<StepCommit> => {
@@ -869,7 +923,7 @@ async function executeClaimedRun(
     };
   };
 
-  const resolveAgents = async (): Promise<AgentsOutput> => {
+  const resolveAgents = async (): Promise<AgentsOutput & { fallbackReason?: string }> => {
     const { outlines, languageDirective, courseTitle, taskEngineMode } = outline();
     const name = courseTitle || topicFromRequirement(input.requirement);
     const presets = async (agentIds: readonly string[]): Promise<GenerationRunAgentsResult> => {
@@ -902,9 +956,13 @@ async function executeClaimedRun(
       };
     };
     let result: GenerationRunAgentsResult;
+    let fallbackReason: string | undefined;
     if (input.agents.mode === 'auto') {
       try {
         const target = await services.narrationTarget(owner);
+        const learnerLevel = learnerLevelText(input);
+        const learnerName = input.learnerProfile?.nickname?.trim();
+        const deadlineAt = Date.now() + STEP_DEADLINES_MS.agentProfiles;
         const profiles = await withDeadline(
           'agents',
           STEP_DEADLINES_MS.agentProfiles,
@@ -913,7 +971,17 @@ async function executeClaimedRun(
             services.agentProfiles(
               owner,
               {
-                stageInfo: { name, description: '' },
+                // What the learner asked for describes the course; their own
+                // description (without their name) is the level the classmates
+                // are placed around. The name is only checked for: no persona
+                // may carry it.
+                stageInfo: { name, description: topicFromRequirement(input.requirement) },
+                ...(learnerLevel ? { learnerLevel } : {}),
+                ...(learnerName ? { learnerName } : {}),
+                deadlineAt,
+                // The class size and kind the learner chose describe the
+                // people only; neither reaches the lecture or the director.
+                ...requestedClass(input),
                 sceneOutlines: outlines.map((o) => ({
                   title: o.title,
                   description: o.description,
@@ -942,7 +1010,11 @@ async function executeClaimedRun(
         // A host failure no retry helps pauses the run here instead.
         if (isNonRetryableHostFailure(error)) throw error;
         // As the browser does: the learner's selected preset agents teach.
-        log.warn(`run ${run.id}: agent generation failed, falling back to presets:`, error);
+        fallbackReason = agentsFallbackReason(error);
+        log.warn(
+          `run ${run.id}: agent generation failed (${fallbackReason}), falling back to presets:`,
+          error,
+        );
         // Never an empty roster: without a selection, the browser's default one.
         const selected = input.agents.presetAgentIds ?? [];
         result = await presets(selected.length > 0 ? selected : DEFAULT_PRESET_AGENT_IDS);
@@ -970,7 +1042,7 @@ async function executeClaimedRun(
         : {}),
       videoManifest: buildVideoManifestFromOutlines(outlines),
     };
-    return { agents: result, stage };
+    return { agents: result, stage, ...(fallbackReason ? { fallbackReason } : {}) };
   };
 
   const narrateScene = async (sceneIndex: number, stepId: string): Promise<void> => {
@@ -1697,6 +1769,7 @@ async function executeClaimedRun(
     run = committed!;
     reportCommittedRunEvents(run, events, currentOwnerOf);
     for (const checkpoint of unplaced.steps) steps.set(checkpoint.id, checkpoint.output);
+    logClassMomentsSummary();
   };
 
   const end = async (stageId: string): Promise<void> => {

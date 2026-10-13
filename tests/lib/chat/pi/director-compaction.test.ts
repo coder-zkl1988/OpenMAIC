@@ -186,4 +186,34 @@ describe('Pi Director compaction runtime', () => {
     expect(toHistoryMessages(messages)).toHaveLength(12);
     expect(toHistoryMessages(messages, null)).toHaveLength(20);
   });
+
+  it('compacts the speaker-labelled Director history like the plain one', async () => {
+    const onSummaryCall = vi.fn();
+    const runtime = createDirectorCompactionRuntime({
+      streamFn: summaryStream('Preserve who said what.', onSummaryCall),
+      contextWindow: 600,
+      maxOutputTokens: 200,
+      settings: { enabled: true, reserveTokens: 160, keepRecentTokens: 120 },
+    });
+    const uiHistory = alternatingUiHistory().map((message) =>
+      message.role === 'assistant'
+        ? { ...message, metadata: { agentId: 'teacher-1', senderName: 'Teacher' } }
+        : message,
+    );
+    const history = toHistoryMessages(uiHistory, null, {
+      agents: [{ id: 'teacher-1', name: '林老师', role: 'teacher' }],
+    });
+
+    // One labelled message per UI message, so the compaction cut points are unchanged
+    expect(history).toHaveLength(uiHistory.length);
+    expect(history[1]).toMatchObject({
+      role: 'assistant',
+      content: [{ type: 'text', text: expect.stringMatching(/^林老师 \(teacher\): turn-1:/) }],
+    });
+
+    const compacted = await runtime.transformContext(history);
+    expect(compacted[0]?.role).toBe('compactionSummary');
+    expect(runtime.getTrace()).toMatchObject({ triggerCount: 1, failures: [] });
+    runtime.dispose();
+  });
 });

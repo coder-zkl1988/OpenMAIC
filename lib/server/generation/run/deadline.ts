@@ -15,7 +15,11 @@ export const STEP_DEADLINES_MS = {
   research: 300_000,
   /** The outline, its own stream retries included. */
   outline: 300_000,
-  agentProfiles: 120_000,
+  /**
+   * Both answers of the profiles, up to 120 s each: the first, and the retry
+   * an unusable roster (or a usable class of the wrong size) gets.
+   */
+  agentProfiles: 240_000,
   /** Per attempt. */
   sceneContent: 300_000,
   /** Per attempt. */

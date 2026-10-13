@@ -4,18 +4,56 @@
  * binding each to an advertised voice. The teacher speaks with the user's
  * narrator voice whenever that voice is usable. The logic of 1.1.x's
  * POST /api/generate/agent-profiles.
+ *
+ * The roster the model writes is checked (`validateRoster`, and that no
+ * persona repeats the real learner's own words or name): a roster that fails
+ * is asked for once more, with what was wrong appended to the prompt, and
+ * refused only when that answer fails too. A usable class of another size
+ * than the learner asked for is asked for once more too, but kept should that
+ * retry fail or run out of time.
  */
 import { nanoid } from 'nanoid';
 import { callLLM } from '@/lib/ai/llm';
 import { AGENT_COLOR_PALETTE } from '@/lib/constants/agent-defaults';
 import { normalizeVoiceDesign } from '@/lib/audio/voice-design';
 import { isQwenCloneVoice, resolveTTSModelForVoice } from '@/lib/audio/constants';
+import {
+  describeClassAtmosphere,
+  formatRosterIssues,
+  isCjkText,
+  learnerNamePattern,
+  PERSONA_GUIDE,
+  validateRoster,
+  type ClassAtmosphere,
+  type RosterIssueCode,
+  type RosterRole,
+} from '@/lib/orchestration/persona-guide';
 
 import { StepRefusal, type StepContext, type StepLanguageModel } from './context';
 
 export interface AgentProfilesInput {
+  /** The course: its name, and what the learner asked for as its description. */
   stageInfo: { name: string; description?: string };
+  /**
+   * The real learner's level, to place the classmates' levels around: their
+   * own description of themselves, without their name. Personas are persisted
+   * and shown to anyone who opens the course, so nothing of it may be copied
+   * into them.
+   */
+  learnerLevel?: string;
+  /**
+   * The learner's name. Never shown to the model: only checked for, so that
+   * no persona carries it.
+   */
+  learnerName?: string;
   sceneOutlines?: { title: string; description?: string }[];
+  /**
+   * How many people the class has, teacher included (the learner's class-size
+   * setting). Absent: the model decides from the course.
+   */
+  agentCount?: number;
+  /** What kind of people the class is made of (the learner's choice); it describes them only. */
+  classAtmosphere?: ClassAtmosphere;
   languageDirective: string;
   availableAvatars: string[];
   avatarDescriptions?: Array<{ path: string; desc: string }>;
@@ -34,10 +72,75 @@ export interface AgentProfilesInput {
   };
   /** The agent-profiles stage's model. */
   model: StepLanguageModel;
+  /**
+   * When the caller stops waiting (epoch ms). The optional retry of a usable
+   * class of the wrong size gives up before it, so that class is kept.
+   */
+  deadlineAt?: number;
 }
 
-/** The model's answer could not be read, or did not make a valid classroom. */
-type AgentProfilesRefusal = 'unparseable' | 'too-few-agents' | 'teacher-count';
+/**
+ * The model's answer could not be read, did not make a valid classroom, had
+ * another size than asked for ('agent-count'), or a persona repeated the real
+ * learner's own words or name ('learner-detail').
+ */
+export type AgentProfilesRefusal =
+  | 'unparseable'
+  | 'agent-count'
+  | 'learner-detail'
+  | RosterIssueCode;
+
+/** Answers the model is asked for: the first, and one more when it is unusable. */
+const AGENT_PROFILES_ATTEMPTS = 2;
+
+/** An optional retry starts only with this much time left before the deadline. */
+const OPTIONAL_RETRY_MIN_MS = 20_000;
+/** An optional retry ends this long before the deadline, so its class is still returned. */
+const OPTIONAL_RETRY_MARGIN_MS = 2_000;
+
+/** Consecutive CJK characters a persona may not share with the learner's own words. */
+const LEARNER_ECHO_CJK_CHARS = 6;
+/** Consecutive words a persona may not share with the learner's own words. */
+const LEARNER_ECHO_WORDS = 4;
+const CJK_RUNS = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu;
+
+function wordsOf(text: string): string[] {
+  return (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((word) => !isCjkText(word));
+}
+
+function wordGrams(words: readonly string[], size: number): Set<string> {
+  const grams = new Set<string>();
+  for (let i = 0; i + size <= words.length; i += 1) grams.add(words.slice(i, i + size).join(' '));
+  return grams;
+}
+
+/**
+ * The persona repeats the real learner: their name, or a stretch of their own
+ * description (6+ CJK characters, or 4+ words, in a row). Personas are
+ * persisted and shown to everyone who opens the course; the learner's words
+ * only calibrate levels.
+ */
+export function echoesLearner(
+  persona: string,
+  learner: { level?: string; name?: string },
+): boolean {
+  const namePattern = learnerNamePattern(learner.name);
+  if (namePattern && persona.search(namePattern) >= 0) return true;
+  const level = learner.level;
+  if (!level) return false;
+  for (const run of level.match(CJK_RUNS) ?? []) {
+    const chars = Array.from(run);
+    for (let i = 0; i + LEARNER_ECHO_CJK_CHARS <= chars.length; i += 1) {
+      if (persona.includes(chars.slice(i, i + LEARNER_ECHO_CJK_CHARS).join(''))) return true;
+    }
+  }
+  const levelGrams = wordGrams(wordsOf(level), LEARNER_ECHO_WORDS);
+  if (levelGrams.size === 0) return false;
+  for (const gram of wordGrams(wordsOf(persona), LEARNER_ECHO_WORDS)) {
+    if (levelGrams.has(gram)) return true;
+  }
+  return false;
+}
 
 type AdvertisedVoice = NonNullable<AgentProfilesInput['availableVoices']>[number];
 
@@ -138,13 +241,133 @@ function stripCodeFences(text: string): string {
   return cleaned.trim();
 }
 
+/** One agent as the model wrote it; nothing in it is trusted yet. */
+interface ModelAgent {
+  name: string;
+  role: string;
+  persona: string;
+  avatar?: unknown;
+  color?: unknown;
+  priority?: unknown;
+  voice?: unknown;
+  voiceDesign?: unknown;
+}
+
+type CheckedRoster = Array<ModelAgent & { role: RosterRole }>;
+
+type RosterReading =
+  | { ok: true; agents: CheckedRoster; warnings: string[] }
+  | {
+      ok: false;
+      reason: AgentProfilesRefusal;
+      /** For the log and the refusal (never the learner's own words). */
+      message: string;
+      /** What the retry prompt says was wrong, one line each. */
+      feedback: string;
+      warnings: string[];
+      /**
+       * A class that is fine but for its size ('agent-count'): kept should
+       * the retry fail.
+       */
+      usable?: CheckedRoster;
+    };
+
+/**
+ * Read and check one answer of the model. A class of another size than the
+ * learner asked for is asked for again, but accepted on the last attempt: a
+ * class of a different size beats the preset fallback. A persona repeating
+ * the real learner (`learner`) is never accepted.
+ */
+export function readRoster(
+  text: string,
+  options: {
+    agentCount?: number;
+    lastAttempt?: boolean;
+    learner?: { level?: string; name?: string };
+  } = {},
+): RosterReading {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripCodeFences(text));
+  } catch {
+    parsed = undefined;
+  }
+  const list = (parsed as { agents?: unknown } | undefined)?.agents;
+  if (!Array.isArray(list)) {
+    return {
+      ok: false,
+      reason: 'unparseable',
+      message: 'Failed to parse agent profiles from LLM response',
+      feedback:
+        '- It was not a JSON object of the structure above (an object with an "agents" array).',
+      warnings: [],
+    };
+  }
+  const agents = list.map((entry): ModelAgent => {
+    const agent = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>;
+    return {
+      ...agent,
+      name: typeof agent.name === 'string' ? agent.name : '',
+      role: typeof agent.role === 'string' ? agent.role : '',
+      persona: typeof agent.persona === 'string' ? agent.persona : '',
+    };
+  });
+  const checked = validateRoster(agents);
+  const warnings = checked.warnings.map((warning) => warning.message);
+  const sizeIssue =
+    options.agentCount && agents.length !== options.agentCount
+      ? `- The class has exactly ${options.agentCount} agents (the teacher and ${options.agentCount - 1} others); there are ${agents.length}.`
+      : undefined;
+  const learner = options.learner;
+  const echoing = learner
+    ? agents.flatMap((agent, index) =>
+        echoesLearner(agent.persona, learner)
+          ? [`Agent ${index + 1}${agent.name.trim() ? ` ("${agent.name.trim()}")` : ''}`]
+          : [],
+      )
+    : [];
+  const echoIssue =
+    echoing.length > 0
+      ? `- ${echoing.join(', ')}: the persona repeats the real learner's own words or name. Describe each classmate in your own words, with nothing personal about the learner.`
+      : undefined;
+  if (checked.ok && !echoIssue) {
+    if (!sizeIssue) return { ok: true, agents: checked.agents, warnings };
+    if (options.lastAttempt) {
+      warnings.push(`kept a class of ${agents.length}, not ${options.agentCount}`);
+      return { ok: true, agents: checked.agents, warnings };
+    }
+    return {
+      ok: false,
+      reason: 'agent-count',
+      message: `Expected ${options.agentCount} agents but the LLM returned ${agents.length}`,
+      feedback: sizeIssue,
+      warnings,
+      usable: checked.agents,
+    };
+  }
+  return {
+    ok: false,
+    reason: checked.issues[0]?.code ?? 'learner-detail',
+    message: [
+      ...checked.issues.map((issue) => issue.message),
+      ...(echoIssue ? [`${echoing.join(', ')} repeat the learner's own words or name.`] : []),
+    ].join(' '),
+    feedback: [formatRosterIssues(checked.issues), echoIssue, sizeIssue].filter(Boolean).join('\n'),
+    warnings,
+  };
+}
+
 export async function generateAgentProfiles(
   input: AgentProfilesInput,
   ctx: StepContext,
 ): Promise<GeneratedAgentProfile[]> {
   const {
     stageInfo,
+    learnerLevel,
+    learnerName,
     sceneOutlines,
+    agentCount,
+    classAtmosphere,
     languageDirective,
     availableAvatars,
     avatarDescriptions,
@@ -167,7 +390,11 @@ export async function generateAgentProfiles(
     ? resolveNarratorVoice(narratorVoice, availableVoices)
     : undefined;
 
-  const systemPrompt = `You are an expert instructional designer. Generate agent profiles for a multi-agent classroom simulation. Decide the appropriate number of agents (typically 3-5) based on the course content and complexity. Return ONLY valid JSON, no markdown or explanation.`;
+  const systemPrompt = `You are an expert instructional designer. Generate agent profiles for a multi-agent classroom simulation. ${
+    agentCount
+      ? `The class has exactly ${agentCount} agents.`
+      : 'Decide the appropriate number of agents (typically 3-5) based on the course content and complexity.'
+  } Return ONLY valid JSON, no markdown or explanation.`;
 
   // Build voice list for prompt (if available)
   const voiceListStr =
@@ -208,12 +435,23 @@ export async function generateAgentProfiles(
 
 Course name: ${stageInfo.name}
 ${stageInfo.description ? `Course description: ${stageInfo.description}` : ''}
+${learnerLevel ? `The learner taking this course (private; only to judge their level): ${learnerLevel}` : ''}
 ${sceneSummary ? `\nScene outlines:\n${sceneSummary}\n` : ''}
 Requirements:
-- Decide the appropriate number of agents based on the course content (typically 3-5)
+- ${
+    agentCount
+      ? `Generate exactly ${agentCount} agents: the teacher and ${agentCount - 1} others`
+      : 'Decide the appropriate number of agents based on the course content (typically 3-5)'
+  }
 - Exactly 1 agent must have role "teacher", the rest can be "assistant" or "student"
 - Priority values: teacher=10 (highest), assistant=7, student=4-6
-- Each agent needs: name, role, persona (2-3 sentences describing personality and teaching/learning style)
+- Each agent needs: name, role, persona; every agent has their own name
+- ${PERSONA_GUIDE.replace(/\n/g, '\n  ')}
+- The students are the learner's classmates. ${learnerLevel ? "Place their levels around the learner's level given above" : 'Place their levels around the level the course is aimed at'}: most close to it, one perhaps a little ahead, one a little behind — never a copy of the learner.
+- Make the students clearly different from one another, as students in a real class are.${
+    classAtmosphere ? `\n- ${describeClassAtmosphere(classAtmosphere)}` : ''
+  }
+- Never copy anything personal about the real learner (their name, school, background, interests) into a persona: personas are shown to everyone who opens the course.
 - Language directive for this course: ${languageDirective}
   Agent names and personas must follow this language directive.
 - Each agent must be assigned one avatar from this list: ${JSON.stringify(avatarDescriptions && avatarDescriptions.length > 0 ? avatarDescriptions.map((a) => ({ path: a.path, description: a.desc })) : availableAvatars)}
@@ -234,7 +472,7 @@ Return a JSON object with this exact structure:
     {
       "name": "string",
       "role": "teacher" | "assistant" | "student",
-      "persona": "string (2-3 sentences)",
+      "persona": "string (3-5 sentences)",
       "voiceDesign": { "identity": "string", "texture": "string", "delivery": "string" },
       "avatar": "string (from available list)",
       "color": "string (hex color from palette)",
@@ -245,66 +483,84 @@ Return a JSON object with this exact structure:
 
   log.info(`Generating agent profiles for "${stageInfo.name}" [model=${modelString}]`);
 
-  const rawResult = (
-    await callLLM(
-      {
-        model: languageModel,
-        abortSignal: ctx.signal,
-        system: systemPrompt,
-        prompt: userPrompt,
-      },
-      'agent-profiles',
-      undefined,
-      thinkingConfig,
-      { serverManaged },
-    )
-  ).text;
+  // ── Ask, check, and ask once more with what was wrong ──
+  const learner =
+    learnerLevel || learnerName ? { level: learnerLevel, name: learnerName } : undefined;
+  let prompt = userPrompt;
+  let refusal: StepRefusal<AgentProfilesRefusal> | undefined;
+  let roster: CheckedRoster | undefined;
+  // A usable class of the wrong size: the retry for the size is optional
+  let kept: CheckedRoster | undefined;
+  for (let attempt = 1; attempt <= AGENT_PROFILES_ATTEMPTS; attempt += 1) {
+    if (attempt > 1 && ctx.signal?.aborted) break;
+    let callSignal = ctx.signal;
+    if (kept) {
+      // Only while there is time for it: the class in hand must still be returned
+      const left = input.deadlineAt === undefined ? undefined : input.deadlineAt - Date.now();
+      if (left !== undefined && left < OPTIONAL_RETRY_MIN_MS) break;
+      if (left !== undefined) {
+        const timeout = AbortSignal.timeout(left - OPTIONAL_RETRY_MARGIN_MS);
+        callSignal = ctx.signal ? AbortSignal.any([ctx.signal, timeout]) : timeout;
+      }
+    }
+    let rawResult: string;
+    try {
+      rawResult = (
+        await callLLM(
+          {
+            model: languageModel,
+            abortSignal: callSignal,
+            system: systemPrompt,
+            prompt,
+          },
+          'agent-profiles',
+          undefined,
+          thinkingConfig,
+          { serverManaged },
+        )
+      ).text;
+    } catch (error) {
+      if (!kept || ctx.signal?.aborted) throw error;
+      log.warn(
+        `Agent profiles attempt ${attempt} failed (${error instanceof Error ? error.message : String(error)}); keeping the earlier class`,
+      );
+      break;
+    }
+    const reading = readRoster(rawResult, {
+      agentCount,
+      lastAttempt: attempt === AGENT_PROFILES_ATTEMPTS,
+      learner,
+    });
+    for (const warning of reading.warnings) log.warn(`Agent profiles: ${warning}`);
+    if (reading.ok) {
+      roster = reading.agents;
+      break;
+    }
+    log.warn(`Agent profiles attempt ${attempt} unusable (${reading.reason}): ${reading.message}`);
+    if (reading.reason === 'unparseable') {
+      log.error('Agent profiles answer:', rawResult.substring(0, 500));
+    }
+    if (reading.usable) kept = reading.usable;
+    refusal = new StepRefusal<AgentProfilesRefusal>(reading.reason, reading.message);
+    prompt = `${userPrompt}
 
-  // ── Parse LLM response ──
-  const rawText = stripCodeFences(rawResult);
-  let parsed: {
-    agents: Array<{
-      name: string;
-      role: string;
-      persona: string;
-      avatar: string;
-      color: string;
-      priority: number;
-      voice?: unknown;
-      voiceDesign?: unknown;
-    }>;
-  };
-
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    log.error('Failed to parse LLM response as JSON:', rawText.substring(0, 500));
-    throw new StepRefusal<AgentProfilesRefusal>(
-      'unparseable',
-      'Failed to parse agent profiles from LLM response',
-    );
+Your previous answer could not be used:
+${reading.feedback}
+Write the whole JSON object again with these fixed.`;
   }
-
-  // ── Validate parsed structure ──
-  if (!parsed.agents || !Array.isArray(parsed.agents) || parsed.agents.length < 2) {
-    log.error(`Expected at least 2 agents, got ${parsed.agents?.length ?? 0}`);
-    throw new StepRefusal<AgentProfilesRefusal>(
-      'too-few-agents',
-      `Expected at least 2 agents but LLM returned ${parsed.agents?.length ?? 0}`,
-    );
+  if (!roster && kept) {
+    log.warn(`Agent profiles: kept a class of ${kept.length}, not ${agentCount}`);
+    roster = kept;
   }
-
-  const teacherCount = parsed.agents.filter((a) => a.role === 'teacher').length;
-  if (teacherCount !== 1) {
-    log.error(`Expected exactly 1 teacher, got ${teacherCount}`);
-    throw new StepRefusal<AgentProfilesRefusal>(
-      'teacher-count',
-      `Expected exactly 1 teacher but LLM returned ${teacherCount}`,
+  if (!roster) {
+    throw (
+      refusal ??
+      new StepRefusal<AgentProfilesRefusal>('unparseable', 'No agent profiles were generated')
     );
   }
 
   // ── Build output with IDs ──
-  const agents = parsed.agents.map((agent, index): GeneratedAgentProfile => {
+  const agents = roster.map((agent, index): GeneratedAgentProfile => {
     // The teacher speaks with the user's explicitly selected narrator voice —
     // the LLM must never reassign it. Everyone else resolves only an
     // advertised voice token so provider/model/voice remain bound together.
@@ -334,13 +590,23 @@ Return a JSON object with this exact structure:
 
     return {
       id: `gen-${nanoid(8)}`,
-      name: agent.name,
+      name: agent.name.trim(),
       role: agent.role,
-      persona: agent.persona,
-      avatar: agent.avatar || availableAvatars[index % availableAvatars.length],
-      color: agent.color || AGENT_COLOR_PALETTE[index % AGENT_COLOR_PALETTE.length],
+      persona: agent.persona.trim(),
+      avatar:
+        (typeof agent.avatar === 'string' && agent.avatar) ||
+        availableAvatars[index % availableAvatars.length],
+      color:
+        (typeof agent.color === 'string' && agent.color) ||
+        AGENT_COLOR_PALETTE[index % AGENT_COLOR_PALETTE.length],
       priority:
-        agent.priority ?? (agent.role === 'teacher' ? 10 : agent.role === 'assistant' ? 7 : 5),
+        typeof agent.priority === 'number'
+          ? agent.priority
+          : agent.role === 'teacher'
+            ? 10
+            : agent.role === 'assistant'
+              ? 7
+              : 5,
       ...(voiceConfig ? { voiceConfig } : {}),
       ...(voiceDesign ? { voiceDesign } : {}),
     };

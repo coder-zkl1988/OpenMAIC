@@ -27,6 +27,12 @@ import {
   type LegacyModelSettingsState,
 } from '@/lib/legacy-browser-import/model-settings';
 import { keepUnimported } from '@/lib/legacy-browser-import/model-settings-unimported';
+import {
+  AUTO_AGENT_COUNT_MAX,
+  AUTO_AGENT_COUNT_MIN,
+  isClassAtmosphere,
+  type ClassAtmosphere,
+} from '@/lib/orchestration/persona-guide';
 
 /** Persisted-blob version for zustand's `persist` `migrate` ladder. */
 const SETTINGS_PERSIST_VERSION = 6;
@@ -90,11 +96,38 @@ export interface SettingsState {
   ttsVolume: number; // 0-1, actual volume level
   autoPlayLecture: boolean;
   playbackSpeed: PlaybackSpeed;
+  /**
+   * While the lecture plays, a question (typed, 举手 or voice) goes to the
+   * classroom's teaching assistant, who answers in the interaction panel
+   * while the teacher keeps lecturing. Off, or without an assistant: the
+   * teacher pauses at the end of the line and answers.
+   */
+  assistantAnswersDuringLecture: boolean;
+  /**
+   * The teacher may call on the learner by name with a direct question, as
+   * on a classmate. Off (the default): nobody singles the learner out; a
+   * question the teacher puts to the whole class still reaches them.
+   */
+  teacherMayCallOnLearner: boolean;
 
   // Agent settings
   selectedAgentIds: string[];
   agentMode: 'preset' | 'auto';
+  /** Auto mode: the class size the learner picked, teacher included (see autoAgentCountSet) */
   autoAgentCount: number;
+  /**
+   * The learner picked `autoAgentCount` (I28). Off (the default, and every
+   * blob from before the choice existed, whose 3 nobody chose): the model
+   * decides how many classmates a course gets.
+   */
+  autoAgentCountSet: boolean;
+  /**
+   * Auto mode: what kind of classmates are generated (I28) — it only
+   * describes the people when their personas are written. Never stored with
+   * a course, and never sent to the classroom or the lecture. Unset: no
+   * preference.
+   */
+  classAtmosphere?: ClassAtmosphere;
   /**
    * Per-agent voice picks made in the AgentBar, keyed by agent id. Lives here
    * (persisted) rather than on registry AgentConfig records because default
@@ -108,6 +141,17 @@ export interface SettingsState {
    * load. Only a user-set selection carries across classrooms on restore.
    */
   agentSelectionIsUserSet: boolean;
+  /**
+   * The user's explicit preset classmates, parked while a course with its own
+   * (generated) classmates is open: that course is taught by its own
+   * classmates, and the preset choice comes back on the home page and in the
+   * next course without generated classmates. Empty: nothing is parked.
+   */
+  parkedPresetAgentIds: string[];
+  /** Always use the preset classmates, even in a course with its own classmates. */
+  presetAgentsInGeneratedCourses: boolean;
+  /** The classroom told the user once that a course's own classmates replaced their preset. */
+  ownClassmatesNoticeSeen: boolean;
 
   // Layout preferences (persisted via localStorage)
   sidebarCollapsed: boolean;
@@ -136,14 +180,28 @@ export interface SettingsState {
   setTTSVolume: (volume: number) => void;
   setAutoPlayLecture: (autoPlay: boolean) => void;
   setPlaybackSpeed: (speed: PlaybackSpeed) => void;
+  setAssistantAnswersDuringLecture: (enabled: boolean) => void;
+  setTeacherMayCallOnLearner: (enabled: boolean) => void;
 
   // Agent actions
   setSelectedAgentIds: (ids: string[]) => void;
   setAgentMode: (mode: 'preset' | 'auto') => void;
-  setAutoAgentCount: (count: number) => void;
+  /** Pick the class size (teacher included), or `null` to let the model decide */
+  setAutoAgentCount: (count: number | null) => void;
+  /** Pick the kind of class, or `undefined` for no preference */
+  setClassAtmosphere: (atmosphere: ClassAtmosphere | undefined) => void;
   /** Set (or clear, with `undefined`) the persisted voice pick for one agent. */
   setAgentVoiceOverride: (agentId: string, voice: AgentVoiceOverride | undefined) => void;
   setAgentSelectionIsUserSet: (isUserSet: boolean) => void;
+  setParkedPresetAgentIds: (ids: string[]) => void;
+  setPresetAgentsInGeneratedCourses: (enabled: boolean) => void;
+  setOwnClassmatesNoticeSeen: (seen: boolean) => void;
+  /**
+   * Bring parked preset classmates back as the user's explicit selection (the
+   * home page, where new courses start; or "always use my preset classmates"
+   * in the classroom). A no-op when nothing is parked.
+   */
+  restoreParkedPresetAgents: () => void;
 
   // Layout actions
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -164,11 +222,18 @@ const PERSISTED_FIELDS = [
   'ttsVolume',
   'autoPlayLecture',
   'playbackSpeed',
+  'assistantAnswersDuringLecture',
+  'teacherMayCallOnLearner',
   'selectedAgentIds',
   'agentMode',
   'autoAgentCount',
+  'autoAgentCountSet',
+  'classAtmosphere',
   'agentVoiceOverrides',
   'agentSelectionIsUserSet',
+  'parkedPresetAgentIds',
+  'presetAgentsInGeneratedCourses',
+  'ownClassmatesNoticeSeen',
   'sidebarCollapsed',
   'chatAreaCollapsed',
   'chatAreaWidth',
@@ -245,6 +310,31 @@ export function migrateSettingsToV6(
   };
 }
 
+/** A class size the generation run accepts: a whole number within its bounds */
+export function clampAutoAgentCount(count: number): number {
+  const whole = Number.isFinite(count) ? Math.round(count) : AUTO_AGENT_COUNT_MIN;
+  return Math.min(AUTO_AGENT_COUNT_MAX, Math.max(AUTO_AGENT_COUNT_MIN, whole));
+}
+
+/**
+ * The class the learner asked an auto-generated roster for (I28), as a
+ * generation run's `agents` takes it in auto mode: the size only once the
+ * learner picked one (else the model decides), the atmosphere only when set
+ * and known. Both are checked here, so the run never refuses them.
+ */
+export function autoClassRequest(
+  settings: Pick<SettingsState, 'autoAgentCount' | 'autoAgentCountSet' | 'classAtmosphere'>,
+): { count?: number; atmosphere?: ClassAtmosphere } {
+  return {
+    ...(settings.autoAgentCountSet && typeof settings.autoAgentCount === 'number'
+      ? { count: clampAutoAgentCount(settings.autoAgentCount) }
+      : {}),
+    ...(isClassAtmosphere(settings.classAtmosphere)
+      ? { atmosphere: settings.classAtmosphere }
+      : {}),
+  };
+}
+
 /** Set when a load staged kept model settings: the store writes itself back without them. */
 let stagedOnLoad = false;
 
@@ -265,13 +355,24 @@ export const useSettingsStore = create<SettingsState>()(
       ttsVolume: 1,
       autoPlayLecture: false,
       playbackSpeed: 1,
+      // Blobs persisted before this field pick it up through merge
+      assistantAnswersDuringLecture: true,
+      // Off until the casting stats say otherwise (I10.5); older blobs merge it in
+      teacherMayCallOnLearner: false,
 
       // Agents
       selectedAgentIds: ['default-1', 'default-2', 'default-3'],
       agentMode: 'auto' as const,
       autoAgentCount: 3,
+      // Older blobs merge these in: the model keeps deciding, no class preference
+      autoAgentCountSet: false,
+      classAtmosphere: undefined,
       agentVoiceOverrides: {},
       agentSelectionIsUserSet: false,
+      // Blobs persisted before these fields pick them up through merge
+      parkedPresetAgentIds: [],
+      presetAgentsInGeneratedCourses: false,
+      ownClassmatesNoticeSeen: false,
 
       // Layout preferences (both panels open, as the classroom design shows)
       sidebarCollapsed: false,
@@ -289,10 +390,20 @@ export const useSettingsStore = create<SettingsState>()(
       setTTSVolume: (volume) => set({ ttsVolume: Math.max(0, Math.min(1, volume)) }),
       setAutoPlayLecture: (autoPlay) => set({ autoPlayLecture: autoPlay }),
       setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
+      setAssistantAnswersDuringLecture: (enabled) =>
+        set({ assistantAnswersDuringLecture: enabled }),
+      setTeacherMayCallOnLearner: (enabled) => set({ teacherMayCallOnLearner: enabled }),
 
       setSelectedAgentIds: (ids) => set({ selectedAgentIds: ids }),
       setAgentMode: (mode) => set({ agentMode: mode }),
-      setAutoAgentCount: (count) => set({ autoAgentCount: count }),
+      setAutoAgentCount: (count) =>
+        set(
+          count === null
+            ? { autoAgentCountSet: false }
+            : { autoAgentCount: clampAutoAgentCount(count), autoAgentCountSet: true },
+        ),
+      setClassAtmosphere: (atmosphere) =>
+        set({ classAtmosphere: isClassAtmosphere(atmosphere) ? atmosphere : undefined }),
       setAgentVoiceOverride: (agentId, voice) =>
         set((state) => {
           const next = { ...state.agentVoiceOverrides };
@@ -304,6 +415,23 @@ export const useSettingsStore = create<SettingsState>()(
           return { agentVoiceOverrides: next };
         }),
       setAgentSelectionIsUserSet: (isUserSet) => set({ agentSelectionIsUserSet: isUserSet }),
+      setParkedPresetAgentIds: (ids) => set({ parkedPresetAgentIds: ids }),
+      setPresetAgentsInGeneratedCourses: (enabled) =>
+        set({ presetAgentsInGeneratedCourses: enabled }),
+      setOwnClassmatesNoticeSeen: (seen) => set({ ownClassmatesNoticeSeen: seen }),
+      restoreParkedPresetAgents: () =>
+        set((state) => {
+          const parked = Array.isArray(state.parkedPresetAgentIds)
+            ? state.parkedPresetAgentIds
+            : [];
+          if (parked.length === 0) return {};
+          return {
+            agentMode: 'preset' as const,
+            selectedAgentIds: [...parked],
+            agentSelectionIsUserSet: true,
+            parkedPresetAgentIds: [],
+          };
+        }),
 
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       setChatAreaCollapsed: (collapsed) => set({ chatAreaCollapsed: collapsed }),

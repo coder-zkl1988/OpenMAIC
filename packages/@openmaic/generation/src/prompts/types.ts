@@ -28,6 +28,7 @@ export type SnippetId =
   | 'slide-image-instructions'
   | 'slide-generated-image-instructions'
   | 'slide-video-instructions'
+  | 'slide-whiteboard-actions'
   | 'speech-tts-readability';
 
 /** Loaded prompt template. */

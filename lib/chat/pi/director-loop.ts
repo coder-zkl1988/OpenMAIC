@@ -2,11 +2,26 @@ import { convertToLlm, type AgentTool } from '@earendil-works/pi-agent-core';
 import type { LanguageModel } from 'ai';
 import { buildAgent } from '@/lib/agent/runtime/build-agent';
 import { createCallLlmStreamFn } from '@/lib/agent/runtime/stream-fn';
+import { getPiCastingMode } from '@/lib/config/feature-flags';
+import { createLogger } from '@/lib/logger';
 import type { AgentConfig } from '@/lib/orchestration/registry/types';
 import type { AgentTurnSummary, WhiteboardActionRecord } from '@/lib/orchestration/types';
-import type { StatelessChatRequest, StatelessEvent } from '@/lib/types/chat';
+import type {
+  PiCastingMode,
+  PiChildTurnStub,
+  StatelessChatRequest,
+  StatelessEvent,
+} from '@/lib/types/chat';
 import type { ThinkingConfig } from '@/lib/types/provider';
 import { buildDirectorPrompt, buildUserPrompt, toHistoryMessages } from './prompts';
+import { isAsideToLecture } from './config';
+import {
+  buildCastingLog,
+  sumAssistantUsage,
+  type CastingTerminal,
+  type ChildTurnMeta,
+} from './casting-log';
+import { PI_PROMPT_CACHE_OPTIONS } from './prompt-cache';
 import { createDirectorCompactionRuntime } from './director-compaction';
 import type { DirectorToolTraceEntry, SendEvent } from './types';
 import type { ChildRuntimeMode } from './child-runtime';
@@ -22,8 +37,45 @@ import type { NativeWebSearchConfig } from './tools/web-search';
 import type { WhiteboardRuntimeService } from '@/lib/whiteboard/runtime/store';
 import type { ResolvedElementReference } from './element-reference';
 
+const log = createLogger('Pi Director');
+
 function formatSceneEvidenceForDelegation(evidence: DirectorSceneEvidencePacket[]): string {
   return evidence.map((packet) => packet.content).join('\n\n');
+}
+
+function toSceneEvidenceMetadata(
+  packet: DirectorSceneEvidencePacket,
+): DirectorSceneEvidenceMetadata {
+  return {
+    sceneId: packet.details.sceneId,
+    title: packet.details.title,
+    sceneType: packet.details.sceneType,
+    order: packet.details.order,
+    revision: packet.details.revision,
+    source: packet.details.source,
+  };
+}
+
+/** How a turn that ended on a student's line was closed (for casting metrics) */
+type StudentLastWordEnd = 'cue_user' | 'close_session' | 'fallback_cue';
+
+/**
+ * The reminder the director gets once per turn when a student had the last
+ * word: a student's wrong or open idea should be taken up by the teacher or
+ * assistant, unless the student was asking the learner a question.
+ */
+function buildStudentLastWordNudge(
+  studentName: string,
+  tool: 'cue_user' | 'close_session',
+  prompt?: string,
+): string {
+  return [
+    `The last line of this turn came from ${studentName}, a student.`,
+    `If it may be wrong or leaves something open, call the teacher or teaching assistant to take it up first, in their own way.`,
+    tool === 'cue_user'
+      ? `If ${studentName} was asking the learner a question, call cue_user again${prompt ? '' : ' with that question as its prompt'}.`
+      : 'If the moment is really over, call close_session again.',
+  ].join(' ');
 }
 
 export async function runPiDirectorLoop(opts: {
@@ -49,14 +101,32 @@ export async function runPiDirectorLoop(opts: {
   nativeWhiteboardStageId?: string;
   nativeWhiteboardLearnerKey?: string;
   requestStartManualVisibilityRevision?: number;
+  /** The director's casting rules; default from OPENMAIC_PI_PERSONA_CASTING */
+  castingMode?: PiCastingMode;
+  /**
+   * Eval-only (eval/pi-casting): scripted child speech instead of child LLM
+   * runs. The route never sets it, and nothing in the request can.
+   */
+  childTurnStub?: PiChildTurnStub;
 }): Promise<void> {
+  const castingMode = opts.castingMode ?? getPiCastingMode();
+  // 'legacy' rolls back the persona turn mechanics too (the student-last-word
+  // reminder, the closing turn past the limit, a student handing back with a
+  // question), so the A/B baseline is the earlier loop
+  const personaMechanics = castingMode === 'persona';
   let totalAgents = 0;
   let totalActions = 0;
   let agentHadContent = false;
   let userCued = false;
   let sessionClosed = false;
   let endReason: string | undefined;
+  let terminal: CastingTerminal = 'none';
+  let cuePrompt = false;
   let directorToolCalls = 0;
+  // A student's wrong or open line should not end the turn: the first
+  // cue_user / close_session after one gets a reminder, once per turn
+  let studentLastWordNudged = false;
+  let studentLastWordEnd: StudentLastWordEnd | undefined;
   const pendingSceneEvidence = new Map<string, DirectorSceneEvidencePacket>();
   // Request-scoped read-only evidence. `metadata` exists only when a component was
   // referenced; area state alone carries content without any element identity.
@@ -70,8 +140,13 @@ export async function runPiDirectorLoop(opts: {
         })
       : undefined;
   const directorToolTrace: DirectorToolTraceEntry[] = [];
+  // The assistant answers on the side while the teacher keeps lecturing
+  const asideToLecture = isAsideToLecture(opts.body);
   const maxDirectorToolCalls = Math.max(opts.maxAgentTurns * 3, opts.maxAgentTurns + 3);
   const piAgentResponses: AgentTurnSummary[] = [];
+  // The casting log's view of each child turn: role, castReason, length, cost
+  const childTurnMetas: Array<ChildTurnMeta | undefined> = [];
+  let pendingTurnMeta: ChildTurnMeta | undefined;
   const piWhiteboardLedger: WhiteboardActionRecord[] = [];
   const requestStartCurrentScene = (() => {
     const sceneId = opts.body.storeState.currentSceneId;
@@ -107,18 +182,44 @@ export async function runPiDirectorLoop(opts: {
     piAgentResponses.some(
       (summary) => summary.contentPreview.trim().length > 0 || summary.actionCount > 0,
     );
+  /** The student who spoke this loop's last visible line, if a student did (never in an aside) */
+  const getStudentLastWord = (): AgentTurnSummary | undefined => {
+    if (asideToLecture) return undefined;
+    const lastVisible = piAgentResponses.findLast(
+      (summary) => summary.contentPreview.trim().length > 0,
+    );
+    if (!lastVisible) return undefined;
+    const agent = opts.agentConfigs.find((candidate) => candidate.id === lastVisible.agentId);
+    return agent?.role === 'student' ? lastVisible : undefined;
+  };
+  const takeStudentLastWordNudge = (
+    tool: 'cue_user' | 'close_session',
+    prompt?: string,
+  ): string | undefined => {
+    if (!personaMechanics || studentLastWordNudged) return undefined;
+    const student = getStudentLastWord();
+    if (!student) return undefined;
+    studentLastWordNudged = true;
+    return buildStudentLastWordNudge(student.agentName, tool, prompt);
+  };
   const cueUser = async (
     data: Extract<StatelessEvent, { type: 'cue_user' }>['data'],
+    source: 'cue_user' | 'fallback_cue' = 'cue_user',
   ): Promise<boolean> => {
     if (userCued) return false;
     userCued = true;
+    terminal = source;
+    cuePrompt = Boolean(data.prompt);
+    if (getStudentLastWord()) studentLastWordEnd = source;
     await opts.send({ type: 'cue_user', data });
     return true;
   };
   const closeSession = async (data: { endReason?: string }): Promise<boolean> => {
     if (sessionClosed || userCued) return false;
     sessionClosed = true;
+    terminal = 'close_session';
     endReason = data.endReason;
+    if (getStudentLastWord()) studentLastWordEnd = 'close_session';
     return true;
   };
 
@@ -128,6 +229,7 @@ export async function runPiDirectorLoop(opts: {
     thinkingConfig: opts.thinkingConfig,
     source: 'pi-chat-director',
     abortSignal: opts.abortSignal,
+    ...PI_PROMPT_CACHE_OPTIONS,
   });
   const compactionRuntime = createDirectorCompactionRuntime({
     streamFn,
@@ -147,10 +249,15 @@ export async function runPiDirectorLoop(opts: {
       agentConfigs: opts.agentConfigs,
       send: opts.send,
       languageModel: opts.languageModel,
+      onAgentTurnMeta: (turn) => {
+        pendingTurnMeta = turn;
+      },
       onAgentDone: (summary) => {
         totalAgents += 1;
         if (summary.contentPreview || summary.actionCount > 0) agentHadContent = true;
         piAgentResponses.push(summary);
+        childTurnMetas.push(pendingTurnMeta);
+        pendingTurnMeta = undefined;
       },
       onActionDone: (record) => {
         totalActions += 1;
@@ -180,46 +287,58 @@ export async function runPiDirectorLoop(opts: {
       requestStartCurrentScene,
       isUserCued: () => userCued,
       isSessionClosed: () => sessionClosed,
-      takeSceneEvidence: () => {
-        if (pendingSceneEvidence.size === 0) return undefined;
-        const packets = [...pendingSceneEvidence.values()];
-        pendingSceneEvidence.clear();
+      getStudentLastWord,
+      castingMode,
+      takeSceneEvidence: (accept) => {
+        const packets = [...pendingSceneEvidence.values()].filter(
+          (packet) => !accept || accept(toSceneEvidenceMetadata(packet)),
+        );
+        if (packets.length === 0) return undefined;
+        for (const packet of packets) pendingSceneEvidence.delete(packet.details.sceneId);
         return {
           content: formatSceneEvidenceForDelegation(packets),
-          metadata: packets.map(
-            (packet): DirectorSceneEvidenceMetadata => ({
-              sceneId: packet.details.sceneId,
-              title: packet.details.title,
-              sceneType: packet.details.sceneType,
-              order: packet.details.order,
-              revision: packet.details.revision,
-              source: packet.details.source,
-            }),
-          ),
+          metadata: packets.map(toSceneEvidenceMetadata),
         };
       },
+      peekSceneEvidence: () => [...pendingSceneEvidence.values()].map(toSceneEvidenceMetadata),
       elementReferenceEvidence,
+      childTurnStub: opts.childTurnStub,
     }),
-    buildCloseSessionTool({
-      closeSession,
-      canCloseSession: hasVisibleAgentTurn,
-      isUserCued: () => userCued,
-    }),
+    // An aside to the lecture stays open for follow-ups: it has no close_session
+    ...(asideToLecture
+      ? []
+      : [
+          buildCloseSessionTool({
+            closeSession,
+            canCloseSession: hasVisibleAgentTurn,
+            isUserCued: () => userCued,
+            takeLastWordNudge: () => takeStudentLastWordNudge('close_session'),
+          }),
+        ]),
     buildCueUserTool({
-      cueUser,
+      cueUser: (data) => cueUser(data),
       getLastAgentId: () => piAgentResponses.at(-1)?.agentId,
-      canCueUser: hasTeachingSubstantiveTurn,
+      // A student whose last line asks the learner a direct question may hand
+      // the turn back (with that question as the prompt), teacher or not
+      canCueUser: (prompt) =>
+        hasTeachingSubstantiveTurn() ||
+        (personaMechanics && prompt !== undefined && Boolean(getStudentLastWord())),
       cueUserSkipReason: 'no_substantive_teaching_turn',
       isSessionClosed: () => sessionClosed,
+      takeLastWordNudge: (prompt) => takeStudentLastWordNudge('cue_user', prompt),
     }),
   ];
 
   const director = buildAgent({
     streamFn,
-    systemPrompt: buildDirectorPrompt(opts.body, opts.agentConfigs, opts.maxAgentTurns),
+    systemPrompt: buildDirectorPrompt(opts.body, opts.agentConfigs, opts.maxAgentTurns, {
+      castingMode,
+    }),
     tools,
     allowedToolNames: new Set(tools.map((tool) => tool.name)),
-    history: toHistoryMessages(opts.body.messages, null),
+    // Every agent line is labelled with its speaker, so the director knows
+    // across turns who said what
+    history: toHistoryMessages(opts.body.messages, null, { agents: opts.agentConfigs }),
     transformContext: compactionRuntime.transformContext,
     convertToLlm,
     afterToolCall: (context) => {
@@ -255,7 +374,9 @@ export async function runPiDirectorLoop(opts: {
     const directorEvidence = [opts.elementReference?.directorSummary, opts.interactiveStateNote]
       .filter(Boolean)
       .join('\n');
-    await director.prompt(buildUserPrompt(opts.body, directorEvidence || undefined));
+    await director.prompt(
+      buildUserPrompt(opts.body, directorEvidence || undefined, opts.agentConfigs),
+    );
     await director.waitForIdle();
   } finally {
     compactionRuntime.dispose();
@@ -268,8 +389,30 @@ export async function runPiDirectorLoop(opts: {
   if (director.state.errorMessage) throw new Error(director.state.errorMessage);
 
   if (!sessionClosed && !userCued && hasAgentContent()) {
-    await cueUser({ fromAgentId: piAgentResponses.at(-1)?.agentId });
+    // The automatic hand-back passes no gate; it only records a student last word
+    await cueUser({ fromAgentId: piAgentResponses.at(-1)?.agentId }, 'fallback_cue');
   }
+  log.info(
+    `pi.casting ${JSON.stringify(
+      buildCastingLog({
+        castingMode,
+        body: opts.body,
+        agents: opts.agentConfigs,
+        turns: piAgentResponses.map((summary, index) => ({
+          summary,
+          meta: childTurnMetas[index],
+        })),
+        terminal,
+        cuePrompt,
+        endReason,
+        studentLastWordNudged,
+        studentLastWordEnd,
+        studentLastWordAgentId: getStudentLastWord()?.agentId,
+        toolTrace: directorToolTrace,
+        directorUsage: sumAssistantUsage(director.state?.messages),
+      }),
+    )}`,
+  );
 
   await opts.send({
     type: 'done',

@@ -62,6 +62,10 @@ import {
   runsByCourse,
 } from '@/lib/generation-run-client/course-card';
 import type { RunSnapshot } from '@/lib/generation-run-client/types';
+import { retryPausedRunSnapshot } from '@/lib/generation-run-client/commands';
+import { runFailureText } from '@/lib/generation-run-client/failure-message';
+import { reportRunRetryFailure } from '@/lib/generation-run-client/retry-feedback';
+import { announceRunsChanged } from '@/lib/generation-run-client/runs-changed';
 import { useModelCapabilities } from '@/lib/model-settings/use-model-settings';
 import { useUserProfileStore, AVATAR_OPTIONS } from '@/lib/store/user-profile';
 import {
@@ -281,6 +285,26 @@ function HomePage() {
   const { runs, forget: forgetRun } = useOwnerRuns({
     onCourseChanged: () => void loadClassrooms(),
   });
+
+  // A paused run's card retries it where it stopped, without opening the course.
+  const retryRun = (run: RunSnapshot | undefined) =>
+    run?.state === 'paused'
+      ? async () => {
+          try {
+            await retryPausedRunSnapshot(run);
+            // Read the runs now: the card leaves 已暂停 without waiting for the next read.
+            announceRunsChanged();
+          } catch (err) {
+            log.warn('Retrying the run failed:', err);
+            reportRunRetryFailure(err);
+          }
+        }
+      : undefined;
+  const runFailure = (run: RunSnapshot | undefined): string | undefined => {
+    if (run?.state !== 'paused' || !run.error) return undefined;
+    const failure = runFailureText(run.error);
+    return 'key' in failure ? t(failure.key) : failure.text;
+  };
 
   const loadFolders = async () => {
     try {
@@ -1243,6 +1267,8 @@ function HomePage() {
                               classroom={pendingRunListItem(run)}
                               formatDate={formatDate}
                               runStatus={courseRunStatus(run)}
+                              runFailure={runFailure(run)}
+                              onRetryRun={retryRun(run)}
                               pendingCourse
                               onDelete={handleDelete}
                               onRename={handleRename}
@@ -1271,6 +1297,8 @@ function HomePage() {
                               const run = runByStageId.get(classroom.id);
                               return run ? courseRunStatus(run) : null;
                             })()}
+                            runFailure={runFailure(runByStageId.get(classroom.id))}
+                            onRetryRun={retryRun(runByStageId.get(classroom.id))}
                             onDelete={handleDelete}
                             onRename={handleRename}
                             confirmingDelete={pendingDeleteId === classroom.id}

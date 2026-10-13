@@ -9,6 +9,7 @@ import { nanoid } from 'nanoid';
 import katex from 'katex';
 import type {
   Action,
+  DiscussionAction,
   PBLProject,
   PPTElement,
   QuizQuestion,
@@ -33,11 +34,15 @@ import { DEFAULT_LANGUAGE_DIRECTIVE } from './outline-generator.js';
 import { postProcessInteractiveHtml } from './interactive-post-processor.js';
 import { findInteractiveScriptSyntaxFailure } from './interactive-script-validator.js';
 import { parseActionsFromStructuredOutput } from './action-parser.js';
+import { normalizeLectureWhiteboard } from './lecture-whiteboard.js';
 import { parseJsonResponse } from './json-repair.js';
 import {
   buildCourseContext,
+  buildClassMoments,
+  buildEarlierKeyPoints,
   formatAgentsForPrompt,
   formatTeacherPersonaForPrompt,
+  formatTeacherVoiceForPrompt,
 } from './prompt-formatters.js';
 import type { PromptId } from './prompts/types.js';
 import { buildPrompt, PROMPT_IDS } from './prompts/index.js';
@@ -70,6 +75,13 @@ const INTERACTIVE_WIDGET_ACTIONS = [
   'widget_annotation',
   'widget_reveal',
 ];
+
+/**
+ * What an interactive page's actions may hold besides speech: the widget
+ * actions, and one class moment at the end (a prediction before the learner
+ * tries the page, or a classmate's "what if...?").
+ */
+const INTERACTIVE_PAGE_ACTIONS = [...INTERACTIVE_WIDGET_ACTIONS, 'discussion'];
 
 // ── Options interfaces for scene generation functions ──
 
@@ -1744,6 +1756,8 @@ export async function generateSceneActions(
       description: outline.description,
       elements: elementsText,
       courseContext: buildCourseContext(ctx),
+      earlierKeyPoints: buildEarlierKeyPoints(ctx),
+      classMoments: buildClassMoments(ctx),
       agents: agentsText,
       userProfile: userProfile || '',
       languageDirective: languageDirective || '',
@@ -1754,7 +1768,10 @@ export async function generateSceneActions(
     }
 
     const response = await aiCall(prompts.system, prompts.user);
-    const actions = parseActionsFromStructuredOutput(response, outline.type, undefined, log);
+    const actions = normalizeLectureWhiteboard(
+      parseActionsFromStructuredOutput(response, outline.type, undefined, log),
+      log,
+    );
 
     if (actions.length > 0) {
       // Validate and fill in Action IDs
@@ -1774,7 +1791,8 @@ export async function generateSceneActions(
       description: outline.description,
       questions: questionsText,
       courseContext: buildCourseContext(ctx),
-      agents: agentsText,
+      // Only the teacher speaks in a quiz opening: the others' personas change nothing.
+      agents: formatTeacherVoiceForPrompt(agents),
       languageDirective: languageDirective || '',
     });
 
@@ -1794,7 +1812,6 @@ export async function generateSceneActions(
 
   if (outline.type === 'interactive' && 'html' in content) {
     const config = outline.interactiveConfig;
-    const agentsText = formatAgentsForPrompt(agents);
     // Always recompute the inventory from the current html so it matches what
     // the tool actually reads — persisting the field would go stale relative
     // to `postProcessInteractiveHtml` output and to any in-turn html edits.
@@ -1811,7 +1828,11 @@ export async function generateSceneActions(
       widgetConfig: JSON.stringify(content.widgetConfig || {}),
       elementInventory: inventory,
       courseContext: buildCourseContext(ctx),
+      // The personas decide whether anyone speaks up before or after the
+      // learner tries the page, as on a slide.
+      classMoments: buildClassMoments(ctx),
       agents: agentsText,
+      userProfile: userProfile || '',
       languageDirective: languageDirective || '',
     });
 
@@ -1823,7 +1844,7 @@ export async function generateSceneActions(
     const actions = parseActionsFromStructuredOutput(
       response,
       outline.type,
-      INTERACTIVE_WIDGET_ACTIONS,
+      INTERACTIVE_PAGE_ACTIONS,
       log,
     );
 
@@ -1836,7 +1857,6 @@ export async function generateSceneActions(
 
   if (outline.type === 'pbl') {
     const pblConfig = outline.pblConfig;
-    const agentsText = formatAgentsForPrompt(agents);
     const projectV2 = (content as Partial<GeneratedPBLContent>).projectV2;
     const prompts = buildPrompt(PROMPT_IDS.PBL_ACTIONS, {
       title: outline.title,
@@ -1846,7 +1866,8 @@ export async function generateSceneActions(
       projectDescription: pblConfig?.projectDescription || outline.description,
       projectSummary: buildPBLProjectSummary(outline, projectV2),
       courseContext: buildCourseContext(ctx),
-      agents: agentsText,
+      // Only the teacher speaks in a project introduction.
+      agents: formatTeacherVoiceForPrompt(agents),
       languageDirective: languageDirective || '',
     });
 
@@ -1932,11 +1953,8 @@ function processActions(
   log: GenerationLogger = noopGenerationLogger,
 ): Action[] {
   const elementIds = new Set(elements.map((el) => el.id));
-  const agentIds = new Set(agents?.map((a) => a.id) || []);
-  const studentAgents = agents?.filter((a) => a.role === 'student') || [];
-  const nonTeacherAgents = agents?.filter((a) => a.role !== 'teacher') || [];
 
-  return actions.map((action) => {
+  return actions.flatMap((action, index): Action[] => {
     // Ensure each action has an ID
     const processedAction: Action = {
       ...action,
@@ -1957,25 +1975,126 @@ function processActions(
       }
     }
 
-    // Validate/fill discussion agentId
-    if (processedAction.type === 'discussion' && agents && agents.length > 0) {
-      if (processedAction.agentId && agentIds.has(processedAction.agentId)) {
-        // agentId valid — keep it
-      } else {
-        // agentId missing or invalid — pick a random student, or non-teacher, or skip
-        const pool = studentAgents.length > 0 ? studentAgents : nonTeacherAgents;
-        if (pool.length > 0) {
-          const picked = pool[Math.floor(Math.random() * pool.length)];
+    if (processedAction.type === 'discussion') {
+      const topic = typeof processedAction.topic === 'string' ? processedAction.topic.trim() : '';
+      if (!topic) {
+        log.warn('Discussion without a topic: dropped the class moment');
+        return [];
+      }
+      processedAction.topic = topic;
+      if (agents && agents.length > 0) {
+        const lastNarration = actions
+          .slice(0, index)
+          .reverse()
+          .find((earlier) => earlier.type === 'speech');
+        const opener = resolveDiscussionOpener(
+          processedAction,
+          lastNarration?.type === 'speech' ? lastNarration.text : undefined,
+          agents,
+        );
+        if (!opener) {
           log.warn(
-            `Discussion agentId "${processedAction.agentId || '(none)'}" invalid, assigned: ${picked.id} (${picked.name})`,
+            `Discussion agentId "${processedAction.agentId || '(none)'}" matches nobody on the roster: dropped the class moment "${Array.from(topic).slice(0, 40).join('')}"`,
           );
-          processedAction.agentId = picked.id;
+          return [];
         }
+        if (opener.agentId !== processedAction.agentId) {
+          log.warn(
+            `Discussion agentId "${processedAction.agentId || '(none)'}" is not on the roster: opened by ${opener.agentId} (${opener.via})`,
+          );
+        }
+        processedAction.agentId = opener.agentId;
+        // The card shows the topic as the opener's own words, never a script line.
+        const openerName = agents.find((agent) => agent.id === opener.agentId)?.name;
+        if (openerName) processedAction.topic = withoutSpeakerLabel(topic, openerName);
       }
     }
 
-    return processedAction;
+    return [processedAction];
   });
+}
+
+/** Names this short match too much by accident (as the classroom matches them). */
+const MIN_MATCHED_NAME_CHARS = 2;
+
+function rosterNamesIn(text: string, agents: readonly AgentInfo[]): AgentInfo[] {
+  const haystack = text.toLowerCase();
+  return agents
+    .map((agent) => ({ agent, at: haystack.indexOf(agent.name.trim().toLowerCase()) }))
+    .filter(
+      ({ agent, at }) => Array.from(agent.name.trim()).length >= MIN_MATCHED_NAME_CHARS && at >= 0,
+    )
+    .sort((a, b) => a.at - b.at || b.agent.name.length - a.agent.name.length)
+    .map(({ agent }) => agent);
+}
+
+/** The last sentence of a narration line: where the teacher calls on someone. */
+function lastSentenceOf(text: string): string {
+  const trimmed = text.trim().replace(/[\s。！？!?.…"'”’」』)）]+$/u, '');
+  const boundary = Math.max(
+    ...['。', '！', '？', '!', '?', '. '].map((mark) => trimmed.lastIndexOf(mark)),
+  );
+  return boundary >= 0 ? trimmed.slice(boundary + 1).trim() : trimmed;
+}
+
+/**
+ * Who opens a class moment. The model names the opener by id. When the id is
+ * not on the roster, the opener is taken only from what the moment says: the
+ * id written as a name (or as the role only one person has); a speaker label
+ * on the topic; a classmate the teacher calls on in the topic (the teacher
+ * opens, as the template writes it); a classmate the teacher calls on at the
+ * end of the page's narration. When none of these names anyone, the moment
+ * has no opener and is dropped: a random classmate would be voicing words
+ * that are not theirs.
+ */
+function resolveDiscussionOpener(
+  discussion: DiscussionAction,
+  lastNarration: string | undefined,
+  agents: readonly AgentInfo[],
+): { agentId: string; via: string } | undefined {
+  const { agentId, topic } = discussion;
+  if (agentId && agents.some((agent) => agent.id === agentId)) return { agentId, via: 'id' };
+
+  const written = typeof agentId === 'string' ? agentId.trim().toLowerCase() : '';
+  if (written) {
+    const byName = agents.find((agent) => agent.name.trim().toLowerCase() === written);
+    if (byName) return { agentId: byName.id, via: 'name written as the id' };
+    const byRole = agents.filter((agent) => agent.role.toLowerCase() === written);
+    const [only] = byRole;
+    if (byRole.length === 1 && only) return { agentId: only.id, via: 'role written as the id' };
+  }
+
+  const teacher = agents.find((agent) => agent.role === 'teacher');
+  const named = rosterNamesIn(topic, agents);
+  const label = named.find((agent) => withoutSpeakerLabel(topic, agent.name) !== topic);
+  if (label) return { agentId: label.id, via: 'speaker label' };
+  const calledOn = named.find((agent) => agent.role !== 'teacher');
+  if (teacher && calledOn) {
+    return { agentId: teacher.id, via: `the teacher calls on ${calledOn.name} in the topic` };
+  }
+
+  if (lastNarration) {
+    const called = rosterNamesIn(lastSentenceOf(lastNarration), agents).find(
+      (agent) => agent.role !== 'teacher',
+    );
+    if (called) return { agentId: called.id, via: 'called on at the end of the narration' };
+  }
+  return undefined;
+}
+
+/** A topic written as "Name: words" (or "Name (role): words"), without the label. */
+function withoutSpeakerLabel(topic: string, name: string): string {
+  if (!name.trim()) return topic;
+  const label = new RegExp(
+    `^${escapeRegExp(name.trim())}\\s*(?:[（(][^）)]*[）)])?\\s*[:：]\\s*`,
+    'iu',
+  );
+  const rest = topic.replace(label, '');
+  return rest.trim() ? rest.trim() : topic;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

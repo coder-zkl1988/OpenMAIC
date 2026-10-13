@@ -25,6 +25,7 @@ import {
   Search,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { AutoClassChoices } from './auto-class-choices';
 import type { AgentConfig } from '@/lib/orchestration/registry/types';
 import type { TTSProviderId } from '@/lib/audio/types';
 import type { ProviderWithVoices } from '@/lib/audio/voice-resolver';
@@ -602,6 +603,8 @@ export function AgentBar() {
   const agentMode = useSettingsStore((s) => s.agentMode);
   const setAgentMode = useSettingsStore((s) => s.setAgentMode);
   const setAgentSelectionIsUserSet = useSettingsStore((s) => s.setAgentSelectionIsUserSet);
+  const parkedPresetAgentIds = useSettingsStore((s) => s.parkedPresetAgentIds);
+  const restoreParkedPresetAgents = useSettingsStore((s) => s.restoreParkedPresetAgents);
   const ttsProvidersConfig = useSlotTTSProvidersConfig();
   // Narration is on when the workspace's tts slot resolves to a provider.
   const ttsEnabled = !!useTTSSelection();
@@ -610,6 +613,13 @@ export function AgentBar() {
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const { profiles: voiceProfiles } = useAllVoiceProfiles();
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // A course with its own classmates parked the user's preset choice while it
+  // was open: the home page, where new courses start, brings it back (also
+  // once the persisted settings arrive after mount)
+  useEffect(() => {
+    if (parkedPresetAgentIds?.length) restoreParkedPresetAgents();
+  }, [parkedPresetAgentIds, restoreParkedPresetAgents]);
 
   // Load browser native TTS voices
   useEffect(() => {
@@ -913,20 +923,15 @@ export function AgentBar() {
                     .map((agent, idx) => renderAgentRow(agent, idx + 1, false))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center pt-6 pb-3 gap-4">
-                  <div className="relative flex items-center justify-center">
-                    <div className="absolute size-10 rounded-full bg-violet-400/10 dark:bg-violet-400/15 animate-ping [animation-duration:3s]" />
-                    <div className="absolute size-12 rounded-full bg-violet-400/5 dark:bg-violet-400/10 animate-pulse [animation-duration:2.5s]" />
-                    <Shuffle className="relative size-5 text-violet-400 dark:text-violet-500" />
-                  </div>
-                  <div className="flex-1" />
-                  <div className="text-center space-y-1">
-                    <p className="text-[11px] text-muted-foreground/60">
+                // The generated class: its size and, optionally, what kind of
+                // class it is (I28)
+                <div className="flex flex-col gap-3 px-1.5 pt-1 pb-2">
+                  <AutoClassChoices />
+                  <div className="space-y-0.5 text-center">
+                    <p className="text-[11px] text-fg-tertiary">
                       {t('settings.agentModeAutoDesc')}
                     </p>
-                    <p className="text-[10px] text-muted-foreground/40">
-                      {t('agentBar.voiceAutoAssign')}
-                    </p>
+                    <p className="text-[10px] text-fg-tertiary">{t('agentBar.voiceAutoAssign')}</p>
                   </div>
                 </div>
               )}

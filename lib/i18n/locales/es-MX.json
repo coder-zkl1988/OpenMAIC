@@ -285,12 +285,22 @@
       "pageLabel": "Página {{n}}",
       "currentPage": "Actual",
       "jumpToLine": "Ir a esta línea",
-      "jumpUnavailable": "No se puede saltar a esta línea"
+      "jumpUnavailable": "No se puede saltar a esta línea",
+      "discussNow": "Hablarlo ahora",
+      "discussNowBusy": "Primero termina la conversación en curso",
+      "momentOutcome": {
+        "joined": "Te uniste",
+        "skipped": "Omitido",
+        "autoSkipped": "Se pasó",
+        "notShown": "No está en esta clase"
+      }
     },
     "badge": {
       "qa": "Q&A",
       "discussion": "Debate",
-      "lecture": "CLASE"
+      "lecture": "CLASE",
+      "aside": "Preguntas al asistente",
+      "asideClassmate": "Charla en voz baja"
     }
   },
   "actions": {
@@ -336,7 +346,22 @@
     "join": "Unirme",
     "skip": "Omitir",
     "offerLabel": "{{name}} quiere iniciar un debate",
-    "autoSkipHint": "Se omitirá automáticamente en {{seconds}} segundos"
+    "autoSkipHint": "Se omitirá automáticamente en {{seconds}} segundos",
+    "countdownPaused": "Cuenta regresiva en pausa: elige cuando estés listo",
+    "question": "Pregunta",
+    "joinTeacher": "Pensar juntos",
+    "teacherOfferLabel": "{{name}} hace una pregunta",
+    "review": "Repaso",
+    "joinReview": "Repasarlo juntos",
+    "reviewOfferLabel": "Repaso del cuestionario",
+    "answerFirst": "Yo respondo",
+    "listenFirst": "Primero escuchar a la clase"
+  },
+  "quizReview": {
+    "topic": "Repasemos las que fallaste: {{questions}}",
+    "question": "P{{n}} «{{text}}»",
+    "separator": "; ",
+    "more": " y {{count}} más"
   },
   "voice": {
     "startListening": "Entrada de voz",
@@ -381,18 +406,25 @@
     "composer": {
       "raiseHand": "Levantar la mano",
       "raiseHandHint": "Levanta la mano: el profesor te dará la palabra al terminar esta frase",
+      "raiseHandHintAssistant": "Levanta la mano: el asistente responde en el panel de Interacción mientras el profesor sigue explicando",
       "raiseHandInLiveSession": "Durante las preguntas puedes hablar directamente",
       "lowerHand": "Bajar",
       "lowerHandHint": "Bajar la mano y retirar la pregunta",
       "cuePlaceholder": "Di o escribe tu pregunta",
+      "answerPlaceholder": "Di o escribe tu respuesta",
       "cueStatus": "Es tu turno · clase en pausa",
+      "cueAsked": "{{name}} espera tu respuesta",
+      "cueHandBack": "Te toca · di lo que pienses",
       "send": "Enviar",
       "cancelRecording": "Cancelar grabación",
       "handRaised": "Mano levantada · te toca al terminar esta frase",
       "handRaisedStep": "Mano levantada · te toca al terminar este paso",
+      "handRaisedAssistant": "Mano levantada · el asistente te responde en el panel de Interacción",
       "raisedPlaceholder": "Puedes escribir tu pregunta antes...",
       "followUpPlaceholder": "Haz una pregunta de seguimiento...",
       "referencePlaceholder": "{{type}}: ¿qué quieres preguntar sobre esto?",
+      "mentionMenu": "A quién preguntar",
+      "mentionPlaceholder": "Escribe tu pregunta o usa @ para preguntarle a alguien",
       "handLowered": "Mano bajada"
     },
     "handRaise": {
@@ -400,15 +432,28 @@
       "aheadOfDiscussion": "Levantaste la mano; el debate de {{name}} va después de ti",
       "calledBy": "{{name}} te da la palabra",
       "pendingQuestion": "En cola · se responde al terminar esta frase",
-      "pendingQuestionStep": "En cola · se responde al terminar este paso"
+      "pendingQuestionStep": "En cola · se responde al terminar este paso",
+      "assistantPrompt": "Dime tu pregunta y te ayudo.",
+      "assistantAnswering": "El asistente está respondiendo…",
+      "agentAnswering": "{{name}} está respondiendo…",
+      "askedBy": "{{name}} te pregunta: {{prompt}}",
+      "handBack": "{{name}} te cede la palabra",
+      "cueReplies": {
+        "think": "Déjame pensar…",
+        "unsure": "No estoy seguro",
+        "hint": "Dame una pista"
+      }
     },
     "participants": {
       "label": "Participantes",
       "online": "{{count}} en línea",
       "speaking": "Hablando",
+      "answering": "Respondiendo",
       "wantsToSpeak": "Quiere hablar",
       "handRaised": "Mano levantada",
-      "more": "{{count}} participantes más"
+      "more": "{{count}} participantes más",
+      "cardLabel": "{{name}}, {{status}}",
+      "askThem": "Preguntar a {{name}}"
     },
     "generating": "Generando...",
     "paused": "En pausa",
@@ -422,7 +467,12 @@
     "exitFullscreen": "Salir de pantalla completa",
     "editCourse": "Editar curso",
     "doneEditing": "Terminar edición",
-    "proModeDisabledHint": "La edición no está disponible en esta página — abre una diapositiva del curso para editar con el modo Pro."
+    "proModeDisabledHint": "La edición no está disponible en esta página — abre una diapositiva del curso para editar con el modo Pro.",
+    "ownClassmates": {
+      "title": "Este curso trae sus propios compañeros",
+      "description": "Tus compañeros predefinidos se guardan para cursos nuevos y para cursos sin compañeros propios.",
+      "alwaysPreset": "Usar siempre mis compañeros predefinidos"
+    }
   },
   "edit": {
     "proMode": "Pro",
@@ -815,7 +865,7 @@
       "count": "{{count}} integrantes",
       "editHint": "Haz clic en un integrante para editar",
       "personaLabel": "Persona",
-      "personaPlaceholder": "Describe la personalidad, el estilo de enseñanza y las tareas del rol...",
+      "personaPlaceholder": "Describe a esta persona: su carácter, cómo habla, qué sabe ya y qué no, cuándo interviene.",
       "noPersona": "Sin persona todavía",
       "unnamed": "Sin título",
       "teacherBadge": "Principal",
@@ -824,7 +874,29 @@
       "removeFromClass": "Quitar del aula",
       "aiClassmates": "Compañeros de IA · {{count}}",
       "addRole": "Agregar rol",
-      "shortTitle": "Elenco"
+      "upgrade": {
+        "action": "Reescribir como personas reales",
+        "actionHint": "Reescribe cada descripción como una persona creíble: carácter, forma de hablar, lo que sabe. Verás cada cambio antes de aplicarlo.",
+        "loading": "Reescribiendo las descripciones…",
+        "previewTitle": "Vista previa de las nuevas descripciones",
+        "previewHint": "Solo cambian las descripciones; nombres, avatares y voces se mantienen. Puedes deshacerlo después.",
+        "now": "Ahora",
+        "rewritten": "Reescrito",
+        "apply": "Aplicar",
+        "failed": "No se pudieron reescribir las descripciones. Inténtalo de nuevo.",
+        "invalid": "Esta lista no se puede reescribir. Comprueba que todos tengan nombre y rol."
+      },
+      "shortTitle": "Elenco",
+      "impact": {
+        "title": "Dónde usa el guion del curso a este miembro",
+        "moments": "Momentos de clase que abre {{name}}: {{count}}",
+        "mentions": "Líneas que mencionan a {{name}}: {{count}}. La narración y la voz ya generadas no cambiarán.",
+        "handToTeacher": "Que los abra el profesor",
+        "dropMoments": "Eliminar también esos momentos",
+        "removeAnyway": "Quitar de todos modos",
+        "renameMentions": "Líneas que todavía dicen «{{name}}»: {{count}}. La narración y la voz ya generadas conservan el nombre anterior.",
+        "renameAnyway": "Cambiar el nombre de todos modos"
+      }
     },
     "elementRef": {
       "remove": "移除引用 {{label}}",
@@ -1388,6 +1460,14 @@
     "agentModeAutoDesc": "La IA generará automáticamente los roles adecuados",
     "autoAgentCount": "Número de agentes",
     "autoAgentCountDesc": "Número de agentes a generar automáticamente (incluye al maestro)",
+    "autoAgentCountAuto": "Que decida la IA",
+    "classAtmosphere": "Ambiente de la clase",
+    "classAtmosphereDesc": "Qué tipo de compañeros se generan",
+    "classAtmosphereOptions": {
+      "focused": "Tranquila y concentrada",
+      "conversational": "Con ida y vuelta",
+      "lively": "Animada"
+    },
     "atLeastOneAgent": "Selecciona al menos 1 agente",
     "singleAgentMode": "Modo de agente único",
     "directAnswer": "Respuesta directa",
@@ -1403,10 +1483,10 @@
     "agentNames": {
       "default-1": "Maestro IA",
       "default-2": "Asistente IA",
-      "default-3": "Payaso del salón",
+      "default-3": "Payasa del salón",
       "default-4": "Mente curiosa",
       "default-5": "Tomador de apuntes",
-      "default-6": "Pensador profundo"
+      "default-6": "Pensadora profunda"
     },
     "agentRoles": {
       "teacher": "Maestro",
@@ -1414,12 +1494,12 @@
       "student": "Estudiante"
     },
     "agentDescriptions": {
-      "default-1": "Maestro titular con explicaciones claras y estructuradas",
-      "default-2": "Apoya el aprendizaje y ayuda a aclarar los puntos clave",
-      "default-3": "Aporta humor y energía al salón de clases",
-      "default-4": "Siempre con curiosidad, le encanta preguntar por qué y cómo",
-      "default-5": "Registra y organiza con esmero los apuntes de la clase",
-      "default-6": "Piensa a fondo y explora la esencia de los temas"
+      "default-1": "Profesor sereno y cálido que explica paso a paso y pone a la clase a adivinar",
+      "default-2": "Asistente amable que te da una pista cuando te atoras",
+      "default-3": "Bromista animada que suelta su primera idea",
+      "default-4": "Estudiante entusiasta que siempre pregunta por qué",
+      "default-5": "Tomador de notas cuidadoso que revisa cada paso",
+      "default-6": "Pensadora callada que pregunta «¿y si…?»"
     },
     "close": "Cerrar",
     "providerNames": {
@@ -1459,6 +1539,13 @@
     "keyboardShortcuts": "Atajos",
     "generalSettings": "General",
     "systemSettings": "Sistema",
+    "classroomSection": "Clase",
+    "assistantAnswersDuringLecture": "El asistente responde las preguntas durante la clase",
+    "assistantAnswersDuringLectureDesc": "Si está activado, las preguntas durante la clase no interrumpen al profesor: el asistente las responde en el panel de Interacción.",
+    "teacherMayCallOnLearner": "Permitir que el profesor me pregunte",
+    "teacherMayCallOnLearnerDesc": "Si está activado, el profesor puede hacerte una pregunta por tu nombre, como a tus compañeros. Si está desactivado, solo pregunta a toda la clase y nunca te señala a ti.",
+    "presetAgentsInGeneratedCourses": "Usar siempre mis compañeros predefinidos",
+    "presetAgentsInGeneratedCoursesDesc": "Si está activado, los cursos generados con sus propios compañeros también usan los compañeros que elegiste en la página de inicio. Si está desactivado, esos cursos se imparten con sus propios compañeros.",
     "importFromClipboard": "Importar del portapapeles",
     "baseUrlRegion": {
       "china": "China",

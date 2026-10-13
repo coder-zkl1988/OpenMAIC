@@ -17,9 +17,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { CourseRunStatus } from '@/lib/generation-run-client/course-card';
+import type { RunPause } from '@/lib/generation-run-client/use-run-course';
 
 const run = vi.hoisted(() => ({
   generation: null as { status: CourseRunStatus; href: string } | null,
+  paused: null as RunPause | null,
+  retryRun: async () => {},
 }));
 
 vi.mock('@/lib/hooks/use-i18n', () => ({
@@ -58,6 +61,8 @@ vi.mock('@/lib/generation-run-client/use-run-course', () => ({
     runId: run.generation ? 'run-1' : null,
     generation: run.generation,
     retryOutline: async () => {},
+    paused: run.paused,
+    retryRun: run.retryRun,
   }),
 }));
 
@@ -71,6 +76,8 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
   run.generation = null;
+  run.paused = null;
+  run.retryRun = async () => {};
 });
 
 const byTestId = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
@@ -144,5 +151,29 @@ describe('a course being generated, in the classroom pane', () => {
 
     expect(byTestId('course-generating-placeholder')).toBeNull();
     expect(byTestId('stage')).not.toBeNull();
+  });
+
+  it("puts a paused run's failed page and Retry over the standalone classroom", async () => {
+    run.generation = { status: { kind: 'paused' }, href: '/classroom/stage-gen' };
+    run.paused = {
+      scene: { number: 10, title: '从频域回到时域' },
+      failure: { key: 'generation.sceneGenerateProviderUnavailable' },
+    };
+    const retryRun = vi.fn(async () => {});
+    run.retryRun = retryRun;
+    await renderSurface('page');
+
+    const notice = byTestId('generation-paused-notice')!;
+    expect(notice).not.toBeNull();
+    expect(byTestId('generation-paused-scene')!.textContent).toContain(
+      'stage.sceneRailItem:{"n":10,"title":"从频域回到时域"}',
+    );
+    expect(byTestId('generation-paused-reason')!.textContent).toContain(
+      'generation.sceneGenerateProviderUnavailable',
+    );
+    expect(byTestId('stage')).not.toBeNull();
+
+    await act(async () => byTestId('generation-paused-retry')!.click());
+    expect(retryRun).toHaveBeenCalledOnce();
   });
 });

@@ -1335,6 +1335,8 @@ export async function runSession(ctx: RunContext, meta: ClaimedAgentSession): Pr
       thinkingConfig: driver.connection.thinkingConfig,
       source: 'agent-runtime',
       abortSignal: abort.signal,
+      // A multi-step loop re-reads its growing prefix (Claude on Anthropic only)
+      promptCaching: true,
     });
     let questionEmitted = false;
     const askUserTool = buildAskUserTool({

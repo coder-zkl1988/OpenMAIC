@@ -8,6 +8,7 @@ import {
   WB_OPEN_MS,
   WB_DRAW_MS,
   WB_EDIT_MS,
+  WIDGET_MS,
   wbDrawCodeMs,
   wbClearMs,
   estimateSpeechDurationMs,
@@ -248,6 +249,35 @@ describe('resolveActionTimeline — per-action durations', () => {
     expect(resolveActionTimeline(scenes, { isDiscussionSkipped: () => false })[0].durationMs).toBe(
       DISCUSSION_TRIGGER_DELAY_MS + DISCUSSION_AUTO_SKIP_MS,
     );
+  });
+
+  it("an interactive page's closing discussion plays and counts as on a slide (I29)", () => {
+    const interactive = {
+      ...sc('I0', [
+        act({ id: 'w1', type: 'widget_setState', state: { mass: 2 } }),
+        act({ id: 'w2', type: 'widget_highlight', target: 'slider' }),
+        act({ id: 'd', type: 'discussion', topic: 'Predict first', agentId: 'teacher' }),
+      ]),
+      type: 'interactive',
+      content: { type: 'interactive', url: '', html: '<div></div>' },
+    } as unknown as Scene;
+    const scenes = [interactive, sc('S1', [speech('s', 'Next page')])];
+    const segments = resolveActionTimeline(scenes);
+    const moment = segments.find((segment) => segment.action.id === 'd')!;
+    expect(moment).toMatchObject({
+      sceneIndex: 0,
+      startMs: 2 * WIDGET_MS,
+      durationMs: DISCUSSION_TRIGGER_DELAY_MS + DISCUSSION_AUTO_SKIP_MS,
+      blocking: true,
+    });
+    // The next page starts once the moment's card has run out
+    expect(segments.find((segment) => segment.sceneId === 'S1')!.startMs).toBe(
+      2 * WIDGET_MS + DISCUSSION_TRIGGER_DELAY_MS + DISCUSSION_AUTO_SKIP_MS,
+    );
+    // Skipped (consumed, or its opener not in class): no dwell
+    const skipped = resolveActionTimeline(scenes, { isDiscussionSkipped: () => true });
+    expect(skipped.find((segment) => segment.action.id === 'd')!.durationMs).toBe(0);
+    expect(skipped.find((segment) => segment.sceneId === 'S1')!.startMs).toBe(2 * WIDGET_MS);
   });
 
   it('wb_edit_code is WB_EDIT_MS by default and 0ms when the caller flags a no-op', () => {

@@ -62,3 +62,39 @@ describe('the outline review a classic run is started with', () => {
     expect(started.inputs.map((input) => input.outlineReview)).toEqual(['wait', 'countdown']);
   });
 });
+
+describe('the class an auto run asks for (I28)', () => {
+  afterEach(() => {
+    useSettingsStore.getState().setAutoAgentCount(null);
+    useSettingsStore.getState().setClassAtmosphere(undefined);
+    useSettingsStore.setState({ agentMode: 'preset' });
+  });
+
+  it('leaves the size and the atmosphere to the model when the learner chose neither', async () => {
+    useSettingsStore.setState({ agentMode: 'auto' });
+    await start();
+    const agents = started.inputs[0].agents as Record<string, unknown>;
+    expect(agents).toMatchObject({ mode: 'auto' });
+    expect(agents).not.toHaveProperty('count');
+    expect(agents).not.toHaveProperty('atmosphere');
+  });
+
+  it('sends the class size and atmosphere the learner chose', async () => {
+    useSettingsStore.setState({ agentMode: 'auto' });
+    useSettingsStore.getState().setAutoAgentCount(5);
+    useSettingsStore.getState().setClassAtmosphere('lively');
+    await start();
+    expect(started.inputs[0].agents).toMatchObject({
+      mode: 'auto',
+      count: 5,
+      atmosphere: 'lively',
+    });
+  });
+
+  it('never sends them for a preset class', async () => {
+    useSettingsStore.setState({ agentMode: 'preset' });
+    useSettingsStore.getState().setAutoAgentCount(5);
+    await start();
+    expect(started.inputs[0].agents).toEqual({ mode: 'preset', agentIds: [] });
+  });
+});

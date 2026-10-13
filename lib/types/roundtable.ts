@@ -1,3 +1,5 @@
+import type { DiscussionMomentKind, LearnerStance } from '@/lib/types/chat';
+
 export const USER_AVATAR = '/avatars/user.png';
 
 export type ParticipantRole = 'teacher' | 'student' | 'user';
@@ -31,5 +33,13 @@ export interface Message {
 export interface DiscussionRequest {
   topic: string;
   prompt?: string;
-  agentId?: string; // Agent ID to initiate discussion (default: 'default-1')
+  /**
+   * Who opens the moment. Absent: the classroom's teacher opens a lecture
+   * moment, and the director picks the opener of a 'quiz-review'.
+   */
+  agentId?: string;
+  /** The kind of class moment; absent means 'lecture' */
+  momentKind?: DiscussionMomentKind;
+  /** The learner's choice on a whole-class question ('ask-learner' only) */
+  learnerStance?: LearnerStance;
 }

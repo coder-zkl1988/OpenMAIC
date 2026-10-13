@@ -223,4 +223,45 @@ describe('Composer: the 举手 flow', () => {
     act(() => handle.current!.toggleHand());
     expect(props.onCancelQueuedQuestion).toHaveBeenCalledOnce();
   });
+
+  describe('while the teaching assistant answers during the lecture', () => {
+    it('says the assistant answers in the panel instead of after this line', async () => {
+      await render({ assistantAnswers: true });
+      expect(raiseButton()!.title).toBe('stage.composer.raiseHandHintAssistant');
+      expect(raiseButton()!.title).not.toBe('stage.composer.raiseHandHint');
+      await render({ assistantAnswers: false });
+      expect(raiseButton()!.title).toBe('stage.composer.raiseHandHint');
+    });
+
+    it('shows a hand raised to the assistant without a line to wait for', async () => {
+      vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+      await render({ getSpeechProgress: () => 0.5 });
+      hand = { ...hand, state: 'raised', assistant: true };
+      await render({ hand });
+
+      expect(lowerButton()).not.toBeNull();
+      expect(row()?.getAttribute('data-kind')).toBe('hand');
+      expect(row()?.textContent).toContain('stage.composer.handRaisedAssistant');
+      expect(row()?.textContent).not.toContain('stage.composer.handRaised ');
+      expect(liveRegion().textContent).toBe('stage.composer.handRaisedAssistant');
+      // Nothing to wait for: no progress bar
+      act(() => vi.advanceTimersToNextFrame());
+      expect(container.querySelector('[data-testid="composer-queued-progress"]')).toBeNull();
+
+      // 放下 lowers it through the owner
+      act(() => lowerButton()!.click());
+      expect(hand.onLower).toHaveBeenCalledOnce();
+    });
+
+    it('reports a finished voice question so the owner can resume the lecture', async () => {
+      const onVoiceEnd = vi.fn();
+      await render({ onVoiceEnd });
+      act(() => handle.current!.toggleVoice());
+      expect(props.onInputActivate).toHaveBeenCalledExactlyOnceWith('voice');
+      expect(onVoiceEnd).not.toHaveBeenCalled();
+      // 取消 drops the recording: voice is over
+      act(() => handle.current!.dismiss());
+      expect(onVoiceEnd).toHaveBeenCalledOnce();
+    });
+  });
 });

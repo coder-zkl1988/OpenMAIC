@@ -37,6 +37,7 @@ const SNIPPET_IDS = [
   'slide-image-instructions',
   'slide-generated-image-instructions',
   'slide-video-instructions',
+  'slide-whiteboard-actions',
   'speech-tts-readability',
 ] as const satisfies readonly SnippetId[];
 

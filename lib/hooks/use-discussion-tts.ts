@@ -46,6 +46,19 @@ interface QueueItem {
   modelId?: string;
   voiceId: string;
   fallbackVoice?: ResolvedVoice;
+  /**
+   * Called once when this line is over: heard, failed, dropped or cancelled
+   * (a class moment's announcement waits on it before its card counts down)
+   */
+  onSettled?: () => void;
+}
+
+/** Run a line's onSettled once (a retried copy carries it on instead) */
+function settleItem(item: QueueItem | null | undefined): void {
+  const onSettled = item?.onSettled;
+  if (!item || !onSettled) return;
+  item.onSettled = undefined;
+  onSettled();
 }
 
 interface PreparedSegment {
@@ -100,6 +113,7 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
   onAudioStateChangeRef.current = onAudioStateChange;
   const processQueueRef = useRef<() => void>(() => {});
   const agentBindingKeysRef = useRef(new Map<string, string>());
+  const announcementCounterRef = useRef(0);
 
   const {
     speak: browserSpeak,
@@ -110,11 +124,13 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
     rate: ttsSpeed,
     onEnd: () => {
       if (currentProviderRef.current !== 'browser-native-tts' || !isPlayingRef.current) return;
+      const item = currentItemRef.current;
       currentItemRef.current = null;
       currentProviderRef.current = null;
       isPlayingRef.current = false;
       segmentDoneCounterRef.current++;
       onAudioStateChangeRef.current?.(null, 'idle');
+      settleItem(item);
       // Don't advance queue while paused — resume() will kick-start it
       if (!pausedRef.current) {
         processQueueRef.current();
@@ -304,7 +320,9 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
     if (pausedRef.current) return; // Don't advance while paused
     if (isPlayingRef.current || queueRef.current.length === 0) return;
     if (!enabled || ttsMuted) {
+      const dropped = queueRef.current;
       queueRef.current = [];
+      dropped.forEach(settleItem);
       return;
     }
 
@@ -362,6 +380,7 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
         isPlayingRef.current = false;
         segmentDoneCounterRef.current++;
         onAudioStateChangeRef.current?.(item.agentId, 'idle');
+        settleItem(item);
         if (!pausedRef.current) {
           queueMicrotask(() => processQueueRef.current());
         }
@@ -420,9 +439,11 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
       currentItemRef.current = null;
       currentProviderRef.current = null;
       isPlayingRef.current = false;
-      // Retrying a missing clone is still the same speech segment.
+      // Retrying a missing clone is still the same speech segment (its retry
+      // carries onSettled on).
       if (!cloneUnavailable) segmentDoneCounterRef.current++;
       onAudioStateChangeRef.current?.(item.agentId, 'idle');
+      if (!cloneUnavailable) settleItem(item);
       if (!pausedRef.current) {
         queueMicrotask(() => processQueueRef.current());
       }
@@ -431,13 +452,19 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
 
   processQueueRef.current = processQueue;
 
-  const handleSegmentSealed = useCallback(
-    (messageId: string, partId: string, fullText: string, agentId: string | null) => {
-      if (!enabled || ttsMuted || !fullText.trim()) return;
+  /** A line in this agent's voice; null when nothing should be heard (off, muted, no voice) */
+  const buildQueueItem = useCallback(
+    (
+      messageId: string,
+      partId: string,
+      fullText: string,
+      agentId: string | null,
+    ): QueueItem | null => {
+      if (!enabled || ttsMuted || !fullText.trim()) return null;
 
       // No enabled provider for this agent ⇒ skip TTS (no silent browser-native).
       const resolved = resolveVoiceForAgent(agentId);
-      if (!resolved) return;
+      if (!resolved) return null;
       const { providerId, modelId, voiceId } = resolved;
       const effectiveModelId = resolveTTSModelForVoice(
         providerId,
@@ -456,7 +483,7 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
               ttsProvidersConfig,
             )
           : undefined;
-      queueRef.current.push({
+      return {
         messageId,
         partId,
         text: fullText,
@@ -468,13 +495,7 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
         (fallbackVoice.providerId !== providerId || fallbackVoice.voiceId !== voiceId)
           ? { fallbackVoice }
           : {}),
-      });
-
-      if (!isPlayingRef.current) {
-        processQueueRef.current();
-      } else {
-        prefetchNextRef.current();
-      }
+      };
     },
     [
       enabled,
@@ -486,7 +507,89 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
     ],
   );
 
+  const enqueue = useCallback((item: QueueItem) => {
+    queueRef.current.push(item);
+    if (!isPlayingRef.current) {
+      processQueueRef.current();
+    } else {
+      prefetchNextRef.current();
+    }
+  }, []);
+
+  const handleSegmentSealed = useCallback(
+    (messageId: string, partId: string, fullText: string, agentId: string | null) => {
+      const item = buildQueueItem(messageId, partId, fullText, agentId);
+      if (item) enqueue(item);
+    },
+    [buildQueueItem, enqueue],
+  );
+
+  /**
+   * Stop one line: dropped from the queue, or cut off while it plays (the
+   * queue then moves on to the next line). Its onSettled runs.
+   */
+  const stopItem = useCallback((item: QueueItem) => {
+    const index = queueRef.current.indexOf(item);
+    if (index >= 0) {
+      queueRef.current.splice(index, 1);
+      if (prefetchedRef.current?.item === item) {
+        prefetchedRef.current.controller.abort();
+        prefetchedRef.current = null;
+      }
+      settleItem(item);
+      return;
+    }
+    if (currentItemRef.current !== item) return;
+    const wasBrowserSpeech = currentProviderRef.current === 'browser-native-tts';
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    // The element outlives the line: its handlers go with it (see cleanup)
+    playbackTokenRef.current++;
+    finishAudioRef.current = null;
+    if (audioRef.current) {
+      const audio = audioRef.current;
+      audioRef.current = null;
+      releaseDiscussionAudioLine(audio);
+    }
+    currentItemRef.current = null;
+    currentProviderRef.current = null;
+    isPlayingRef.current = false;
+    if (wasBrowserSpeech) browserCancelRef.current();
+    onAudioStateChangeRef.current?.(null, 'idle');
+    settleItem(item);
+    if (!pausedRef.current) queueMicrotask(() => processQueueRef.current());
+  }, []);
+
+  /** Whether a line by this agent would be heard now (TTS on, not muted, a voice resolves) */
+  const canVoice = useCallback(
+    (agentId: string | null): boolean => !!enabled && !ttsMuted && !!resolveVoiceForAgent(agentId),
+    [enabled, resolveVoiceForAgent, ttsMuted],
+  );
+
+  /**
+   * Read a class moment's topic out in its opener's voice (I07): queued like
+   * a discussion line, but no stream segment waits on it. `onSettled` runs
+   * once when it is over — heard, failed, cancelled, or at once when nothing
+   * would be heard (TTS off, muted, no voice). Returns its cancel.
+   */
+  const announce = useCallback(
+    (text: string, agentId: string | null, onSettled?: () => void): (() => void) => {
+      const id = `announce-${++announcementCounterRef.current}`;
+      const item = buildQueueItem(id, id, text, agentId);
+      if (!item) {
+        onSettled?.();
+        return () => {};
+      }
+      item.onSettled = onSettled;
+      enqueue(item);
+      return () => stopItem(item);
+    },
+    [buildQueueItem, enqueue, stopItem],
+  );
+
   const cleanup = useCallback(() => {
+    // Every line in flight or waiting is over now
+    const unsettled = [currentItemRef.current, ...queueRef.current];
     pausedRef.current = false;
     currentProviderRef.current = null;
     currentItemRef.current = null;
@@ -508,6 +611,7 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
     isPlayingRef.current = false;
     segmentDoneCounterRef.current = 0;
     onAudioStateChangeRef.current?.(null, 'idle');
+    unsettled.forEach(settleItem);
   }, []);
 
   /** Pause TTS audio (browser-native or server). Does NOT stop the SSE stream. */
@@ -586,6 +690,8 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
 
   return {
     handleSegmentSealed,
+    announce,
+    canVoice,
     cleanup,
     pause,
     resume,

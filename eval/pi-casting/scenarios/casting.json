@@ -1,0 +1,1089 @@
+{
+  "rosters": {
+    "waves": [
+      {
+        "id": "t1",
+        "name": "林老师",
+        "role": "teacher",
+        "persona": "林老师教了十年高中物理，说话慢条斯理，喜欢先让学生猜，再揭晓答案。讲到难点会停下来问一句“大家跟上了吗”。"
+      },
+      {
+        "id": "ta1",
+        "name": "小禾",
+        "role": "assistant",
+        "persona": "小禾是物理系研究生助教，热心，爱用生活里的例子解释抽象概念，看到有人卡住会主动凑过来帮一把，但不会抢老师的话。"
+      },
+      {
+        "id": "s1",
+        "name": "小思",
+        "role": "student",
+        "persona": "小思刚接触波动，有点害羞，说话声音小，常把相位和振幅弄混。只有在真的想不通时才会小声发问，刚开过口后通常会安静一阵。"
+      },
+      {
+        "id": "s2",
+        "name": "阿杰",
+        "role": "student",
+        "persona": "阿杰话多，爱抢答，反应快但偶尔想当然。听到能联系到游戏或音乐的东西就特别来劲。"
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "observed-ta-silent-12-pages",
+      "description": "Observed failure: a 12-page course, the teaching assistant has not spoken all lesson, and the learner is stuck and asks for an everyday example. Distribution only: is the assistant ever cast?",
+      "tags": ["observed-failure"],
+      "roster": "waves",
+      "stageName": "机械波",
+      "pages": [
+        {
+          "id": "p1",
+          "title": "什么是机械波",
+          "keyPoints": ["振动的传播", "介质"]
+        },
+        {
+          "id": "p2",
+          "title": "横波与纵波",
+          "keyPoints": ["振动方向与传播方向"]
+        },
+        {
+          "id": "p3",
+          "title": "波长、频率与波速",
+          "keyPoints": ["v = λf"]
+        },
+        {
+          "id": "p4",
+          "title": "波的图像",
+          "keyPoints": ["位移-位置图"]
+        },
+        {
+          "id": "p5",
+          "title": "波的叠加",
+          "keyPoints": ["位移直接相加"]
+        },
+        {
+          "id": "p6",
+          "title": "相位",
+          "keyPoints": ["同相与反相"]
+        },
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"]
+        },
+        {
+          "id": "p8",
+          "title": "衍射",
+          "keyPoints": ["绕过障碍物"]
+        },
+        {
+          "id": "p9",
+          "title": "驻波",
+          "keyPoints": ["波节与波腹", "两列反向传播的相同波叠加"],
+          "speech": [
+            "两列频率相同、方向相反的波叠加，就会形成驻波。",
+            "有些点始终不动，我们叫它波节；有些点振动最大，叫波腹。"
+          ]
+        },
+        {
+          "id": "p10",
+          "title": "共鸣与乐器",
+          "keyPoints": ["弦的固有频率"]
+        },
+        {
+          "id": "p11",
+          "title": "多普勒效应",
+          "keyPoints": ["频率随相对运动变化"]
+        },
+        {
+          "id": "p12",
+          "title": "复习",
+          "keyPoints": ["本章小结"]
+        }
+      ],
+      "currentPageId": "p9",
+      "lectureProgress": {
+        "pageId": "p9",
+        "actionIndex": 1
+      },
+      "messages": [
+        {
+          "role": "user",
+          "text": "为什么驻波会有完全不动的点？"
+        },
+        {
+          "role": "assistant",
+          "agentId": "t1",
+          "text": "因为在波节处，两列波的位移始终大小相等、方向相反，加起来一直是零。"
+        },
+        {
+          "role": "user",
+          "text": "还是没懂……能不能举个生活里的例子？"
+        }
+      ],
+      "config": {
+        "sessionType": "qa",
+        "classPresence": {
+          "agents": [
+            {
+              "agentId": "t1",
+              "turns": 14,
+              "lastSceneId": "p9",
+              "learnerTurnsSince": 1
+            },
+            {
+              "agentId": "ta1",
+              "turns": 0
+            },
+            {
+              "agentId": "s1",
+              "turns": 1,
+              "lastSceneId": "p3",
+              "learnerTurnsSince": 9
+            },
+            {
+              "agentId": "s2",
+              "turns": 2,
+              "lastSceneId": "p6",
+              "learnerTurnsSince": 4
+            }
+          ]
+        }
+      },
+      "scripts": {
+        "t1": ["想象两个人拉着跳绳两头一起抖，绳子中间会有一个点几乎不动。"],
+        "ta1": ["你可以回家试试：把吉他弦中间轻轻按住再拨，按住的地方就是波节。"],
+        "s1": ["那……波节是不是就是没有波经过的地方？"],
+        "s2": ["这不就跟音箱共振一样嘛！"]
+      },
+      "e2e": true
+    },
+    {
+      "id": "observed-student-silent-until-asked",
+      "description": "Observed failure: the lecture moment has the teacher call on 小思 by name; she should answer next, in character, instead of staying silent until pressed.",
+      "tags": ["observed-failure"],
+      "roster": "waves",
+      "stageName": "机械波",
+      "pages": [
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"],
+          "speech": ["两列相同的波相遇，有的地方振动加强，有的地方减弱。"],
+          "moments": [
+            {
+              "id": "d7",
+              "agentId": "t1",
+              "topic": "小思，你来说说，两列波相遇时为什么有的地方会抵消？"
+            }
+          ]
+        }
+      ],
+      "currentPageId": "p7",
+      "messages": [],
+      "config": {
+        "sessionType": "discussion",
+        "momentKind": "lecture",
+        "triggerAgentId": "t1",
+        "discussionTopic": "小思，你来说说，两列波相遇时为什么有的地方会抵消？"
+      },
+      "scripts": {
+        "t1": [
+          "小思，你来说说，两列波相遇时为什么有的地方会抵消？",
+          "方向相反只说对了一半，关键是在那一点上它们总是一个往上一个往下。"
+        ],
+        "s1": ["是……因为它们方向相反吗？"],
+        "s2": ["我觉得是波峰撞上波谷！"],
+        "ta1": ["可以想成两个人反方向推同一扇门。"]
+      },
+      "e2e": true,
+      "expect": [
+        {
+          "check": "firstSpeaker",
+          "agentId": "t1"
+        },
+        {
+          "check": "speakerAt",
+          "index": 1,
+          "agentId": "s1"
+        },
+        {
+          "check": "studentNotLastWord"
+        }
+      ]
+    },
+    {
+      "id": "ack-closes",
+      "description": "Counter-example: a bare 明白了 after an answer closes the side session; nobody else is cast.",
+      "tags": ["counter-example"],
+      "roster": "waves",
+      "pages": [
+        {
+          "id": "p6",
+          "title": "相位",
+          "keyPoints": ["同相与反相"]
+        }
+      ],
+      "currentPageId": "p6",
+      "messages": [
+        {
+          "role": "user",
+          "text": "相位差是什么？"
+        },
+        {
+          "role": "assistant",
+          "agentId": "t1",
+          "text": "相位差就是两列波“步调”差了多少，差半个周期就是反相。"
+        },
+        {
+          "role": "user",
+          "text": "明白了"
+        }
+      ],
+      "scripts": {
+        "t1": ["好，那我们接着看下一部分。"]
+      },
+      "expect": [
+        {
+          "check": "terminal",
+          "is": "close_session"
+        },
+        {
+          "check": "maxTurns",
+          "n": 1
+        },
+        {
+          "check": "notCalled",
+          "agentId": "s1"
+        },
+        {
+          "check": "notCalled",
+          "agentId": "s2"
+        }
+      ]
+    },
+    {
+      "id": "back-to-lesson",
+      "description": "Counter-example: a request to go back to the lesson closes the side session.",
+      "tags": ["counter-example"],
+      "roster": "waves",
+      "pages": [
+        {
+          "id": "p5",
+          "title": "波的叠加",
+          "keyPoints": ["位移直接相加"]
+        }
+      ],
+      "currentPageId": "p5",
+      "messages": [
+        {
+          "role": "user",
+          "text": "叠加就是相加吗？"
+        },
+        {
+          "role": "assistant",
+          "agentId": "t1",
+          "text": "对，同一点上两列波的位移直接相加。"
+        },
+        {
+          "role": "user",
+          "text": "好的，继续上课吧"
+        }
+      ],
+      "scripts": {
+        "t1": ["好，我们回到叠加这一页接着讲。"]
+      },
+      "expect": [
+        {
+          "check": "terminal",
+          "is": "close_session"
+        },
+        {
+          "check": "maxTurns",
+          "n": 1
+        }
+      ]
+    },
+    {
+      "id": "shy-student-just-spoke",
+      "description": "Counter-example: shy 小思 just spoke and was corrected; the learner moves to a new question, so she is not called again.",
+      "tags": ["counter-example"],
+      "roster": "waves",
+      "pages": [
+        {
+          "id": "p3",
+          "title": "波长、频率与波速",
+          "keyPoints": ["v = λf"]
+        },
+        {
+          "id": "p6",
+          "title": "相位",
+          "keyPoints": ["同相与反相"]
+        }
+      ],
+      "currentPageId": "p6",
+      "messages": [
+        {
+          "role": "user",
+          "text": "反相是什么意思？"
+        },
+        {
+          "role": "assistant",
+          "agentId": "t1",
+          "text": "反相就是一个在波峰时另一个正好在波谷。"
+        },
+        {
+          "role": "assistant",
+          "agentId": "s1",
+          "text": "那……是不是反相的波振幅就会变小？"
+        },
+        {
+          "role": "assistant",
+          "agentId": "t1",
+          "text": "振幅是每列波自己的，反相改变的是叠加后的结果，不是它们各自的振幅。"
+        },
+        {
+          "role": "user",
+          "text": "那频率和波速又是什么关系？"
+        }
+      ],
+      "config": {
+        "classPresence": {
+          "agents": [
+            {
+              "agentId": "t1",
+              "turns": 6,
+              "lastSceneId": "p6",
+              "learnerTurnsSince": 1
+            },
+            {
+              "agentId": "ta1",
+              "turns": 2,
+              "lastSceneId": "p3",
+              "learnerTurnsSince": 3
+            },
+            {
+              "agentId": "s1",
+              "turns": 2,
+              "lastSceneId": "p6",
+              "learnerTurnsSince": 1
+            },
+            {
+              "agentId": "s2",
+              "turns": 3,
+              "lastSceneId": "p3",
+              "learnerTurnsSince": 3
+            }
+          ]
+        }
+      },
+      "scripts": {
+        "t1": ["波速等于波长乘以频率，同一介质里波速基本不变。"],
+        "ta1": ["比如同一根弦上，频率高了，波长就变短。"],
+        "s1": ["嗯……"],
+        "s2": ["那高音是不是波长短？"]
+      },
+      "expect": [
+        {
+          "check": "notCalled",
+          "agentId": "s1"
+        },
+        {
+          "check": "studentNotLastWord"
+        }
+      ]
+    },
+    {
+      "id": "ta-silent-no-reason",
+      "description": "Counter-example A: the assistant has never spoken, but a simple factual question gives them no natural reason to speak now.",
+      "tags": ["counter-example"],
+      "roster": "waves",
+      "pages": [
+        {
+          "id": "p3",
+          "title": "波长、频率与波速",
+          "keyPoints": ["v = λf"]
+        }
+      ],
+      "currentPageId": "p3",
+      "messages": [
+        {
+          "role": "user",
+          "text": "波长的单位是什么？"
+        }
+      ],
+      "config": {
+        "classPresence": {
+          "agents": [
+            {
+              "agentId": "t1",
+              "turns": 3,
+              "lastSceneId": "p3",
+              "learnerTurnsSince": 1
+            },
+            {
+              "agentId": "ta1",
+              "turns": 0
+            },
+            {
+              "agentId": "s1",
+              "turns": 1,
+              "lastSceneId": "p3",
+              "learnerTurnsSince": 1
+            },
+            {
+              "agentId": "s2",
+              "turns": 1,
+              "lastSceneId": "p3",
+              "learnerTurnsSince": 1
+            }
+          ]
+        }
+      },
+      "scripts": {
+        "t1": ["波长的单位就是长度单位，常用米。"],
+        "ta1": ["对，比如声波波长大概是几十厘米到几米。"],
+        "s1": ["哦，就是米啊。"],
+        "s2": ["那光的波长是不是很小？"]
+      },
+      "expect": [
+        {
+          "check": "notCalled",
+          "agentId": "ta1"
+        }
+      ]
+    },
+    {
+      "id": "addressed-student-first",
+      "description": "The learner asks 小思 by name: she answers first, in character; a wrong or unsure line from her is taken up.",
+      "tags": ["addressed"],
+      "roster": "waves",
+      "pages": [
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"]
+        }
+      ],
+      "currentPageId": "p7",
+      "messages": [
+        {
+          "role": "user",
+          "text": "小思，你觉得为什么有的地方会抵消？"
+        }
+      ],
+      "config": {
+        "addressedAgentIds": ["s1"]
+      },
+      "scripts": {
+        "s1": ["我……我猜是两列波的振幅不一样？"],
+        "t1": ["小思想到了振幅，不过关键其实是两列波在那一点的步调正好相反。"],
+        "ta1": ["可以想成两个人反方向推门。"],
+        "s2": ["是波峰撞波谷吧！"]
+      },
+      "expect": [
+        {
+          "check": "firstSpeaker",
+          "agentId": "s1"
+        },
+        {
+          "check": "studentNotLastWord"
+        }
+      ]
+    },
+    {
+      "id": "aside-ta-only",
+      "description": "An aside during the lecture: only the assistant answers, once, and hands back with cue_user.",
+      "tags": ["aside"],
+      "roster": "waves",
+      "agentIds": ["ta1"],
+      "pages": [
+        {
+          "id": "p9",
+          "title": "驻波",
+          "keyPoints": ["波节与波腹"],
+          "speech": [
+            "两列频率相同、方向相反的波叠加，就会形成驻波。",
+            "有些点始终不动，我们叫它波节。"
+          ]
+        },
+        {
+          "id": "p10",
+          "title": "共鸣与乐器",
+          "keyPoints": ["弦的固有频率"]
+        }
+      ],
+      "currentPageId": "p9",
+      "lectureProgress": {
+        "pageId": "p9",
+        "actionIndex": 1
+      },
+      "messages": [
+        {
+          "role": "user",
+          "text": "波节为什么不动？"
+        }
+      ],
+      "config": {
+        "asideToLecture": true
+      },
+      "scripts": {
+        "ta1": ["因为两列波在波节处总是一个往上一个往下，正好抵消，就像老师刚说的。"]
+      },
+      "expect": [
+        {
+          "check": "firstSpeaker",
+          "agentId": "ta1"
+        },
+        {
+          "check": "maxTurns",
+          "n": 1
+        },
+        {
+          "check": "terminal",
+          "is": "cue_user"
+        }
+      ]
+    },
+    {
+      "id": "observed-students-silent-12-pages",
+      "description": "Observed failure: in a 12-page course both students have stayed silent all lesson; the learner asks a why question a curious classmate would react to. Distribution only: is a student ever cast, and is their idea taken up?",
+      "tags": ["observed-failure"],
+      "roster": "waves",
+      "stageName": "机械波",
+      "pages": [
+        {
+          "id": "p1",
+          "title": "什么是机械波",
+          "keyPoints": ["振动的传播", "介质"]
+        },
+        {
+          "id": "p2",
+          "title": "横波与纵波",
+          "keyPoints": ["振动方向与传播方向"]
+        },
+        {
+          "id": "p3",
+          "title": "波长、频率与波速",
+          "keyPoints": ["v = λf"]
+        },
+        {
+          "id": "p4",
+          "title": "波的图像",
+          "keyPoints": ["位移-位置图"]
+        },
+        {
+          "id": "p5",
+          "title": "波的叠加",
+          "keyPoints": ["位移直接相加"]
+        },
+        {
+          "id": "p6",
+          "title": "相位",
+          "keyPoints": ["同相与反相"]
+        },
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"]
+        },
+        {
+          "id": "p8",
+          "title": "衍射",
+          "keyPoints": ["绕过障碍物"]
+        },
+        {
+          "id": "p9",
+          "title": "驻波",
+          "keyPoints": ["波节与波腹", "两列反向传播的相同波叠加"],
+          "speech": [
+            "两列频率相同、方向相反的波叠加，就会形成驻波。",
+            "有些点始终不动，我们叫它波节；有些点振动最大，叫波腹。"
+          ]
+        },
+        {
+          "id": "p10",
+          "title": "共鸣与乐器",
+          "keyPoints": ["弦的固有频率"]
+        },
+        {
+          "id": "p11",
+          "title": "多普勒效应",
+          "keyPoints": ["频率随相对运动变化", "靠近时音调变高，远离时变低"]
+        },
+        {
+          "id": "p12",
+          "title": "复习",
+          "keyPoints": ["本章小结"]
+        }
+      ],
+      "currentPageId": "p7",
+      "messages": [
+        {
+          "role": "user",
+          "text": "为什么两列波相遇以后，还能各自继续往前走，好像没撞过一样？"
+        }
+      ],
+      "config": {
+        "sessionType": "qa",
+        "classPresence": {
+          "agents": [
+            {
+              "agentId": "t1",
+              "turns": 11,
+              "lastSceneId": "p7",
+              "learnerTurnsSince": 1
+            },
+            {
+              "agentId": "ta1",
+              "turns": 2,
+              "lastSceneId": "p4",
+              "learnerTurnsSince": 3
+            },
+            {
+              "agentId": "s1",
+              "turns": 0
+            },
+            {
+              "agentId": "s2",
+              "turns": 0
+            }
+          ]
+        }
+      },
+      "scripts": {
+        "t1": [
+          "因为波传的是振动的形式，不是一团东西。相遇时位移相加，分开后各自的形状还是原来的样子。"
+        ],
+        "ta1": ["可以想想两个人隔着一根绳子各抖一下，两个波包穿过去以后还是原样。"],
+        "s1": ["那……它们相遇的那一下，是不是其实已经变形了？"],
+        "s2": ["就像游戏里两个技能穿模一样，互相不影响！"]
+      },
+      "e2e": true
+    },
+    {
+      "id": "student-opens-moment",
+      "description": "A lecture moment opened by 阿杰 (a student): he speaks first, in his own voice, and his half-right idea is taken up before the turn ends.",
+      "tags": ["moment"],
+      "roster": "waves",
+      "stageName": "机械波",
+      "pages": [
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"],
+          "speech": ["两列相同的波相遇，有的地方振动加强，有的地方减弱。"],
+          "moments": [
+            {
+              "id": "d7s",
+              "agentId": "s2",
+              "topic": "那降噪耳机是不是就是故意造一列波，把噪音抵消掉？"
+            }
+          ]
+        }
+      ],
+      "currentPageId": "p7",
+      "messages": [],
+      "config": {
+        "sessionType": "discussion",
+        "momentKind": "lecture",
+        "triggerAgentId": "s2",
+        "discussionTopic": "那降噪耳机是不是就是故意造一列波，把噪音抵消掉？"
+      },
+      "scripts": {
+        "s2": ["那降噪耳机是不是就是故意造一列波，把噪音抵消掉？"],
+        "t1": [
+          "阿杰这个联想很好。降噪耳机确实是造一列和噪音步调相反的波，但它得实时跟上噪音的变化，不是随便造一列就行。"
+        ],
+        "ta1": ["你戴耳机时开关一下降噪试试，低沉的嗡嗡声最容易被抵消。"],
+        "s1": ["那……高音为什么不容易抵消呀？"]
+      },
+      "expect": [
+        {
+          "check": "firstSpeaker",
+          "agentId": "s2"
+        },
+        {
+          "check": "studentNotLastWord"
+        }
+      ]
+    },
+    {
+      "id": "ask-learner-answer",
+      "description": "The teacher asks the whole class to predict and the learner chose 我来答: the teacher asks once and hands that question to the learner.",
+      "tags": ["moment", "ask-learner"],
+      "roster": "waves",
+      "stageName": "机械波",
+      "pages": [
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"],
+          "speech": ["两列相同的波相遇，有的地方振动加强，有的地方减弱。"],
+          "moments": [
+            {
+              "id": "d7q",
+              "agentId": "t1",
+              "topic": "大家先猜一猜：两列完全相同的波，一列的波峰正好对上另一列的波谷，会发生什么？"
+            }
+          ]
+        }
+      ],
+      "currentPageId": "p7",
+      "messages": [],
+      "config": {
+        "sessionType": "discussion",
+        "momentKind": "ask-learner",
+        "learnerStance": "answer",
+        "triggerAgentId": "t1",
+        "discussionTopic": "大家先猜一猜：两列完全相同的波，一列的波峰正好对上另一列的波谷，会发生什么？"
+      },
+      "scripts": {
+        "t1": [
+          "大家先猜一猜：两列完全相同的波，一列的波峰正好对上另一列的波谷，会发生什么？",
+          "对，会互相抵消。关键是在那一点上它们总是一个往上一个往下。"
+        ],
+        "s1": ["我猜……会互相抵消？"],
+        "s2": ["肯定是叠起来更强啊！"],
+        "ta1": ["可以想象两个人反方向推同一扇门。"]
+      },
+      "expect": [
+        {
+          "check": "firstSpeaker",
+          "agentId": "t1"
+        },
+        {
+          "check": "maxTurns",
+          "n": 1
+        },
+        {
+          "check": "terminal",
+          "is": "cue_user"
+        },
+        {
+          "check": "cuePrompt"
+        }
+      ]
+    },
+    {
+      "id": "ask-learner-listen",
+      "description": "The same whole-class question, but the learner chose 先听听大家: classmates who would speak guess in character, then the teacher reveals and compares. Distribution of who guesses; hard: the teacher opens and a student's guess never ends the turn.",
+      "tags": ["moment", "ask-learner"],
+      "roster": "waves",
+      "stageName": "机械波",
+      "pages": [
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"],
+          "speech": ["两列相同的波相遇，有的地方振动加强，有的地方减弱。"],
+          "moments": [
+            {
+              "id": "d7q",
+              "agentId": "t1",
+              "topic": "大家先猜一猜：两列完全相同的波，一列的波峰正好对上另一列的波谷，会发生什么？"
+            }
+          ]
+        }
+      ],
+      "currentPageId": "p7",
+      "messages": [],
+      "config": {
+        "sessionType": "discussion",
+        "momentKind": "ask-learner",
+        "learnerStance": "listen",
+        "triggerAgentId": "t1",
+        "discussionTopic": "大家先猜一猜：两列完全相同的波，一列的波峰正好对上另一列的波谷，会发生什么？"
+      },
+      "scripts": {
+        "t1": [
+          "大家先猜一猜：两列完全相同的波，一列的波峰正好对上另一列的波谷，会发生什么？",
+          "小思猜得对，阿杰想的是波峰碰波峰的情况。波峰对波谷时，两列波在那一点总是一上一下，就抵消了。"
+        ],
+        "s1": ["我猜……会互相抵消？"],
+        "s2": ["肯定是叠起来更强啊！"],
+        "ta1": ["可以想象两个人反方向推同一扇门。"]
+      },
+      "e2e": true,
+      "expect": [
+        {
+          "check": "firstSpeaker",
+          "agentId": "t1"
+        },
+        {
+          "check": "studentNotLastWord"
+        }
+      ]
+    },
+    {
+      "id": "quiz-review-director-picks",
+      "description": "A quiz review after two missed questions, with no opener given: the director picks who opens and who joins. Distribution only, plus the student-last-word rule.",
+      "tags": ["moment", "quiz-review"],
+      "roster": "waves",
+      "stageName": "机械波",
+      "pages": [
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"]
+        },
+        {
+          "id": "p8",
+          "title": "小测：叠加与干涉",
+          "keyPoints": ["加强减弱的条件", "叠加不改变各自的振幅"]
+        }
+      ],
+      "currentPageId": "p8",
+      "messages": [],
+      "config": {
+        "sessionType": "discussion",
+        "momentKind": "quiz-review",
+        "discussionTopic": "有两题没答对：什么情况下振动加强、什么情况下减弱；两列波叠加后各自的振幅会不会变。",
+        "classMemory": {
+          "entries": [],
+          "learner": {
+            "missedConcepts": ["加强与减弱的条件", "叠加后各自的振幅"]
+          }
+        }
+      },
+      "scripts": {
+        "t1": ["我们一起看看这两题。先说加强和减弱：关键看两列波在那一点的步调是同还是反。"],
+        "ta1": ["第二题很多人都会错：叠加改变的是那一点的合位移，每列波自己的振幅没变。"],
+        "s1": ["我也以为叠加以后振幅就变了……"],
+        "s2": ["那相遇完以后它们还能恢复原样吗？"]
+      },
+      "expect": [
+        {
+          "check": "studentNotLastWord"
+        }
+      ]
+    },
+    {
+      "id": "learner-goodbye",
+      "description": "Counter-example: the learner thanks the teacher and says goodbye; the session closes.",
+      "tags": ["counter-example"],
+      "roster": "waves",
+      "pages": [
+        {
+          "id": "p12",
+          "title": "复习",
+          "keyPoints": ["本章小结"]
+        }
+      ],
+      "currentPageId": "p12",
+      "messages": [
+        {
+          "role": "user",
+          "text": "驻波和干涉有什么联系？"
+        },
+        {
+          "role": "assistant",
+          "agentId": "t1",
+          "text": "驻波其实就是两列反向传播的相同的波一直在干涉，波节就是一直抵消的地方。"
+        },
+        {
+          "role": "user",
+          "text": "懂了，谢谢老师，今天就到这吧，拜拜！"
+        }
+      ],
+      "scripts": {
+        "t1": ["不客气，回去把驻波的图再画一遍，下次见！"]
+      },
+      "expect": [
+        {
+          "check": "terminal",
+          "is": "close_session"
+        }
+      ]
+    },
+    {
+      "id": "addressed-assistant-first",
+      "description": "The learner asks 小禾 (the assistant) by name for an everyday example: she answers first, in her own way.",
+      "tags": ["addressed"],
+      "roster": "waves",
+      "pages": [
+        {
+          "id": "p6",
+          "title": "相位",
+          "keyPoints": ["同相与反相"]
+        }
+      ],
+      "currentPageId": "p6",
+      "messages": [
+        {
+          "role": "user",
+          "text": "小禾，你能举个生活里反相的例子吗？"
+        }
+      ],
+      "config": {
+        "addressedAgentIds": ["ta1"]
+      },
+      "scripts": {
+        "ta1": ["比如两个人荡秋千，一个荡到最前面时另一个正好在最后面，这就是反相。"],
+        "t1": ["小禾这个例子很贴切，反相就是步调正好错开半个周期。"],
+        "s1": ["哦……那同相就是一起荡？"],
+        "s2": ["那俩秋千要是挨着，岂不是会撞上！"]
+      },
+      "expect": [
+        {
+          "check": "firstSpeaker",
+          "agentId": "ta1"
+        }
+      ]
+    },
+    {
+      "id": "asks-about-upcoming-page",
+      "description": "Cognitive boundary: on page 9 of 12 the learner asks about the Doppler effect (page 11, not taught yet). The teacher or assistant may preview it; no student is handed page 11's evidence, and a student's guess never ends the turn.",
+      "tags": ["cognitive-boundary"],
+      "roster": "waves",
+      "stageName": "机械波",
+      "pages": [
+        {
+          "id": "p1",
+          "title": "什么是机械波",
+          "keyPoints": ["振动的传播", "介质"]
+        },
+        {
+          "id": "p2",
+          "title": "横波与纵波",
+          "keyPoints": ["振动方向与传播方向"]
+        },
+        {
+          "id": "p3",
+          "title": "波长、频率与波速",
+          "keyPoints": ["v = λf"]
+        },
+        {
+          "id": "p4",
+          "title": "波的图像",
+          "keyPoints": ["位移-位置图"]
+        },
+        {
+          "id": "p5",
+          "title": "波的叠加",
+          "keyPoints": ["位移直接相加"]
+        },
+        {
+          "id": "p6",
+          "title": "相位",
+          "keyPoints": ["同相与反相"]
+        },
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"]
+        },
+        {
+          "id": "p8",
+          "title": "衍射",
+          "keyPoints": ["绕过障碍物"]
+        },
+        {
+          "id": "p9",
+          "title": "驻波",
+          "keyPoints": ["波节与波腹", "两列反向传播的相同波叠加"],
+          "speech": [
+            "两列频率相同、方向相反的波叠加，就会形成驻波。",
+            "有些点始终不动，我们叫它波节；有些点振动最大，叫波腹。"
+          ]
+        },
+        {
+          "id": "p10",
+          "title": "共鸣与乐器",
+          "keyPoints": ["弦的固有频率"]
+        },
+        {
+          "id": "p11",
+          "title": "多普勒效应",
+          "keyPoints": ["频率随相对运动变化", "靠近时音调变高，远离时变低"]
+        },
+        {
+          "id": "p12",
+          "title": "复习",
+          "keyPoints": ["本章小结"]
+        }
+      ],
+      "currentPageId": "p9",
+      "lectureProgress": {
+        "pageId": "p9",
+        "actionIndex": 1
+      },
+      "messages": [
+        {
+          "role": "user",
+          "text": "救护车开过去的时候声音会变调，这个和波有关系吗？"
+        }
+      ],
+      "scripts": {
+        "t1": [
+          "有关系，这叫多普勒效应，后面第 11 页会专门讲。先简单说：声源靠近时你听到的频率变高，远离时变低。"
+        ],
+        "ta1": ["下次听到救护车可以留意一下，靠近和远离时音调明显不一样。"],
+        "s1": ["是不是……声音被风吹歪了？"],
+        "s2": ["我知道，赛车游戏里车开过去也是这样！"]
+      },
+      "e2e": true,
+      "expect": [
+        {
+          "check": "noUpcomingEvidenceToStudents"
+        },
+        {
+          "check": "studentNotLastWord"
+        }
+      ]
+    },
+    {
+      "id": "teacher-question-learner-first",
+      "description": "Q&A: the teacher answers by turning the question back to the whole class. The learner, who asked, gets the first try: cue_user with that question, and talkative 阿杰 does not answer it first.",
+      "tags": ["wait-time"],
+      "roster": "waves",
+      "stageName": "机械波",
+      "pages": [
+        {
+          "id": "p6",
+          "title": "相位",
+          "keyPoints": ["同相与反相"]
+        },
+        {
+          "id": "p7",
+          "title": "干涉",
+          "keyPoints": ["加强与减弱", "相位差"],
+          "speech": ["两列相同的波相遇，有的地方振动加强，有的地方减弱。"]
+        }
+      ],
+      "currentPageId": "p7",
+      "lectureProgress": {
+        "pageId": "p7",
+        "actionIndex": 0
+      },
+      "messages": [
+        {
+          "role": "user",
+          "text": "为什么有的地方会减弱？"
+        }
+      ],
+      "scripts": {
+        "t1": ["好问题。大家先想想：如果一列波在这里是波峰，另一列正好是波谷，加起来会怎样？"],
+        "ta1": ["可以想象两个人反方向推同一扇门。"],
+        "s1": ["是……会变小吗？"],
+        "s2": ["那肯定抵消了啊！"]
+      },
+      "expect": [
+        {
+          "check": "firstSpeaker",
+          "agentId": "t1"
+        },
+        {
+          "check": "notCalled",
+          "agentId": "s2"
+        },
+        {
+          "check": "terminal",
+          "is": "cue_user"
+        },
+        {
+          "check": "cuePrompt"
+        }
+      ]
+    }
+  ]
+}
