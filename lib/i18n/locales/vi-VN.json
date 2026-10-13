@@ -299,7 +299,8 @@
       "qa": "Hỏi đáp",
       "discussion": "Thảo luận",
       "lecture": "GIẢNG",
-      "aside": "Hỏi trợ giảng"
+      "aside": "Hỏi trợ giảng",
+      "asideClassmate": "Trao đổi nhỏ"
     }
   },
   "actions": {
@@ -434,6 +435,7 @@
       "pendingQuestionStep": "Đang chờ · sẽ trả lời khi xong bước này",
       "assistantPrompt": "Hãy nói câu hỏi của bạn, mình sẽ giúp bạn.",
       "assistantAnswering": "Trợ giảng đang trả lời…",
+      "agentAnswering": "{{name}} đang trả lời…",
       "askedBy": "{{name}} hỏi bạn: {{prompt}}",
       "handBack": "{{name}} nhường lời cho bạn",
       "cueReplies": {

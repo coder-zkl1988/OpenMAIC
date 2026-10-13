@@ -299,7 +299,8 @@
       "qa": "Q&A",
       "discussion": "讨论",
       "lecture": "授课",
-      "aside": "助教答疑"
+      "aside": "助教答疑",
+      "asideClassmate": "小声交流"
     }
   },
   "actions": {
@@ -434,6 +435,7 @@
       "pendingQuestionStep": "排队中 · 老师完成当前步骤就回答",
       "assistantPrompt": "请说出你的问题，我来帮你解答",
       "assistantAnswering": "助教正在回答…",
+      "agentAnswering": "{{name}}正在回答…",
       "askedBy": "{{name}} 问你：{{prompt}}",
       "handBack": "{{name}} 把话交给了你",
       "cueReplies": {

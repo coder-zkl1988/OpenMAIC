@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   pickAssistantAgent,
+  resolveAsideAgent,
   shouldAssistantAnswer,
   type AssistantRouteInput,
 } from '@/lib/playback/assistant-aside';
@@ -102,5 +103,61 @@ describe('shouldAssistantAnswer', () => {
     expect(shouldAssistantAnswer({ ...playing, engineMode: 'idle', pausedForVoice: true })).toBe(
       false,
     );
+  });
+});
+
+describe('resolveAsideAgent', () => {
+  const classmate = { id: 'default-3', role: 'student' };
+  const ta = { id: 'default-2', role: 'assistant' };
+  const teacherAgent = { id: 'default-1', role: 'teacher' };
+
+  it('lets a classmate named during the lecture answer on the side, not as a raised hand', () => {
+    expect(resolveAsideAgent({ ...playing, addressed: [classmate] })).toBe('default-3');
+    // The learner chose them: even with the assistant setting off or no assistant
+    expect(resolveAsideAgent({ ...playing, enabled: false, addressed: [classmate] })).toBe(
+      'default-3',
+    );
+    expect(resolveAsideAgent({ ...playing, assistantAgentId: null, addressed: [classmate] })).toBe(
+      'default-3',
+    );
+    // The first one named answers
+    expect(resolveAsideAgent({ ...playing, addressed: [classmate, ta] })).toBe('default-3');
+  });
+
+  it('keeps the teacher flow for the teacher, fullscreen, an open Q&A or a waiting hand', () => {
+    expect(resolveAsideAgent({ ...playing, addressed: [teacherAgent] })).toBeNull();
+    expect(resolveAsideAgent({ ...playing, addressed: [classmate, teacherAgent] })).toBeNull();
+    expect(resolveAsideAgent({ ...playing, presenting: true, addressed: [classmate] })).toBeNull();
+    expect(
+      resolveAsideAgent({ ...playing, liveSessionOpen: true, addressed: [classmate] }),
+    ).toBeNull();
+    expect(
+      resolveAsideAgent({ ...playing, teacherHandPending: true, addressed: [classmate] }),
+    ).toBeNull();
+    // Paused or idle: the named one answers first in an ordinary Q&A
+    expect(
+      resolveAsideAgent({ ...playing, engineMode: 'paused', addressed: [classmate] }),
+    ).toBeNull();
+  });
+
+  it('keeps a follow-up in an open aside with whoever answers it', () => {
+    expect(resolveAsideAgent({ ...playing, asideOpen: true, asideAgentId: 'default-3' })).toBe(
+      'default-3',
+    );
+    // Naming someone else in the open aside asks them instead
+    expect(
+      resolveAsideAgent({
+        ...playing,
+        asideOpen: true,
+        asideAgentId: 'default-3',
+        addressed: [ta],
+      }),
+    ).toBe('default-2');
+  });
+
+  it('follows the assistant rules when nobody is named', () => {
+    expect(resolveAsideAgent(playing)).toBe('default-2');
+    expect(resolveAsideAgent({ ...playing, enabled: false })).toBeNull();
+    expect(resolveAsideAgent({ ...playing, engineMode: 'idle' })).toBeNull();
   });
 });

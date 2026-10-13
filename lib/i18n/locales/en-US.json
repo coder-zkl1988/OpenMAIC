@@ -299,7 +299,8 @@
       "qa": "Q&A",
       "discussion": "Discussion",
       "lecture": "LEC",
-      "aside": "Assistant Q&A"
+      "aside": "Assistant Q&A",
+      "asideClassmate": "Side chat"
     }
   },
   "actions": {
@@ -434,6 +435,7 @@
       "pendingQuestionStep": "Queued · answered when this step ends",
       "assistantPrompt": "Tell me your question and I'll help you with it.",
       "assistantAnswering": "The teaching assistant is answering…",
+      "agentAnswering": "{{name}} is answering…",
       "askedBy": "{{name}} asks you: {{prompt}}",
       "handBack": "{{name}} passes it to you",
       "cueReplies": {

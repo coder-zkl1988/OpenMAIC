@@ -665,7 +665,7 @@ export function buildDirectorPrompt(
   return [
     'You are the director of an in-class multi-agent classroom.',
     ...(aside
-      ? buildAsideDirectorRules(agents)
+      ? buildAsideDirectorRules(body, agents)
       : legacy
         ? buildLegacyDirectorRules(body, maxAgentTurns, moment)
         : buildPersonaDirectorRules(body, maxAgentTurns, moment)),
@@ -865,19 +865,32 @@ function buildLegacyDirectorRules(
 
 /**
  * The director's rules for an aside to the lecture: the teacher keeps
- * lecturing, and only the teaching assistant answers in the chat, in text,
- * then hands the floor back with cue_user (an aside is never closed).
+ * lecturing, and only the one asked on the side answers in the chat, in text
+ * — the teaching assistant, or a classmate the learner named (@) — then hands
+ * the floor back with cue_user (an aside is never closed). The request sends
+ * only that one agent.
  */
-function buildAsideDirectorRules(agents: AgentConfig[]): string[] {
-  const assistant = agents.find((agent) => agent.role === 'assistant') ?? agents[0];
+function buildAsideDirectorRules(body: StatelessChatRequest, agents: AgentConfig[]): string[] {
+  const asked = body.config.agentIds?.[0];
+  const answerer =
+    agents.find((agent) => agent.id === asked && agent.role !== 'teacher') ??
+    agents.find((agent) => agent.role === 'assistant') ??
+    agents.find((agent) => agent.role !== 'teacher') ??
+    agents[0];
+  const classmate = answerer?.role === 'student';
+  const who = answerer
+    ? `${answerer.name} ("${answerer.id}", ${classmate ? 'a classmate' : 'the teaching assistant'})`
+    : 'the agent asked';
   return [
-    'In this request the lead teacher is lecturing right now and KEEPS lecturing. The learner asked a question on the side, in the chat. Only the teaching assistant answers it here.',
-    `Call \`call_agent\` exactly once, for the teaching assistant${assistant ? ` ("${assistant.id}")` : ''}. Never call the teacher or a student, and never pause, stop or replace the lecture.`,
-    'Do not write the classroom response yourself. The assistant produces the visible answer.',
-    'Ask the assistant to answer concisely but completely, in text only: a few short sentences are fine. No whiteboard, slide, spotlight, laser or other classroom actions; the stage belongs to the lecture.',
+    `In this request the lead teacher is lecturing right now and KEEPS lecturing. The learner said something on the side, in the chat${classmate ? ', to a classmate' : ''}. Only ${who} answers it here.`,
+    `Call \`call_agent\` exactly once, for ${who}. Never call anyone else, and never pause, stop or replace the lecture.`,
+    'Do not write the classroom response yourself. The agent you call produces the visible answer.',
+    classmate
+      ? 'Ask the classmate to reply the way a classmate whispers back during a lecture: briefly, in text only, in their own character and at their own level. No whiteboard, slide, spotlight, laser or other classroom actions; the stage belongs to the lecture.'
+      : 'Ask the assistant to answer concisely but completely, in text only: a few short sentences are fine. No whiteboard, slide, spotlight, laser or other classroom actions; the stage belongs to the lecture.',
     '',
     '# Terminal Tool Policy (aside to the lecture)',
-    'After the assistant has answered, call `cue_user` so the learner can follow up, then finish with a short internal summary only.',
+    'After the answer, call `cue_user` so the learner can follow up, then finish with a short internal summary only.',
     'Never close this aside: there is no `close_session` here. Even for thanks, goodbye or "I understand", finish with `cue_user`.',
   ];
 }
@@ -1068,6 +1081,15 @@ function buildRoleGuideline(role: string, aside = false): string {
       '- Support the lead teacher by filling gaps or rephrasing briefly, building on how the teacher explained it (see what was just said on this page, when given).',
       '- Provide one concrete example or angle when useful.',
       "- You play a supporting role. Don't take over the lesson.",
+    ].join('\n');
+  }
+  if (aside) {
+    return [
+      'Your role in this classroom: STUDENT, whispering with the learner during the lecture.',
+      '- The teacher is lecturing right now and keeps lecturing. The learner, your classmate, said something to you in the chat.',
+      '- Reply the way you would whisper back in class: short, in your own voice and at your own level. You are not the teacher and do not explain beyond what you know; when you are unsure or do not know, say so, and you may suggest asking the teacher or the teaching assistant.',
+      '- A greeting or small talk gets a brief, friendly, in-character reply, and you keep half an ear on the lecture.',
+      '- Text only: do not use the whiteboard, slides or any other classroom action.',
     ].join('\n');
   }
   return [
@@ -1401,7 +1423,7 @@ export function buildUserPrompt(
   agents: readonly Pick<AgentConfig, 'id' | 'name' | 'role'>[] = [],
 ): string {
   const latestUserText = [...body.messages].reverse().find((message) => message.role === 'user');
-  // An aside has only the assistant to answer, whoever the learner named
+  // An aside has only the one asked on the side to answer (the request names them)
   const addressed = isAsideToLecture(body)
     ? []
     : (body.config.addressedAgentIds ?? [])

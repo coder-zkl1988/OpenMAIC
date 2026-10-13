@@ -299,7 +299,8 @@
       "qa": "Q&A",
       "discussion": "Debate",
       "lecture": "CLASE",
-      "aside": "Preguntas al asistente"
+      "aside": "Preguntas al asistente",
+      "asideClassmate": "Charla en voz baja"
     }
   },
   "actions": {
@@ -434,6 +435,7 @@
       "pendingQuestionStep": "En cola · se responde al terminar este paso",
       "assistantPrompt": "Dime tu pregunta y te ayudo.",
       "assistantAnswering": "El asistente está respondiendo…",
+      "agentAnswering": "{{name}} está respondiendo…",
       "askedBy": "{{name}} te pregunta: {{prompt}}",
       "handBack": "{{name}} te cede la palabra",
       "cueReplies": {

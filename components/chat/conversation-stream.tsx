@@ -429,8 +429,15 @@ export function HandRaiseStreamStatus({
 }
 
 interface AssistantAsideStreamStatusProps {
-  /** The teaching assistant who answers on the side while the lecture plays */
-  readonly assistant: { readonly name: string; readonly avatar: string };
+  /**
+   * Who answers on the side while the lecture plays: the teaching assistant
+   * (isAssistant), or a classmate the learner named (@)
+   */
+  readonly assistant: {
+    readonly name: string;
+    readonly avatar: string;
+    readonly isAssistant?: boolean;
+  };
   /**
    * `prompt`: the learner raised a hand to the assistant, who invites the
    * question (a local row, no request); `answering`: the assistant's answer
@@ -456,7 +463,9 @@ export function AssistantAsideStreamStatus({ assistant, status }: AssistantAside
         <span className="relative size-[18px] shrink-0 overflow-hidden rounded-full">
           <AvatarDisplay src={assistant.avatar} alt="" />
         </span>
-        {t('stage.handRaise.assistantAnswering')}
+        {assistant.isAssistant === false
+          ? t('stage.handRaise.agentAnswering', { name: assistant.name })
+          : t('stage.handRaise.assistantAnswering')}
       </div>
     );
   }

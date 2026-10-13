@@ -299,7 +299,8 @@
       "qa": "Q&A",
       "discussion": "議論",
       "lecture": "講義",
-      "aside": "アシスタントQ&A"
+      "aside": "アシスタントQ&A",
+      "asideClassmate": "ひそひそ話"
     }
   },
   "actions": {
@@ -434,6 +435,7 @@
       "pendingQuestionStep": "待機中 · このステップが終わったら回答します",
       "assistantPrompt": "質問をどうぞ。お手伝いします",
       "assistantAnswering": "アシスタントが回答中…",
+      "agentAnswering": "{{name}}が答えています…",
       "askedBy": "{{name}}からの質問：{{prompt}}",
       "handBack": "{{name}}があなたに話を振りました",
       "cueReplies": {

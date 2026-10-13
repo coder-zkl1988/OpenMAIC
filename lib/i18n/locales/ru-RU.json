@@ -299,7 +299,8 @@
       "qa": "Вопросы",
       "discussion": "Обсуждение",
       "lecture": "ЛЕКЦ",
-      "aside": "Вопросы ассистенту"
+      "aside": "Вопросы ассистенту",
+      "asideClassmate": "Шёпотом"
     }
   },
   "actions": {
@@ -434,6 +435,7 @@
       "pendingQuestionStep": "В очереди · ответ после этого шага",
       "assistantPrompt": "Задайте свой вопрос, я помогу.",
       "assistantAnswering": "Ассистент отвечает…",
+      "agentAnswering": "{{name}} отвечает…",
       "askedBy": "{{name}} спрашивает тебя: {{prompt}}",
       "handBack": "{{name}} передаёт слово тебе",
       "cueReplies": {

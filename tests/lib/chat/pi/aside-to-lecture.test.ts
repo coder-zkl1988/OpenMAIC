@@ -138,9 +138,9 @@ describe('aside director and child prompts', () => {
     const prompt = buildDirectorPrompt(makeBody({ asideToLecture: true }), [teacher, assistant], 1);
     expect(prompt).toContain('KEEPS lecturing');
     expect(prompt).toContain(
-      'Call `call_agent` exactly once, for the teaching assistant ("assistant-1")',
+      'Call `call_agent` exactly once, for AI assistant ("assistant-1", the teaching assistant)',
     );
-    expect(prompt).toContain('Never call the teacher or a student');
+    expect(prompt).toContain('Never call anyone else');
     expect(prompt).toContain('in text only');
     expect(prompt).toContain('call `cue_user` so the learner can follow up');
     expect(prompt).toContain('there is no `close_session` here');
@@ -148,6 +148,32 @@ describe('aside director and child prompts', () => {
     expect(prompt).not.toContain('The teacher (role: teacher) should usually');
     expect(prompt).not.toContain('# Classroom Casting');
     expect(prompt).not.toContain('For these call `close_session`');
+  });
+
+  it('has a classmate the learner named answer on the side, as a classmate whispers back', () => {
+    const student: AgentConfig = {
+      ...teacher,
+      id: 'student-1',
+      name: 'Kai',
+      role: 'student',
+      persona: 'A curious classmate.',
+      priority: 5,
+    };
+    const body = makeBody({ asideToLecture: true });
+    body.config.agentIds = ['student-1'];
+    const prompt = buildDirectorPrompt(body, [student], 1);
+    expect(prompt).toContain(
+      'to a classmate. Only Kai ("student-1", a classmate) answers it here.',
+    );
+    expect(prompt).toContain('Call `call_agent` exactly once, for Kai ("student-1", a classmate)');
+    expect(prompt).toContain('the way a classmate whispers back during a lecture');
+    expect(prompt).not.toContain('Ask the assistant to answer');
+    expect(prompt).toContain('there is no `close_session` here');
+
+    const child = buildChildPrompt(body, student, [], []);
+    expect(child).toContain('STUDENT, whispering with the learner during the lecture');
+    expect(child).toContain('when you are unsure or do not know, say so');
+    expect(child).not.toContain('TEACHING ASSISTANT, answering on the side');
   });
 
   it('keeps the normal Q&A rules without the flag', () => {

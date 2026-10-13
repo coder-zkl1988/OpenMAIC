@@ -46,6 +46,7 @@ const SESSION_BADGE_STYLES: Record<string, string> = {
   qa: 'bg-accent-soft text-accent-text',
   discussion: 'bg-warning-soft text-warning',
   aside: 'bg-success-soft text-success',
+  asideClassmate: 'bg-success-soft text-success',
 };
 
 /** Role chip colours next to an agent's name */
@@ -207,9 +208,14 @@ export function ChatSessionComponent({
   const { t } = useI18n();
   const isDiscussion = session.type === 'discussion';
   const isQA = session.type === 'qa';
-  // The teaching assistant answered on the side while the lecture played
+  // Someone answered on the side while the lecture played: the teaching
+  // assistant (助教答疑), or a classmate the learner named (小声交流)
   const isAside = isQA && session.config?.aside === true;
-  const badgeKind = isAside ? 'aside' : session.type;
+  const asideWithClassmate =
+    isAside &&
+    !!session.config?.defaultAgentId &&
+    useAgentRegistry.getState().getAgent(session.config.defaultAgentId)?.role === 'student';
+  const badgeKind = isAside ? (asideWithClassmate ? 'asideClassmate' : 'aside') : session.type;
   const isEnded = session.status === 'completed' && (isDiscussion || isQA);
   const isSoftClosing = session.status === 'soft-closing' && (isDiscussion || isQA);
   const remainingSoftCloseSeconds = useSoftCloseCountdown(session.softCloseDeadline);

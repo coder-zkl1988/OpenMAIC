@@ -299,7 +299,8 @@
       "qa": "P&R",
       "discussion": "Debate",
       "lecture": "AULA",
-      "aside": "P&R com o assistente"
+      "aside": "P&R com o assistente",
+      "asideClassmate": "Conversa baixinho"
     }
   },
   "actions": {
@@ -869,6 +870,7 @@
       "pendingQuestionStep": "Na fila · resposta ao fim desta etapa",
       "assistantPrompt": "Diga sua pergunta que eu te ajudo.",
       "assistantAnswering": "O assistente está respondendo…",
+      "agentAnswering": "{{name}} está respondendo…",
       "askedBy": "{{name}} pergunta para você: {{prompt}}",
       "handBack": "{{name}} passa a palavra para você",
       "cueReplies": {

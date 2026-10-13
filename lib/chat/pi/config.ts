@@ -7,7 +7,7 @@ const DEFAULT_PI_MAX_AGENT_TURNS = 6;
 const MAX_PI_MAX_AGENT_TURNS = 6;
 const DEFAULT_PI_MAX_ACTIONS_PER_AGENT = 8;
 const MAX_PI_MAX_ACTIONS_PER_AGENT = 8;
-/** An aside is one assistant answer: a single agent turn */
+/** An aside is one answer on the side (the assistant's, or a named classmate's): a single agent turn */
 export const ASIDE_MAX_AGENT_TURNS = 1;
 
 /**

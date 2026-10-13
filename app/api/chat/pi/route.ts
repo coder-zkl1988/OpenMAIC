@@ -230,7 +230,7 @@ async function chat(req: NextRequest, principal: OwnerPrincipal): Promise<Respon
 
     const maxAgentTurns = getPiMaxAgentTurns(body);
     const maxActionsPerAgent = getPiMaxActionsPerAgent(body);
-    // Never in an aside to the lecture: the assistant answers in text only
+    // Never in an aside to the lecture: the one asked on the side answers in text only
     const enableWhiteboardTools = getPiEnableWhiteboardTools(body);
     const childRuntimeMode = isPiNativeChildRuntimeEnabled() ? 'native' : 'legacy';
     const enableNativeChildSpotlight = isPiNativeChildSpotlightEnabled();
@@ -573,7 +573,7 @@ function boundClassroomContext(body: StatelessChatRequest): string[] {
   }
 
   if (config.classMemory !== undefined) {
-    // An aside requests only the assistant, but its memory may still name the
+    // An aside requests only the one asked on the side, but its memory may still name the
     // rest of the class (what the teacher or a classmate said earlier)
     const memoryAgentIds =
       config.asideToLecture === true

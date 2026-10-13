@@ -299,7 +299,8 @@
       "qa": "أسئلة",
       "discussion": "نقاش",
       "lecture": "محاضرة",
-      "aside": "أسئلة المساعد"
+      "aside": "أسئلة المساعد",
+      "asideClassmate": "حديث جانبي"
     }
   },
   "actions": {
@@ -434,6 +435,7 @@
       "pendingQuestionStep": "في الانتظار · سيُجاب بعد هذه الخطوة",
       "assistantPrompt": "اطرح سؤالك وسأساعدك.",
       "assistantAnswering": "المساعد يجيب…",
+      "agentAnswering": "{{name}} يجيب…",
       "askedBy": "يسألك {{name}}: {{prompt}}",
       "handBack": "{{name}} يترك لك الكلمة",
       "cueReplies": {

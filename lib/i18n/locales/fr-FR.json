@@ -299,7 +299,8 @@
       "qa": "Q/R",
       "discussion": "Discussion",
       "lecture": "COURS",
-      "aside": "Q/R assistant"
+      "aside": "Q/R assistant",
+      "asideClassmate": "Aparté"
     }
   },
   "actions": {
@@ -434,6 +435,7 @@
       "pendingQuestionStep": "En attente · réponse après cette étape",
       "assistantPrompt": "Posez-moi votre question, je vais vous aider.",
       "assistantAnswering": "L’assistant répond…",
+      "agentAnswering": "{{name}} répond…",
       "askedBy": "{{name}} te demande : {{prompt}}",
       "handBack": "{{name}} te passe la parole",
       "cueReplies": {

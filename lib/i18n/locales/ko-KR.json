@@ -299,7 +299,8 @@
       "qa": "Q&A",
       "discussion": "토론",
       "lecture": "강의",
-      "aside": "보조 선생님 Q&A"
+      "aside": "보조 선생님 Q&A",
+      "asideClassmate": "귓속말"
     }
   },
   "actions": {
@@ -434,6 +435,7 @@
       "pendingQuestionStep": "대기 중 · 이 단계가 끝나면 답변해요",
       "assistantPrompt": "질문을 말해 주세요. 제가 도와드릴게요",
       "assistantAnswering": "보조 선생님이 답변하는 중…",
+      "agentAnswering": "{{name}} 님이 답하는 중…",
       "askedBy": "{{name}}의 질문: {{prompt}}",
       "handBack": "{{name}}이(가) 당신에게 차례를 넘겼어요",
       "cueReplies": {

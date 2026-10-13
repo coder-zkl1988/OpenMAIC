@@ -99,7 +99,11 @@ import {
   takeRaisedHandDraft,
 } from '@/lib/playback/raised-hand-draft';
 import { loadCursor, saveCursor, type PlaybackCursor } from '@/lib/playback/cursor';
-import { pickAssistantAgent, shouldAssistantAnswer } from '@/lib/playback/assistant-aside';
+import {
+  pickAssistantAgent,
+  resolveAsideAgent,
+  shouldAssistantAnswer,
+} from '@/lib/playback/assistant-aside';
 import { ActionEngine } from '@/lib/action/engine';
 import { createAudioPlayer } from '@/lib/utils/audio-player';
 import { useDiscussionTTS } from '@/lib/hooks/use-discussion-tts';
@@ -375,10 +379,22 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const assistantHandUiRef = useRef<() => void>(() => {});
     // A Q&A / discussion with the teacher is open: mirrored for routing at call time
     const liveSessionOpenRef = useRef(false);
-    const setAsideSessionOpen = useCallback((open: boolean) => {
-      asideSessionOpenRef.current = open;
-      setAsideSessionOpenState(open);
+    // Who answers in the open aside: the assistant, or a classmate the
+    // learner named (@) during the lecture. Follow-ups stay with them.
+    const asideAgentIdRef = useRef<string | null>(null);
+    const [asideAgentId, setAsideAgentIdState] = useState<string | null>(null);
+    const setAsideAgentId = useCallback((agentId: string | null) => {
+      asideAgentIdRef.current = agentId;
+      setAsideAgentIdState(agentId);
     }, []);
+    const setAsideSessionOpen = useCallback(
+      (open: boolean) => {
+        asideSessionOpenRef.current = open;
+        if (!open) setAsideAgentId(null);
+        setAsideSessionOpenState(open);
+      },
+      [setAsideAgentId],
+    );
     const setAsideStreaming = useCallback((streaming: boolean) => {
       asideStreamingRef.current = streaming;
       setAsideStreamingState(streaming);
@@ -665,12 +681,12 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     );
 
     /**
-     * Who answers the learner now: the teaching assistant's id when its aside
-     * applies (shouldAssistantAnswer), else null for the teacher. Read at call
-     * time from refs and the stores: a voice transcript arrives through a
-     * callback captured when the recording started. A message that names
-     * (@) anyone but the assistant goes to the teacher, who pauses the
-     * lecture and hosts it (I23).
+     * Who answers the learner now on the side, while the teacher keeps
+     * lecturing: the teaching assistant when its aside applies, or the
+     * classmate (or assistant) the message names (@) during the lecture;
+     * else null for the teacher (resolveAsideAgent). Read at call time from
+     * refs and the stores: a voice transcript arrives through a callback
+     * captured when the recording started.
      */
     const resolveAssistantRoute = useCallback(
       (message?: string): string | null => {
@@ -686,7 +702,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
               mentionRoster(settings.selectedAgentIds ?? [], (id) => registry.getAgent(id), t),
             )
           : [];
-        const answers = shouldAssistantAnswer({
+        return resolveAsideAgent({
           enabled: settings.assistantAnswersDuringLecture !== false,
           assistantAgentId,
           asideOpen:
@@ -697,10 +713,10 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           liveSessionOpen: liveSessionOpenRef.current,
           teacherHandPending: !!queuedQuestionRef.current || !!engine?.getHandState(),
           pausedForVoice: !!engine && assistantVoicePauseRef.current === engine,
-          addressesOthers: addressed.some((id) => id !== assistantAgentId),
+          addressed: addressed.map((id) => ({ id, role: registry.getAgent(id)?.role ?? '' })),
+          asideAgentId: asideAgentIdRef.current,
           presenting: isPresentingRef.current,
         });
-        return answers ? assistantAgentId : null;
       },
       [t],
     );
@@ -759,6 +775,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         // Sent now: supersedes an unsent raised hand (e.g. one Pro mode gave back)
         forgetUnsentQuestion();
         setAssistantHandRaised(false);
+        setAsideAgentId(agentId);
         chatAreaRef.current?.switchToTab('interaction');
         // Optimistic, until the aside reports its own state; a new turn has
         // not started answering yet (the send cooldown waits for it)
@@ -775,6 +792,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         elementReferenceSendOptions,
         forgetUnsentQuestion,
         resumeAfterAssistantVoice,
+        setAsideAgentId,
         setAsideStreaming,
         setAssistantHandRaised,
       ],
@@ -3102,19 +3120,23 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       streamCueSpeaker !== null;
     // The assistant's rows in the stream: its invitation while a hand is up
     // to it, then 助教正在回答… until its answer's bubble starts
-    const assistantParticipant = assistantAgent
-      ? participants.find((p) => p.id === assistantAgent.id)
+    // Who answers on the side: the classmate the learner named (@), else the assistant
+    const asideAgentConfig =
+      (asideAgentId ? selectedAgents.find((agent) => agent.id === asideAgentId) : undefined) ??
+      assistantAgent ??
+      undefined;
+    const asideParticipant = asideAgentConfig
+      ? participants.find((p) => p.id === asideAgentConfig.id)
       : undefined;
-    const assistantStreamStatus: 'prompt' | 'answering' | null = !assistantAgent
-      ? null
-      : asideStreaming && !asideSpeakingAgentId
+    const assistantStreamStatus: 'prompt' | 'answering' | null =
+      asideStreaming && !asideSpeakingAgentId && asideAgentConfig
         ? 'answering'
-        : assistantHandRaised
+        : assistantHandRaised && assistantAgent
           ? 'prompt'
           : null;
-    // The assistant answering on the side (回答中 on its participant tile)
+    // The one answering on the side (回答中 on their participant tile)
     const asideAnsweringAgentId = asideStreaming
-      ? (asideSpeakingAgentId ?? assistantAgent?.id ?? null)
+      ? (asideSpeakingAgentId ?? asideAgentConfig?.id ?? null)
       : null;
 
     // The stacked chrome is off while presenting: fullscreen shows the stage
@@ -3604,12 +3626,13 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                         onThink={thinkAboutCue}
                       />
                     )}
-                    {assistantStreamStatus && assistantAgent && (
+                    {assistantStreamStatus && asideAgentConfig && (
                       <AssistantAsideStreamStatus
                         status={assistantStreamStatus}
                         assistant={{
-                          name: assistantParticipant?.name || assistantAgent.name,
-                          avatar: assistantParticipant?.avatar || assistantAgent.avatar,
+                          name: asideParticipant?.name || asideAgentConfig.name,
+                          avatar: asideParticipant?.avatar || asideAgentConfig.avatar,
+                          isAssistant: asideAgentConfig.role === 'assistant',
                         }}
                       />
                     )}
