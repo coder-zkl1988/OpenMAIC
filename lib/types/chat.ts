@@ -764,6 +764,11 @@ export type StatelessEvent =
          * most PI_REQUEST_BOUNDS.cuePromptMaxChars. Absent: a plain hand-back.
          */
         prompt?: string;
+        /**
+         * Two to four short suggested replies the learner can tap instead of
+         * typing, normalized by normalizeCueUserOptions. Absent: no suggestions.
+         */
+        options?: string[];
       };
     }
   | {

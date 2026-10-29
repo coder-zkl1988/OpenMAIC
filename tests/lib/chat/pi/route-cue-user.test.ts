@@ -2,9 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 import { convertToLlm } from '@earendil-works/pi-agent-core';
 
-const PI_CHAT_FLAG = 'NEXT_PUBLIC_PI_CHAT_ENABLED';
 const COURSEWARE_REFERENCE_FLAG = 'NEXT_PUBLIC_COURSEWARE_REFERENCE_ENABLED';
-let originalPiChatFlag: string | undefined;
 let originalCoursewareReferenceFlag: string | undefined;
 
 type MockTool = {
@@ -623,9 +621,7 @@ const callAssistant: ScriptStep = {
 
 describe('POST /api/chat/pi cue_user', () => {
   beforeEach(() => {
-    originalPiChatFlag = process.env[PI_CHAT_FLAG];
     originalCoursewareReferenceFlag = process.env[COURSEWARE_REFERENCE_FLAG];
-    process.env[PI_CHAT_FLAG] = 'true';
     process.env[COURSEWARE_REFERENCE_FLAG] = 'false';
     vi.resetModules();
     mocks.resolveModel.mockReset();
@@ -644,11 +640,6 @@ describe('POST /api/chat/pi cue_user', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    if (originalPiChatFlag === undefined) {
-      delete process.env[PI_CHAT_FLAG];
-    } else {
-      process.env[PI_CHAT_FLAG] = originalPiChatFlag;
-    }
     if (originalCoursewareReferenceFlag === undefined) {
       delete process.env[COURSEWARE_REFERENCE_FLAG];
     } else {
@@ -1239,9 +1230,7 @@ describe('POST /api/chat/pi cue_user', () => {
 
 describe('POST /api/chat/pi persona-driven turn endings', () => {
   beforeEach(() => {
-    originalPiChatFlag = process.env[PI_CHAT_FLAG];
     originalCoursewareReferenceFlag = process.env[COURSEWARE_REFERENCE_FLAG];
-    process.env[PI_CHAT_FLAG] = 'true';
     process.env[COURSEWARE_REFERENCE_FLAG] = 'false';
     vi.resetModules();
     mocks.resolveModel.mockReset();
@@ -1258,8 +1247,6 @@ describe('POST /api/chat/pi persona-driven turn endings', () => {
   });
 
   afterEach(() => {
-    if (originalPiChatFlag === undefined) delete process.env[PI_CHAT_FLAG];
-    else process.env[PI_CHAT_FLAG] = originalPiChatFlag;
     if (originalCoursewareReferenceFlag === undefined) {
       delete process.env[COURSEWARE_REFERENCE_FLAG];
     } else {

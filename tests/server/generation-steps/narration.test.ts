@@ -1,3 +1,4 @@
+import { setDeploymentConfigForTests } from '@/lib/server/model-config/runtime';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StepRefusal } from '@/lib/server/generation/steps/context';
@@ -36,11 +37,56 @@ const connection: MediaConnection = {
 describe('narration step', () => {
   beforeEach(() => {
     vi.resetModules();
+    setDeploymentConfigForTests({
+      layer: {
+        source: 'deployment',
+        config: {
+          providers: {
+            seedream: { preset: 'seedream', apiKey: 'image-key' },
+            seedance: { preset: 'seedance', apiKey: 'video-key' },
+            'openai-tts': { preset: 'openai-tts', apiKey: 'server-key' },
+          },
+          slots: { image: 'seedream', video: 'seedance', tts: 'openai-tts:gpt-4o-mini-tts' },
+        },
+      },
+      legacy: false,
+      notices: [],
+    });
     mocks.generateTTS.mockReset();
     mocks.generateTTS.mockResolvedValue({ audio: new Uint8Array([1, 2, 3]), format: 'mp3' });
     mocks.resolveMediaSlot.mockReset();
     mocks.resolveMediaSlot.mockResolvedValue(connection);
     mocks.recordGenerationUsage.mockReset();
+  });
+
+  it('uses the connection default voice while preserving explicit requests', async () => {
+    for (const [requestedVoice, expected] of [
+      [undefined, 'vivian'],
+      ['alloy', 'alloy'],
+    ] as const) {
+      await synthesizeNarration(
+        {
+          text: 'Hello',
+          audioId: 'default-voice-test',
+          connection: { ...connection, options: { defaultVoice: 'vivian' } },
+          requestedVoice,
+        },
+        { log: testLogger() },
+      );
+      expect(mocks.generateTTS.mock.calls.at(-1)?.[0].voice).toBe(expected);
+    }
+  });
+
+  it('uses the configured catalogue fallback without an explicit default', async () => {
+    await synthesizeNarration(
+      {
+        text: 'Hello',
+        audioId: 'catalogue-default-test',
+        connection: { ...connection, voices: [{ id: 'vivian', name: 'Vivian' }] },
+      },
+      { log: testLogger() },
+    );
+    expect(mocks.generateTTS.mock.calls.at(-1)?.[0].voice).toBe('vivian');
   });
 
   it('speaks with the requested voice through the slot provider and records the usage', async () => {

@@ -116,6 +116,7 @@ import {
   audioProviderFetch,
   type AudioEndpointTarget,
 } from '@/lib/server/audio-provider-fetch';
+import { ProviderQuotaExhaustedError } from '@/lib/server/provider-quota';
 import { appAttributionHeaders } from '@/lib/config/app-attribution';
 import { pcmS16leMonoToWav } from './pcm-wav';
 
@@ -153,13 +154,21 @@ export interface TTSGenerationResult {
 export class TTSRateLimitError extends Error {
   /** Milliseconds from a `Retry-After` header, when the provider sent one. */
   readonly retryAfterMs?: number;
+  /**
+   * Classifier sentinel, not the provider's HTTP status. Business-level rate
+   * limits (MiniMax HTTP 200 + code 1002, Doubao business codes) still carry
+   * 429 so `runFailureCode` and route retry map this class to `RATE_LIMITED`
+   * and a retryable status. A quota error attached as `cause` still wins.
+   */
+  readonly statusCode = 429;
 
   constructor(
     public readonly provider: string,
     message: string,
     retryAfterMs?: number,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = 'TTSRateLimitError';
     if (retryAfterMs !== undefined && Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
       this.retryAfterMs = retryAfterMs;
@@ -269,12 +278,14 @@ export function throwIfTtsRateLimited(
   provider: string,
   status: number,
   retryAfterHeader?: string | null,
+  options?: ErrorOptions,
 ): void {
   if (status === 429) {
     throw new TTSRateLimitError(
       provider,
       `${provider} TTS rate limit exceeded (HTTP 429)`,
       parseRetryAfterMs(retryAfterHeader),
+      options,
     );
   }
 }
@@ -388,9 +399,14 @@ async function generateOpenAITTS(
   });
 
   if (!response.ok) {
-    throwIfTtsRateLimited('OpenAI', response.status, response.headers?.get('retry-after'));
     const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(`OpenAI TTS API error: ${error.error?.message || response.statusText}`);
+    // Retain the response without changing the HTTP status used by route retries.
+    const options = { cause: { data: error } };
+    throwIfTtsRateLimited('OpenAI', response.status, response.headers?.get('retry-after'), options);
+    throw new Error(
+      `OpenAI TTS API error: ${error.error?.message || response.statusText}`,
+      options,
+    );
   }
 
   return await validateTTSAudioResponse(response, 'OpenAI');
@@ -645,7 +661,9 @@ function getVLLMOmniSpeechUrl(baseUrl: string): string {
 }
 
 function getVLLMOmniModelId(config: TTSModelConfig): string {
-  const modelId = config.modelId?.trim();
+  const modelId = config.modelId;
+  // VoxCPM2 is the operator-declared id; vLLM-Omni requires this fixed internal
+  // alias. The rewrite is deterministic and cannot be selected by a request.
   if (!modelId || modelId === 'VoxCPM2') return VOXCPM_VLLM_MODEL_ID;
   return modelId;
 }
@@ -940,13 +958,13 @@ async function generateQwenTTS(
   signal: AbortSignal,
 ): Promise<TTSGenerationResult> {
   const baseUrl = config.baseUrl || TTS_PROVIDERS['qwen-tts'].defaultBaseUrl;
-  const cloneVoice = isQwenCloneVoice(config.voice);
+  const cloneVoice = isQwenCloneVoice(config.voice, config.voices);
 
   if (cloneVoice) {
     const targetModel =
       config.providerOptions?.qwenVoiceClone === true
         ? config.modelId
-        : resolveTTSModelForVoice('qwen-tts', config.voice, config.modelId);
+        : resolveTTSModelForVoice('qwen-tts', config.voice, config.modelId, config.voices);
     try {
       return await synthesizeQwenVoiceClone(
         {
@@ -973,7 +991,7 @@ async function generateQwenTTS(
   // speed 1.0 = rate 0, speed 2.0 = rate 500, speed 0.5 = rate -250
   const rate = Math.round(((config.speed || 1.0) - 1.0) * 500);
 
-  const modelId = resolveTTSModelForVoice('qwen-tts', config.voice, config.modelId);
+  const modelId = resolveTTSModelForVoice('qwen-tts', config.voice, config.modelId, config.voices);
   const response = await ttsFetch(
     config,
     `${baseUrl}/services/aigc/multimodal-generation/generation`,
@@ -1047,6 +1065,13 @@ async function generateQwenTTS(
  */
 const MINIMAX_RATE_LIMIT_STATUS_CODES = new Set([1002, 1039, 1041, 2045]);
 
+/**
+ * MiniMax plan and balance exhaustion, as opposed to its rate limits:
+ * 1008 insufficient balance, 2056 usage limit exceeded (the plan's window).
+ * https://platform.minimax.io/docs/api-reference/errorcode
+ */
+const MINIMAX_QUOTA_STATUS_CODES = new Set([1008, 2056]);
+
 function minimaxStatusCode(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim() !== '') {
@@ -1054,6 +1079,26 @@ function minimaxStatusCode(value: unknown): number | undefined {
     if (Number.isFinite(parsed)) return parsed;
   }
   return undefined;
+}
+
+/** The `base_resp.status_code` of a MiniMax error response body, if it has one. */
+function minimaxBodyStatusCode(body: string): number | undefined {
+  try {
+    const parsed = JSON.parse(body) as { base_resp?: { status_code?: unknown } } | null;
+    return minimaxStatusCode(parsed?.base_resp?.status_code);
+  } catch {
+    return undefined;
+  }
+}
+
+/** A MiniMax quota code as the provider-neutral quota error; undefined for any other code. */
+function minimaxQuotaError(
+  statusCode: number | undefined,
+  message: string,
+): ProviderQuotaExhaustedError | undefined {
+  return statusCode !== undefined && MINIMAX_QUOTA_STATUS_CODES.has(statusCode)
+    ? new ProviderQuotaExhaustedError('MiniMax', message)
+    : undefined;
 }
 
 /** Any non-zero MiniMax `base_resp.status_code` is a failure, even with audio bytes. */
@@ -1077,7 +1122,8 @@ function throwIfMiniMaxBaseRespFailed(
     );
   }
 
-  throw new Error(`MiniMax TTS API error (${statusCode}): ${statusMsg}`);
+  const message = `MiniMax TTS API error (${statusCode}): ${statusMsg}`;
+  throw minimaxQuotaError(statusCode, message) ?? new Error(message);
 }
 
 /**
@@ -1122,9 +1168,18 @@ async function generateMiniMaxTTS(
   });
 
   if (!response.ok) {
-    throwIfTtsRateLimited('MiniMax', response.status, response.headers?.get('retry-after'));
     const errorText = await response.text().catch(() => response.statusText);
-    throw new Error(`MiniMax TTS API error: ${errorText}`);
+    const message = `MiniMax TTS API error: ${errorText}`;
+    // A quota code in the body says what the HTTP status does not; an HTTP 429
+    // keeps its rate-limit type and carries the quota error as its cause.
+    const quota = minimaxQuotaError(minimaxBodyStatusCode(errorText), message);
+    throwIfTtsRateLimited(
+      'MiniMax',
+      response.status,
+      response.headers?.get('retry-after'),
+      quota ? { cause: quota } : undefined,
+    );
+    throw quota ?? new Error(message);
   }
 
   const data = await response.json();
@@ -1150,7 +1205,7 @@ async function generateMiniMaxTTS(
 
 /**
  * Google Gemini TTS via the Interactions API.
- * Response audio is raw 24 kHz mono s16le PCM; wrap as WAV for classroom playback.
+ * Gemini 3.8 returns WAV; earlier preview models return raw mono s16le PCM.
  */
 async function generateGoogleTTS(
   config: TTSModelConfig,
@@ -1194,13 +1249,21 @@ async function generateGoogleTTS(
     throw new Error('Google Gemini TTS API error: response missing audio data');
   }
 
-  const pcm = new Uint8Array(Buffer.from(audio.data, 'base64'));
-  if (pcm.byteLength === 0) {
+  const bytes = new Uint8Array(Buffer.from(audio.data, 'base64'));
+  if (bytes.byteLength === 0) {
     throw new Error('Google Gemini TTS API error: empty audio payload');
   }
 
+  const mimeType = audio.mimeType?.split(';')[0].trim().toLowerCase();
+  if (mimeType === 'audio/wav') {
+    return { audio: bytes, format: 'wav' };
+  }
+  // Preserve the legacy PCM fallback for responses without a MIME type.
+  if (mimeType && mimeType !== 'audio/l16') {
+    throw new Error('Google Gemini TTS API error: unsupported audio format');
+  }
   return {
-    audio: pcmS16leMonoToWav(pcm, audio.sampleRate),
+    audio: pcmS16leMonoToWav(bytes, sampleRateFromL16Mime(audio.mimeType)),
     format: 'wav',
   };
 }
@@ -1211,7 +1274,7 @@ async function generateGoogleTTS(
  */
 function extractGoogleInteractionsAudio(
   payload: Record<string, unknown> | null,
-): { data: string; sampleRate: number } | null {
+): { data: string; mimeType?: string } | null {
   if (!payload || !Array.isArray(payload.steps)) return null;
 
   for (const step of payload.steps) {
@@ -1224,7 +1287,10 @@ function extractGoogleInteractionsAudio(
       if (block.type !== 'audio' || typeof block.data !== 'string' || block.data.length === 0) {
         continue;
       }
-      return { data: block.data, sampleRate: sampleRateFromL16Mime(block.mime_type) };
+      return {
+        data: block.data,
+        mimeType: typeof block.mime_type === 'string' ? block.mime_type : undefined,
+      };
     }
   }
 

@@ -213,7 +213,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="h-[85vh] p-0 gap-0 block max-sm:h-[100dvh] max-sm:max-w-none max-sm:rounded-none"
+        className="home-settings-dialog h-[85vh] p-0 gap-0 block max-sm:h-[100dvh] max-sm:max-w-none max-sm:rounded-none"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">{t('settings.title')}</DialogTitle>
@@ -271,7 +271,12 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                     <span className="hidden xl:inline">{t('settings.syncToDesktop')}</span>
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('common.close')}
+                  onClick={() => onOpenChange(false)}
+                >
                   <X className="h-4 w-4" />
                 </Button>
               </div>

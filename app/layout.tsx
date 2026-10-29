@@ -1,4 +1,7 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import { AdaptiveProvider } from '@/lib/adaptive/adaptive-provider';
+import { identifyRequestDevice } from '@/lib/adaptive/request-device';
+import { cookies, headers } from 'next/headers';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import './globals.css';
@@ -14,6 +17,8 @@ import { StorageHealthNotice } from '@/components/storage-health-notice';
 import { AccessCodeGuard } from '@/components/access-code-guard';
 import { ProSwapWatcher } from '@/components/workbench/ProSwapWatcher';
 import { DesktopSettingsBridge } from '@/components/desktop-settings-bridge';
+import { loadLocaleResource } from '@/lib/i18n/load-resource';
+import { LOCALE_COOKIE, resolveRequestLocale } from '@/lib/i18n/resolve-locale';
 
 // The UI font is loaded from @fontsource's stylesheet rather than next/font,
 // because only the stylesheet carries the per-subset `unicode-range`
@@ -43,19 +48,36 @@ const THEME_INIT_SCRIPT = `try{var t=localStorage.getItem('theme');if(t==='dark'
 // Set it before paint so the title bar never overlaps a full-height route.
 const DESKTOP_INIT_SCRIPT = `if(window.openmaicDesktop?.isDesktop)document.documentElement.dataset.openmaicDesktop=window.openmaicDesktop.platform`;
 
+// Keep the browser's default cutout avoidance: full-screen routes such as
+// classroom do not yet pad their controls for edge-to-edge rendering.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
   title: 'OpenMAIC',
   description:
     'The open-source AI interactive classroom. Upload a PDF to instantly generate an immersive, multi-agent learning experience.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // The client hydrates with this same locale and bundle instead of detecting
+  // its own, so the first render matches the server's HTML.
+  const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
+  const locale = resolveRequestLocale({
+    cookie: cookieStore.get(LOCALE_COOKIE)?.value,
+    acceptLanguage: headerStore.get('accept-language'),
+  });
+  const resources = await loadLocaleResource(locale);
+  const { initialMobileLayout } = identifyRequestDevice(headerStore.get('user-agent'));
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: DESKTOP_INIT_SCRIPT }} />
@@ -67,20 +89,22 @@ export default function RootLayout({
         <div className="desktop-titlebar" aria-hidden="true">
           OpenMAIC
         </div>
-        <ThemeProvider>
-          <I18nProvider>
-            <ModelSettingsInit />
-            <AgentRegistryInit />
-            <ProSwapWatcher />
-            <DesktopSettingsBridge />
-            <AccessCodeGuard>{children}</AccessCodeGuard>
-            <Toaster position="top-center" />
-            {/* After the Toaster: this one raises a toast on mount when
+        <AdaptiveProvider initialMobileLayout={initialMobileLayout}>
+          <ThemeProvider>
+            <I18nProvider initialLocale={locale} initialResources={resources}>
+              <ModelSettingsInit />
+              <AgentRegistryInit />
+              <ProSwapWatcher />
+              <DesktopSettingsBridge />
+              <AccessCodeGuard>{children}</AccessCodeGuard>
+              <Toaster position="top-center" />
+              {/* After the Toaster: this one raises a toast on mount when
                 persistence is already broken, and a toast raised before its
                 host exists has nowhere to go. */}
-            <StorageHealthNotice />
-          </I18nProvider>
-        </ThemeProvider>
+              <StorageHealthNotice />
+            </I18nProvider>
+          </ThemeProvider>
+        </AdaptiveProvider>
       </body>
     </html>
   );

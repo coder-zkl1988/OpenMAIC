@@ -10,7 +10,7 @@
 import type { NextRequest } from 'next/server';
 
 import { createLogger } from '@/lib/logger';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import { apiError, apiSuccess, modelAuthorizationResponse } from '@/lib/server/api-response';
 import { StepRefusal } from '@/lib/server/generation/steps/context';
 import {
   parsePersonaUpgradeRequest,
@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
     // The client sends no model headers: the agent-profiles stage's model writes personas.
     model = await resolveModelFromRequest(req, body, 'agent-profiles');
   } catch (error) {
+    const authorization = modelAuthorizationResponse(error);
+    if (authorization) return authorization;
     log.error('Model resolution failed:', error);
     return apiError('INVALID_REQUEST', 400, error instanceof Error ? error.message : String(error));
   }

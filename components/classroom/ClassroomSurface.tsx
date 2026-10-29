@@ -55,6 +55,7 @@ import {
 import { CourseGeneratingPlaceholder } from './CourseGeneratingPlaceholder';
 import { GenerationPausedNotice } from './GenerationPausedNotice';
 import { useOwnClassmatesNotice } from './use-own-classmates-notice';
+import { pendingSceneFailureKey } from '@/lib/generation-run-client/failure-message';
 
 const log = createLogger('Classroom');
 
@@ -290,6 +291,10 @@ export function ClassroomSurface({
   // A course a server-side generation run produces: the classroom follows the
   // run (its scenes, media and pauses) and sends it Retry.
   const runCourse = useRunCourse({ classroomId, ready: !loading && !error });
+  // The pending scene's failure card shows the first outline not yet produced;
+  // the run's guidance belongs there only when that is the scene it stopped at.
+  const pendingOutlineId = useStageStore((s) => s.generatingOutlines[0]?.id);
+  const failureKey = pendingSceneFailureKey(runCourse.failure, pendingOutlineId);
 
   // A course with its own classmates replaced the learner's preset ones: say
   // so once, with the choice to always use the preset classmates
@@ -401,6 +406,7 @@ export function ClassroomSurface({
               )}
               <Stage
                 classroomId={classroomId}
+                generationFailureMessage={failureKey ? t(failureKey) : undefined}
                 onRetryOutline={mayGenerate && runCourse.runId ? runCourse.retryOutline : undefined}
               />
             </ClassroomLayoutContext.Provider>

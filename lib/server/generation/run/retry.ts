@@ -11,7 +11,10 @@
  */
 import { isAbortError, withGenerationRetry, type GenerationRetryEvent } from '@openmaic/generation';
 
-import { classifyHostFailure } from '@/lib/server/generation-run-hooks/runtime';
+import {
+  classifyHostFailure,
+  isProviderQuotaRefusal,
+} from '@/lib/server/generation-run-hooks/runtime';
 import { StepRefusal } from '@/lib/server/generation/steps/context';
 import { upstreamHttpStatus } from '@/lib/server/llm-error-response';
 
@@ -22,8 +25,9 @@ export const SCENE_MAX_RETRIES = 5;
 
 /**
  * A failure carrying the status the step's route would have answered, for
- * classification, and the host's answer to whether a retry is worthwhile
- * when the failure is the host's (it overrides the status).
+ * classification, and whether a retry is worthwhile when that is not the
+ * status's to decide: an explicit provider quota refusal is not retried, and
+ * the host answers for a failure that is its own (both override the status).
  */
 class RouteStatusError extends Error {
   readonly isRetryable?: boolean;
@@ -31,11 +35,11 @@ class RouteStatusError extends Error {
   constructor(
     readonly original: unknown,
     readonly statusCode: number,
-    hostRetryable: boolean | undefined,
+    retryable: boolean | undefined,
   ) {
     super(original instanceof Error ? original.message : String(original));
     this.name = 'RouteStatusError';
-    if (hostRetryable !== undefined) this.isRetryable = hostRetryable;
+    if (retryable !== undefined) this.isRetryable = retryable;
   }
 }
 
@@ -55,6 +59,12 @@ export interface RouteRetryOptions {
   signal?: AbortSignal;
   /** `cause` is the failure being retried, as the step reported it. */
   onRetry?: (event: GenerationRetryEvent & { cause: string }) => Promise<void> | void;
+  /**
+   * Surface this failure immediately, without the route's retry sleep.
+   * A hung TTS request matches the retryable "timed out" message, so it is
+   * marked non-retryable here instead of being thrown raw into the retry loop.
+   */
+  rethrow?: (error: unknown) => boolean;
 }
 
 /** Run `operation`, retried as the browser retries the route it replaces; throws the last failure. */
@@ -71,10 +81,16 @@ export async function withRouteRetry<T>(
         } catch (error) {
           if (isAbortError(error)) throw error;
           cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+          // `rethrow` still goes through RouteStatusError so the retry loop
+          // sees `isRetryable: false` and the caller gets the original error.
+          // Rethrowing it raw would let a "timed out" message be retried.
+          const passthrough = options.rethrow?.(error) === true;
           throw new RouteStatusError(
             error,
             routeStatus(error, options.refusalStatus),
-            classifyHostFailure(error)?.retryable,
+            passthrough || isProviderQuotaRefusal(error)
+              ? false
+              : classifyHostFailure(error)?.retryable,
           );
         }
       },

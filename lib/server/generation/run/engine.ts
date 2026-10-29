@@ -47,6 +47,7 @@ import {
   type ClassMoment,
   type ClassMomentScene,
 } from '@openmaic/generation';
+import { ModelAuthorizationError } from '@/lib/server/model-config/model-authorization';
 import type { Queryable } from '@openmaic/storage/document/pg';
 
 import { pickNarratorAgent, resolveServerAgentVoiceOptions } from '@/lib/audio/agent-voice-options';
@@ -304,6 +305,7 @@ class StepFailedError extends Error {
  * own error first, then the built-in one (see `runFailureCode`).
  */
 function failureCodeOf(error: unknown): RunFailureCode {
+  if (error instanceof ModelAuthorizationError) return runFailureCode(error);
   const host = classifyHostFailure(error);
   if (host) {
     return {

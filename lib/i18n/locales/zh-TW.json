@@ -1,5 +1,6 @@
 {
   "common": {
+    "back": "返回",
     "you": "你",
     "confirm": "確定",
     "cancel": "取消",
@@ -11,6 +12,22 @@
     "switchLanguage": "切換語言"
   },
   "home": {
+    "resumeGeneration": "繼續生成",
+    "emptyLibraryTitle": "你的課程，從這裡開始",
+    "emptyLibraryBody": "在首頁建立課程後，可以在這裡繼續學習。",
+    "mobileTitle": "今天想學什麼？",
+    "mobileSubtitle": "說說你想學什麼，AI 為你生成互動課堂",
+    "mobilePlaceholder": "輸入學習主題，或上傳資料",
+    "courseOptions": "課程選項",
+    "courseMaterials": "課程資料",
+    "courseMaterialsCount": "課程資料 · {{n}} 個檔案",
+    "backToCourseOptions": "返回課程選項",
+    "materialsDone": "完成",
+    "allSettings": "所有設定",
+    "examplesLabel": "試試這些主題",
+    "examplePython": "從零學習 Python",
+    "exampleFourier": "用直觀的例子講解傅立葉轉換",
+    "desktopOnly": "編輯器和專業模式請在電腦上使用。",
     "slogan": "多智能體互動課室中的生成式學習",
     "greetingWithName": "嗨，{{name}}"
   },
@@ -246,9 +263,15 @@
     "lecture": "授課",
     "noConversations": "暫無對話",
     "startConversation": "輸入訊息開始對話",
+    "noMessages": "暫無訊息",
+    "ended": "已結束",
     "unknown": "未知",
+    "stopDiscussion": "結束討論",
+    "endQA": "結束問答",
     "softClosing": "繼續討論",
     "error": {
+      "toolCallingRequired": "課堂聊天需要支援工具呼叫的模型。請在設定 → 課程模型配置中為「課堂互動」選擇此類模型；如果此設定由管理員管理，請聯絡管理員。",
+      "geminiNativeRequired": "Gemini 課堂互動需要使用 Google 原生路線。請在設定 → 模型服務中新增 Google（google 預設），再在課程模型配置中為「課堂互動」選擇該模型；如果配置由管理員管理，請聯絡管理員。",
       "emptyAgentResponses": "智能體連續無回應,討論已停止。請重新嘗試或檢查模型設定。",
       "streamInterrupted": "資料串流意外中斷,討論未能完成。請重新嘗試。",
       "modelBusy": "模型服務目前繁忙。請稍後再次傳送訊息，或在模型設定中切換可用模型。"
@@ -355,7 +378,9 @@
     "joinReview": "一起檢討",
     "reviewOfferLabel": "測驗檢討",
     "answerFirst": "我來答",
-    "listenFirst": "先聽聽大家"
+    "listenFirst": "先聽聽大家",
+    "pause": "暫停",
+    "resume": "繼續"
   },
   "quizReview": {
     "topic": "一起看看沒做對的題：{{questions}}",
@@ -563,6 +588,7 @@
       "moreActions": "更多操作",
       "rename": "重新命名",
       "sceneIncomplete": "此頁面內容不完整",
+      "sceneHasErrors": "此頁面存在錯誤",
       "addPage": "新增頁面",
       "nextPage": "下一頁",
       "prevPage": "上一頁"
@@ -918,6 +944,7 @@
     "readyHint": "AI 新增元素後將在此顯示",
     "clearSuccess": "白板已清空",
     "clearError": "清空白板失敗：",
+    "resetView": "重設檢視",
     "restoreError": "恢復白板失敗：",
     "history": "歷史紀錄",
     "restore": "恢復",
@@ -973,11 +1000,16 @@
     "discussionEnded": "討論已結束",
     "qaEnded": "問答已結束",
     "thinking": "思考中",
+    "yourTurn": "輪到你發言了",
     "stopDiscussion": "結束討論",
     "stopQA": "結束問答",
+    "softClosing": "繼續討論",
     "autoPlay": "自動播放",
     "autoPlayOff": "關閉自動播放",
     "speed": "倍速",
+    "previousLine": "Previous line",
+    "nextLine": "Next line",
+    "lineProgress": "Line {{current}} / {{total}}",
     "voiceInput": "語音輸入",
     "voiceInputDisabled": "語音輸入已停用",
     "textInput": "文字輸入",
@@ -987,7 +1019,8 @@
     "handRaisedDelivered": "你的問題已送出",
     "cancelQueuedQuestion": "撤回",
     "queuedQuestionNotSent": "舉手提問未送出",
-    "queuedQuestionRestored": "已恢復你未送出的提問"
+    "queuedQuestionRestored": "已恢復你未送出的提問",
+    "startRecording": "開始錄音"
   },
   "pbl": {
     "emptyProject": "PBL專案尚未生成，請透過課程生成建立",
@@ -1223,6 +1256,7 @@
     "yesterday": "昨天",
     "daysAgo": "天前",
     "slides": "投影片",
+    "nameCopied": "名稱已複製",
     "deleteConfirmTitle": "確認刪除",
     "delete": "刪除",
     "rename": "重新命名",
@@ -1251,6 +1285,7 @@
     "openCourse": "開啟課程 {{name}}",
     "openFolder": "開啟資料夾 {{name}}",
     "moveToFolder": "移動到資料夾",
+    "moveToFolderLabel": "移動到資料夾",
     "ungrouped": "未分類",
     "searchResults": "搜尋結果",
     "folderCreateFailed": "建立資料夾失敗",
@@ -1292,6 +1327,7 @@
     "materialTooLarge": "{{name}} 過大：單個素材最大為 {{size}}。"
   },
   "generation": {
+    "quotaExhausted": "生成額度已用盡。請檢查方案額度或帳戶餘額，或聯絡管理員處理後重試。",
     "pdfLoadFailed": "無法載入 PDF 檔案，請重試",
     "pdfParseFailed": "PDF 解析失敗",
     "courseMaterialLoadFailed": "無法載入課程材料，請重試",
@@ -1424,6 +1460,8 @@
     },
     "apiKey": "API 金鑰",
     "apiKeyDesc": "設定你的API密鑰",
+    "credentialStorageHint": "已加密保存在本執行個體伺服器",
+    "credentialStorageHintDetail": "憑據會加密保存在此執行個體的伺服器上，並由伺服器代你呼叫服務。此部署的運營者可能存取這些憑據，請只在你信任的執行個體上輸入。",
     "apiBaseUrl": "API 端點位址",
     "apiBaseUrlDesc": "設定你的 API 端點位址",
     "apiKeyRequired": "API密鑰不能為空",
@@ -1509,11 +1547,13 @@
       "ollama": "Ollama（本機模型）",
       "tavily": "Tavily",
       "exa": "Exa",
+      "firecrawl": "Firecrawl",
       "bocha": "Bocha",
       "brave": "Brave Search",
       "baidu": "Baidu",
       "claude": "Claude",
-      "searxng": "SearXNG"
+      "searxng": "SearXNG",
+      "builtin": "內建讀取服務"
     },
     "modelCount": "個模型",
     "modelSingular": "個模型",
@@ -1877,6 +1917,7 @@
     "providerNanoBanana": "Nano Banana（Gemini）",
     "providerMiniMaxImage": "MiniMax 圖像",
     "providerGrokImage": "Grok Image（xAI）",
+    "providerGlmImage": "GLM 圖片（智譜）",
     "providerOpenRouterImage": "OpenRouter 圖像",
     "providerComfyUIImage": "ComfyUI Image",
     "providerLemonadeImage": "Lemonade 影像（本機）",
@@ -1893,7 +1934,6 @@
     "videoModel": "影片生成模型",
     "providerSeedance": "Seedance（字節跳動）",
     "providerKling": "可靈（快手）",
-    "providerVeo": "Veo（Google）",
     "providerSora": "Sora（OpenAI）",
     "providerMiniMaxVideo": "MiniMax 影片",
     "providerGrokVideo": "Grok Video（xAI）",
@@ -1975,7 +2015,7 @@
     "tokenPlan": {
       "nav": "Token Plan",
       "title": "Token Plan 一鍵設定",
-      "desc": "選擇你的 Token Plan 服務商並填入金鑰，將自動設定所有已適配的模態（語言模型/影像/影片/語音/網路搜尋）。",
+      "desc": "選擇你的 Token Plan 服務商並填入金鑰，將自動設定所有已適配的模態（語言模型/影像/影片/語音/網路搜尋/網頁擷取）。",
       "selectPlan": "選擇服務商",
       "apiKey": "API 金鑰",
       "updateKey": "更新金鑰",
@@ -1983,7 +2023,7 @@
       "capabilities": "套餐提供的能力",
       "offeredNote": "此方案提供的模型清單。請在生成介面選擇需要使用的模型——是否可用取決於你的方案檔位，不支援的模型會在生成時報錯。",
       "statusConnected": "已連接",
-      "keyStorage": "金鑰加密保存在伺服器上，之後不再顯示。連接後會將此方案推薦的模型套用到課程環節；如果會取代環節目前所用的模型（你選的模型或伺服器預設值），會先徵求你的確認。",
+      "applyModelsNote": "連接後會將此方案推薦的模型套用到課程環節；如果會取代環節目前所用的模型（你選的模型或伺服器預設值），會先徵求你的確認。",
       "saveKey": "儲存並啟用",
       "cancelKeyUpdate": "取消更新",
       "manageAccount": "管理帳號",
@@ -2001,6 +2041,7 @@
       "capTts": "語音合成",
       "capVideo": "影片生成",
       "capWebSearch": "網路搜尋",
+      "capWebFetch": "網頁擷取",
       "saved": "連線設定已儲存",
       "stageInteractive": "互動頁面",
       "stageSlide": "課件頁面",
@@ -2079,7 +2120,6 @@
     "comfyuiNoWorkflowsFoundPrefix": "未在",
     "comfyuiRefresh": "重新整理",
     "comfyuiWorkflows": "工作流程",
-    "confirmReset": "確認重設",
     "connectionFailed": "連線失敗",
     "connectionSuccess": "連線成功",
     "defaultBaseUrl": "預設 Base URL",
@@ -2127,7 +2167,8 @@
         "providers": "設定語言模型服務的憑證、API 位址與模型目錄",
         "tts": "設定語音合成服務、音色與模型",
         "video": "設定影片生成服務的憑證與模型目錄",
-        "webSearch": "設定網路搜尋服務與檢索來源"
+        "webSearch": "設定網路搜尋服務與檢索來源",
+        "webFetch": "設定網頁內容擷取服務"
       },
       "nav": "模型服務",
       "notConfigured": "未設定",
@@ -2152,7 +2193,6 @@
     "providers": "語言模型",
     "requestUrl": "請求位址",
     "reset": "重設",
-    "resetConfirmDescription": "此作業將清除所有自訂模型，恢復到內建的預設模型清單。API 密鑰和 Base URL 將被保留。",
     "resetToDefault": "重設為預設設定",
     "saveModel": "儲存",
     "searxngServerOnlyNotice": "SearXNG 須由伺服器端設定。請設定 SEARXNG_BASE_URL 環境變數（或在 server-providers.yml 的 web-search 區段中設定）。不接受用戶端自行填寫實例位址。",
@@ -2238,7 +2278,7 @@
       },
       "picker": {
         "follow": "跟隨{{name}}",
-        "providers": "Provider",
+        "providers": "供應商",
         "providerDefault": "預設模型",
         "modelId": "模型 ID",
         "use": "使用",
@@ -2300,7 +2340,7 @@
         },
         "classroom": {
           "name": "課堂互動",
-          "desc": "學習過程中的討論、測驗批改與專題。"
+          "desc": "學習過程中的討論、測驗批改與專題。課堂聊天需要支援工具呼叫的模型。"
         },
         "agent": {
           "name": "智慧體",
@@ -2329,6 +2369,10 @@
         "document": {
           "name": "文件解析",
           "desc": "讀取上傳的文件。"
+        },
+        "webFetch": {
+          "name": "網頁擷取",
+          "desc": "供智慧體讀取工作階段中已獲准的網頁。"
         }
       },
       "source": {
@@ -2342,6 +2386,7 @@
         "lines": {
           "rewrite": "改寫",
           "search": "搜尋",
+          "fetch": "擷取",
           "image": "圖像",
           "video": "影片"
         }
@@ -2374,9 +2419,144 @@
         "unconfirmed": "伺服器未確認已匯入。"
       }
     },
-    "serverConfiguredAddOwn": "如需使用自己的憑證，請新增一個供應商。"
+    "serverConfiguredAddOwn": "如需使用自己的憑證，請新增一個供應商。",
+    "webFetchSettings": "網頁擷取",
+    "webFetchHint": "選擇網頁讀取方式。託管服務只會收到工作階段中已獲准的公開網址。結果仍是不可信資料，失敗時不會切換讀取服務。",
+    "webFetchApiKey": "API 金鑰",
+    "webFetchSharedKeyHint": "此金鑰也用於與同一供應商進行對話。修改或移除金鑰也會影響對話。"
   },
   "workspace": {
+    "knowledgeBase": {
+      "title": "知識庫",
+      "topLevel": "頂層",
+      "back": "返回",
+      "search": "搜尋名稱或檔案類型",
+      "loading": "載入中…",
+      "retry": "重試",
+      "loadMore": "載入更多",
+      "failure": {
+        "more": "失敗說明：{{reason}}",
+        "storage_full": {
+          "label": "儲存空間不足",
+          "description": "沒有足夠空間儲存解析結果，請釋放空間後重試。"
+        },
+        "source_unavailable": {
+          "label": "原始檔案無法使用",
+          "description": "無法讀取這份資料的原始檔案，請重新上傳後再試。"
+        },
+        "service_unavailable": {
+          "label": "解析服務無法使用",
+          "description": "尚未設定可處理此類檔案的解析服務。請聯絡管理員完成設定，再選擇「重新解析」。"
+        },
+        "media_too_long": {
+          "label": "音訊或影片過長",
+          "description": "目前的解析方式最長支援 {{minutes}} 分鐘的音訊或影片，請縮短或分段後重新上傳。"
+        },
+        "no_text_extracted": {
+          "label": "未擷取到文字",
+          "description": "這次解析未取得可用文字，請檢查資料內容，或嘗試其他檔案。"
+        },
+        "processing_interrupted": {
+          "label": "解析未完成",
+          "description": "本次解析未能完成，可以稍後重試。"
+        },
+        "too_many_pages": {
+          "label": "頁數過多",
+          "description": "這份 PDF 有 {{pages}} 頁，超過 {{maxPages}} 頁的解析上限。請拆分後上傳，或只上傳需要的章節。",
+          "descriptionWithoutCount": "這份 PDF 超過 {{maxPages}} 頁的解析上限。請拆分後上傳，或只上傳需要的章節。",
+          "descriptionWithoutLimit": "這份 PDF 的頁數超過了解析服務的上限。請拆分後上傳，或只上傳需要的章節。"
+        }
+      },
+      "status": {
+        "uploading": "上傳中",
+        "stored": "已存入 · 未解析",
+        "parsing": "解析中",
+        "searchable": "可檢索",
+        "failed": "解析失敗"
+      },
+      "column": {
+        "name": "名稱",
+        "status": "狀態",
+        "folder": "資料夾",
+        "size": "大小",
+        "date": "日期"
+      },
+      "limits": {
+        "perFile": "單一文件或圖片不超過 {{document}}，音訊與影片不超過 {{media}}"
+      },
+      "usage": {
+        "summary": "已用 {{used}} / {{max}} · {{count}} / {{maxCount}} 個檔案",
+        "fileStorage": "另計檔案儲存：已用 {{used}} / {{max}}（含解析內容與課程素材）",
+        "fileStorageUnlimited": "另計檔案儲存：已用 {{used}}（含解析內容與課程素材）"
+      },
+      "empty": {
+        "title": "知識庫還是空的",
+        "body": "上傳教學資料，讓助理幫你整理與解析，備課時用 @ 選用。",
+        "folder": "這個資料夾裡還沒有資料",
+        "query": "找不到與「{{query}}」相符的資料"
+      },
+      "upload": {
+        "button": "上傳資料",
+        "dismiss": "移除"
+      },
+      "error": {
+        "load": "知識庫載入失敗",
+        "busy": "帳號正在更新，請稍後再試",
+        "identity": "登入狀態已變更，請重新整理頁面",
+        "stale": "顯示的內容可能不是最新的",
+        "nameTaken": "已有同名資料夾",
+        "invalidName": "請輸入不超過 255 個字元的名稱",
+        "folderNameEmpty": "請輸入資料夾名稱",
+        "folderNameTooLong": "資料夾名稱太長",
+        "folderLimit": "資料夾數量已達上限",
+        "notMovable": "這份資料不能移動",
+        "gone": "它已經不存在了",
+        "save": "操作沒有成功，請重試",
+        "notEmpty": "資料夾裡還有資料，請先移走",
+        "materialNotFound": "資料不存在或無法存取。",
+        "folderNotFound": "資料夾不存在或無法存取。",
+        "textUnavailable": "資料的文字內容無法使用。",
+        "derivative": "衍生資料沿用原資料名稱，請重新命名原資料。",
+        "moveTooMany": "每次最多移動 {{limit}} 份資料。",
+        "moveNotMovable": "未移動任何資料。部分所選資料無法使用或移動。",
+        "toolFolderNameTooLong": "資料夾名稱過長，最多支援 40 個半形字元或 20 個全形字元。",
+        "toolFolderLimit": "知識庫已達 {{limit}} 個資料夾的上限。",
+        "mediaUnsupported": "只有圖片、影片或音訊資料可用作課程媒體。",
+        "mediaStorageFull": "沒有足夠空間儲存這份媒體，請釋放空間後重試。",
+        "mediaNotFound": "找不到這份媒體資料，或它沒有可用的媒體檔案。"
+      },
+      "actions": {
+        "parse": "解析",
+        "reparse": "重新解析",
+        "more": "{{name}} 的更多操作",
+        "rename": "重新命名",
+        "delete": "刪除",
+        "open": "開啟",
+        "downloadOriginal": "下載原始檔案",
+        "chat": "用這份資料對話"
+      },
+      "folder": {
+        "new": "新增資料夾",
+        "items": "{{count}} 項",
+        "items_one": "{{count}} 項",
+        "items_other": "{{count}} 項"
+      },
+      "dialog": {
+        "cancel": "取消",
+        "close": "關閉"
+      },
+      "delete": {
+        "materialTitle": "刪除「{{name}}」？",
+        "materialLinks": "刪除後，對話裡再讀取這份資料會失敗，對話裡已有的文字保留。",
+        "materialCourses": "已儲存到課程中的內容不受影響。",
+        "cannotUndo": "此操作無法復原。",
+        "folderTitle": "刪除資料夾「{{name}}」？",
+        "folderContents": "{{count}} 個檔案將移到頂層，不會刪除任何檔案。"
+      },
+      "conversationFailure": {
+        "serviceUnavailable": "尚未設定可處理此類檔案的解析服務，請聯絡管理員完成設定。"
+      }
+    },
     "untitledCourse": "未命名课堂",
     "sceneCount": "{{count}} 页",
     "sceneCount_one": "{{count}} 页",
@@ -2384,14 +2564,30 @@
     "courseLinkHint": "在右侧打开《{{name}}》",
     "courseLinkMore": "还有 {{count}} 节课堂",
     "courseMention": {
+      "search": "搜尋課堂和資料",
+      "searchMaterials": "搜尋資料",
+      "searchClassrooms": "搜尋課堂",
+      "courseOrder": "目前課堂優先，其餘依最近更新時間排序",
+      "materialOrder": "依上傳時間由新到舊",
       "title": "为这条消息引用课堂",
+      "titleBoth": "為這則訊息引用課堂或附加知識庫資料",
+      "titleMaterials": "為這則訊息附加知識庫資料",
       "empty": "没有匹配的课堂",
       "alreadyNamed": "已引用",
       "remove": "移除{{name}}",
       "pillHint": "这条消息引用了「{{name}}」",
       "notAccepted": "服務暫時不可用，請稍後重試。",
       "reference": "引用「{{name}}」",
-      "capped": "仅显示前 {{count}} 个，继续输入以缩小范围"
+      "capped": "仅显示前 {{count}} 个，继续输入以缩小范围",
+      "classrooms": "課堂",
+      "knowledgeBase": "知識庫",
+      "emptyWithMaterials": "沒有符合的課堂或材料",
+      "attachMaterial": "把 {{name}} 附加到這則訊息",
+      "materialUnavailable": "{{name}} 無法附加（{{reason}}）。請在知識庫中查看原因並重新解析。",
+      "materialAttached": "本會話已有",
+      "materialStaged": "已在這則訊息裡",
+      "materialsCapped": "只顯示前 {{count}} 份材料，繼續輸入可縮小範圍",
+      "materialUnavailableGuidance": "{{name}} 無法附加。{{guidance}}可在知識庫頁面處理。"
     },
     "heroTitle": "今天想創造點什麼？",
     "heroSubtitle": "說出你的想法，把它變成一段可以親歷的學習旅程",
@@ -2412,6 +2608,11 @@
     "homeAria": "返回首頁",
     "currentSession": "目前對話",
     "startLearning": "開始學習",
+    "classroomMode": "課堂模式",
+    "learningMode": "學習",
+    "editingMode": "編輯",
+    "editingUnavailableGenerating": "課程生成期間無法編輯。",
+    "fullscreenLearning": "全螢幕學習",
     "time": {
       "justNow": "剛剛",
       "minutesAgo": "{{count}} 分鐘前",
@@ -2543,7 +2744,8 @@
     "badgeEnter": "專業模式",
     "badgeExit": "返回普通模式",
     "launchPlaceholder": "描述你想創造的學習體驗",
-    "launchSend": "開始構建"
+    "launchSend": "開始構建",
+    "mentionCourseOrMaterial": "引用課堂或知識庫材料"
   },
   "workbench": {
     "tool": {

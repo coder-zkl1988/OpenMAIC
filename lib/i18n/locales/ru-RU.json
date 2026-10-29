@@ -1,5 +1,6 @@
 {
   "common": {
+    "back": "Назад",
     "you": "Вы",
     "confirm": "Подтвердить",
     "cancel": "Отмена",
@@ -11,6 +12,22 @@
     "switchLanguage": "Сменить язык"
   },
   "home": {
+    "resumeGeneration": "Продолжить генерацию",
+    "emptyLibraryTitle": "Ваши уроки появятся здесь",
+    "emptyLibraryBody": "Создайте курс на главной странице и возвращайтесь сюда, чтобы продолжить.",
+    "mobileTitle": "Что хотите изучить?",
+    "mobileSubtitle": "Расскажите о теме, и ИИ создаст интерактивный урок.",
+    "mobilePlaceholder": "Введите тему или загрузите материалы",
+    "courseOptions": "Параметры урока",
+    "courseMaterials": "Материалы курса",
+    "courseMaterialsCount": "Материалы курса · {{n}}",
+    "backToCourseOptions": "Назад к параметрам урока",
+    "materialsDone": "Готово",
+    "allSettings": "Все настройки",
+    "examplesLabel": "Примеры тем",
+    "examplePython": "Python с нуля",
+    "exampleFourier": "Преобразование Фурье на простых примерах",
+    "desktopOnly": "Для редактора и режима Pro используйте компьютер.",
     "slogan": "Generative Learning in Multi-Agent Interactive Classroom",
     "greetingWithName": "Привет, {{name}}"
   },
@@ -246,9 +263,15 @@
     "lecture": "Лекция",
     "noConversations": "Нет диалогов",
     "startConversation": "Введите сообщение, чтобы начать диалог",
+    "noMessages": "Пока нет сообщений",
+    "ended": "завершено",
     "unknown": "Неизвестно",
+    "stopDiscussion": "Завершить обсуждение",
+    "endQA": "Завершить вопросы и ответы",
     "softClosing": "Продолжить обсуждение",
     "error": {
+      "toolCallingRequired": "Для чата класса нужна модель с поддержкой вызова инструментов. Выберите такую модель для слота класса в разделе Настройки → Настройка моделей курса. Если этим параметром управляет администратор, обратитесь к нему.",
+      "geminiNativeRequired": "Для общения с Gemini нужен нативный Google. Добавьте Google (пресет google) в Настройки → Сервисы моделей, затем выберите его для «Класс» в разделе «Настройка моделей курса». Если конфигурацией управляет администратор, обратитесь к нему.",
       "emptyAgentResponses": "Агенты вернули пустые ответы; обсуждение остановлено. Попробуйте ещё раз или проверьте настройки модели.",
       "streamInterrupted": "Поток данных неожиданно прервался; обсуждение не завершено. Попробуйте ещё раз.",
       "modelBusy": "Сервис модели сейчас перегружен. Отправьте сообщение позже или выберите доступную модель в настройках моделей."
@@ -355,7 +378,9 @@
     "joinReview": "Разобрать вместе",
     "reviewOfferLabel": "Разбор теста",
     "answerFirst": "Я отвечу",
-    "listenFirst": "Сначала послушать других"
+    "listenFirst": "Сначала послушать других",
+    "pause": "Пауза",
+    "resume": "Продолжить"
   },
   "quizReview": {
     "topic": "Давай разберём, где ошибки: {{questions}}",
@@ -614,6 +639,7 @@
       "moreActions": "Ещё действия",
       "rename": "Переименовать",
       "sceneIncomplete": "Содержимое этой страницы не заполнено",
+      "sceneHasErrors": "На этой странице есть ошибки",
       "addPage": "Добавить страницу",
       "nextPage": "Следующая страница",
       "prevPage": "Предыдущая страница"
@@ -933,6 +959,7 @@
     "readyHint": "Элементы появятся здесь, когда AI их добавит",
     "clearSuccess": "Доска очищена",
     "clearError": "Ошибка очистки доски: ",
+    "resetView": "Сбросить вид",
     "restoreError": "Ошибка восстановления доски: ",
     "history": "История",
     "restore": "Восстановить",
@@ -987,12 +1014,17 @@
     "noSpeechDetected": "Речь не обнаружена, попробуйте ещё раз",
     "discussionEnded": "Обсуждение завершено",
     "qaEnded": "Вопросы и ответы завершены",
+    "softClosing": "Продолжить обсуждение",
     "thinking": "Размышляет",
+    "yourTurn": "Ваша очередь",
     "stopDiscussion": "Завершить обсуждение",
     "stopQA": "Завершить вопросы",
     "autoPlay": "Автовоспр.",
     "autoPlayOff": "Остановить",
     "speed": "Скорость",
+    "previousLine": "Previous line",
+    "nextLine": "Next line",
+    "lineProgress": "Line {{current}} / {{total}}",
     "voiceInput": "Голосовой ввод",
     "voiceInputDisabled": "Голосовой ввод отключён",
     "textInput": "Текстовый ввод",
@@ -1002,7 +1034,8 @@
     "handRaisedDelivered": "Ваш вопрос отправлен",
     "cancelQueuedQuestion": "Отменить",
     "queuedQuestionNotSent": "Вопрос с поднятой рукой не отправлен",
-    "queuedQuestionRestored": "Неотправленный вопрос восстановлен"
+    "queuedQuestionRestored": "Неотправленный вопрос восстановлен",
+    "startRecording": "Начать запись"
   },
   "pbl": {
     "emptyProject": "PBL-проект ещё не создан. Создайте его через генерацию курса.",
@@ -1238,6 +1271,7 @@
     "yesterday": "Вчера",
     "daysAgo": "дн. назад",
     "slides": "слайдов",
+    "nameCopied": "Название скопировано",
     "deleteConfirmTitle": "Удалить",
     "delete": "Удалить",
     "rename": "Переименовать",
@@ -1266,6 +1300,7 @@
     "openCourse": "Открыть курс {{name}}",
     "openFolder": "Открыть папку {{name}}",
     "moveToFolder": "Переместить в папку",
+    "moveToFolderLabel": "Переместить в папку",
     "ungrouped": "Без папки",
     "searchResults": "Результаты поиска",
     "folderCreateFailed": "Не удалось создать папку",
@@ -1307,6 +1342,7 @@
     "materialTooLarge": "Файл {{name}} слишком большой: материал может быть не больше {{size}}."
   },
   "generation": {
+    "quotaExhausted": "Квота на генерацию исчерпана. Проверьте лимиты тарифного плана или баланс аккаунта либо обратитесь к администратору перед повторной попыткой.",
     "pdfLoadFailed": "Не удалось загрузить PDF, попробуйте снова",
     "pdfParseFailed": "Ошибка обработки PDF",
     "courseMaterialLoadFailed": "Не удалось загрузить материал курса, попробуйте снова",
@@ -1438,6 +1474,8 @@
       "system": "Системная"
     },
     "apiKey": "API-ключ",
+    "credentialStorageHint": "Encrypted on this instance's server",
+    "credentialStorageHintDetail": "Saved encrypted on this instance's server and used to call the provider for you. The operator of this deployment can access it, so only enter keys on instances you trust.",
     "apiKeyDesc": "Настройте ваш API-ключ",
     "apiBaseUrl": "URL API-эндпоинта",
     "apiBaseUrlDesc": "Настройте URL API-эндпоинта",
@@ -1524,11 +1562,13 @@
       "ollama": "Ollama (Локальный)",
       "tavily": "Tavily",
       "exa": "Exa",
+      "firecrawl": "Firecrawl",
       "bocha": "Bocha",
       "brave": "Brave Search",
       "baidu": "Baidu",
       "claude": "Claude",
-      "searxng": "SearXNG"
+      "searxng": "SearXNG",
+      "builtin": "Встроенный сервис чтения"
     },
     "modelCount": "моделей",
     "modelSingular": "модель",
@@ -1892,6 +1932,7 @@
     "providerNanoBanana": "Nano Banana (Gemini)",
     "providerMiniMaxImage": "MiniMax Image",
     "providerGrokImage": "Grok Image (xAI)",
+    "providerGlmImage": "GLM Image (Zhipu)",
     "providerOpenRouterImage": "OpenRouter Image",
     "providerComfyUIImage": "ComfyUI Image",
     "providerLemonadeImage": "Lemonade Image (Локальный)",
@@ -1908,7 +1949,6 @@
     "videoModel": "Модель генерации видео",
     "providerSeedance": "Seedance (ByteDance)",
     "providerKling": "Kling (Kuaishou)",
-    "providerVeo": "Veo (Google)",
     "providerSora": "Sora (OpenAI)",
     "providerMiniMaxVideo": "MiniMax Video",
     "providerGrokVideo": "Grok Video (xAI)",
@@ -1990,7 +2030,7 @@
     "tokenPlan": {
       "nav": "Token Plan",
       "title": "Token Plan Setup",
-      "desc": "Pick your token plan provider and enter the key — it auto-configures every adapted modality (LLM/image/video/speech/web search).",
+      "desc": "Pick your token plan provider and enter the key — it auto-configures every adapted modality (LLM/image/video/speech/web search/web fetch).",
       "selectPlan": "Select Provider",
       "apiKey": "API Key",
       "updateKey": "Update key",
@@ -1998,7 +2038,7 @@
       "capabilities": "Capabilities offered",
       "offeredNote": "Models offered by this plan. Pick the ones you want on the generation bar — availability depends on your plan tier, and unsupported models will error at generation time.",
       "statusConnected": "Подключено",
-      "keyStorage": "Ключ хранится на сервере в зашифрованном виде и больше не показывается. При подключении к этапам курса применяются рекомендуемые модели тарифа; если при этом заменится то, что этап использует сейчас (выбранная вами модель или значение сервера по умолчанию), сначала будет запрошено подтверждение.",
+      "applyModelsNote": "При подключении к этапам курса применяются рекомендуемые модели тарифа; если при этом заменится то, что этап использует сейчас (выбранная вами модель или значение сервера по умолчанию), сначала будет запрошено подтверждение.",
       "saveKey": "Сохранить и включить",
       "cancelKeyUpdate": "Отменить изменение",
       "manageAccount": "Управление аккаунтом",
@@ -2016,6 +2056,7 @@
       "capTts": "Синтез речи",
       "capVideo": "Генерация видео",
       "capWebSearch": "Веб-поиск",
+      "capWebFetch": "Загрузка веб-страниц",
       "saved": "Настройки подключения сохранены",
       "stageInteractive": "Интерактив",
       "stageSlide": "Слайды",
@@ -2094,7 +2135,6 @@
     "comfyuiNoWorkflowsFoundPrefix": "JSON-файлы рабочих процессов не найдены в",
     "comfyuiRefresh": "Обновить",
     "comfyuiWorkflows": "Рабочие процессы",
-    "confirmReset": "Подтвердить сброс",
     "connectionFailed": "Ошибка подключения",
     "connectionSuccess": "Подключение успешно",
     "defaultBaseUrl": "Base URL по умолчанию",
@@ -2142,7 +2182,8 @@
         "providers": "Настройте доступы, адреса API и каталоги моделей для служб языковых моделей",
         "tts": "Настройте службы синтеза речи, голоса и модели",
         "video": "Настройте доступы и каталоги моделей служб генерации видео",
-        "webSearch": "Настройте службы веб-поиска и источники поиска"
+        "webSearch": "Настройте службы веб-поиска и источники поиска",
+        "webFetch": "Настроить сервисы извлечения содержимого веб-страниц"
       },
       "nav": "Сервисы моделей",
       "notConfigured": "Не настроено",
@@ -2167,7 +2208,6 @@
     "providers": "LLM",
     "requestUrl": "URL запроса",
     "reset": "Сброс",
-    "resetConfirmDescription": "Это удалит все пользовательские модели и восстановит встроенный список. API-ключ и Base URL будут сохранены.",
     "resetToDefault": "Сбросить на стандартные",
     "saveModel": "Сохранить",
     "searxngServerOnlyNotice": "SearXNG должен быть настроен на сервере. Установите переменную окружения SEARXNG_BASE_URL (или раздел web-search в server-providers.yml). URL экземпляра от клиента не принимаются.",
@@ -2315,7 +2355,7 @@
         },
         "classroom": {
           "name": "Класс",
-          "desc": "Обсуждения, проверка тестов и проекты во время обучения."
+          "desc": "Обсуждения, проверка тестов и проекты во время обучения. Для чата класса нужна модель с поддержкой вызова инструментов."
         },
         "agent": {
           "name": "Агент",
@@ -2344,6 +2384,10 @@
         "document": {
           "name": "Разбор документов",
           "desc": "Читает загруженные документы."
+        },
+        "webFetch": {
+          "name": "Загрузка веб-страниц",
+          "desc": "Позволяет агенту читать разрешённые в сеансе веб-страницы."
         }
       },
       "source": {
@@ -2357,6 +2401,7 @@
         "lines": {
           "rewrite": "Запрос",
           "search": "Поиск",
+          "fetch": "Чтение",
           "image": "Изобр.",
           "video": "Видео"
         }
@@ -2389,9 +2434,144 @@
         "unconfirmed": "Сервер не подтвердил импорт."
       }
     },
-    "serverConfiguredAddOwn": "Чтобы использовать свои учётные данные, добавьте отдельного провайдера."
+    "serverConfiguredAddOwn": "Чтобы использовать свои учётные данные, добавьте отдельного провайдера.",
+    "webFetchSettings": "Загрузка веб-страниц",
+    "webFetchHint": "Выберите способ чтения веб-страниц. Размещённым сервисам передаются только публичные URL, разрешённые в сеансе. Результаты остаются недоверенными данными; при ошибке сервис не меняется.",
+    "webFetchApiKey": "Ключ API",
+    "webFetchSharedKeyHint": "Этот ключ также используется для чата с этим провайдером. Его изменение или удаление влияет на чат."
   },
   "workspace": {
+    "knowledgeBase": {
+      "title": "База знаний",
+      "topLevel": "Верхний уровень",
+      "back": "Назад",
+      "search": "Поиск по названию или типу файла",
+      "loading": "Загрузка…",
+      "retry": "Повторить",
+      "loadMore": "Загрузить ещё",
+      "failure": {
+        "more": "Об ошибке: {{reason}}",
+        "storage_full": {
+          "label": "Недостаточно места",
+          "description": "Недостаточно места для сохранения результатов. Освободите место и повторите попытку."
+        },
+        "source_unavailable": {
+          "label": "Исходный файл недоступен",
+          "description": "Не удалось прочитать исходный файл. Загрузите его заново и повторите попытку."
+        },
+        "service_unavailable": {
+          "label": "Сервис обработки недоступен",
+          "description": "Сервис обработки для этого типа файлов не настроен. Попросите администратора настроить его, затем запустите обработку повторно."
+        },
+        "media_too_long": {
+          "label": "Слишком длинная запись",
+          "description": "Этот способ обработки поддерживает записи длительностью до {{minutes}} минут. Сократите или разделите файл и загрузите его заново."
+        },
+        "no_text_extracted": {
+          "label": "Текст не извлечён",
+          "description": "В этот раз не удалось извлечь пригодный текст. Проверьте содержимое или попробуйте другой файл."
+        },
+        "processing_interrupted": {
+          "label": "Обработка не завершена",
+          "description": "Не удалось завершить обработку. Можно повторить попытку позже."
+        },
+        "too_many_pages": {
+          "label": "Слишком много страниц",
+          "description": "В этом PDF {{pages}} стр. — больше лимита обработки в {{maxPages}} стр. Разделите файл и загрузите части или загрузите только нужные главы.",
+          "descriptionWithoutCount": "Этот PDF превышает лимит обработки в {{maxPages}} стр. Разделите файл и загрузите части или загрузите только нужные главы.",
+          "descriptionWithoutLimit": "В этом PDF больше страниц, чем принимает сервис обработки. Разделите файл и загрузите части или загрузите только нужные главы."
+        }
+      },
+      "status": {
+        "uploading": "Загрузка",
+        "stored": "Сохранено · не обработано",
+        "parsing": "Обработка",
+        "searchable": "Доступно для поиска",
+        "failed": "Ошибка обработки"
+      },
+      "column": {
+        "name": "Название",
+        "status": "Статус",
+        "folder": "Папка",
+        "size": "Размер",
+        "date": "Дата"
+      },
+      "limits": {
+        "perFile": "До {{document}} на документ или изображение, {{media}} на аудио или видео"
+      },
+      "usage": {
+        "summary": "Занято {{used}} из {{max}} · Файлов: {{count}} из {{maxCount}}",
+        "fileStorage": "Отдельное файловое хранилище: занято {{used}} из {{max}} (включая обработанное содержимое и материалы курсов)",
+        "fileStorageUnlimited": "Отдельное файловое хранилище: занято {{used}} (включая обработанное содержимое и материалы курсов)"
+      },
+      "empty": {
+        "title": "База знаний пока пуста",
+        "body": "Загрузите учебные материалы — ассистент упорядочит и обработает их, а при подготовке курса их можно выбрать через @.",
+        "folder": "В этой папке пока нет материалов",
+        "query": "Нет материалов, соответствующих «{{query}}»"
+      },
+      "upload": {
+        "button": "Загрузить материалы",
+        "dismiss": "Скрыть"
+      },
+      "error": {
+        "load": "Не удалось загрузить базу знаний",
+        "busy": "Аккаунт обновляется. Повторите попытку чуть позже",
+        "identity": "Состояние входа изменилось. Обновите страницу",
+        "stale": "показанные данные могут быть устаревшими",
+        "nameTaken": "Папка с таким названием уже есть",
+        "invalidName": "Введите название длиной не более 255 символов",
+        "folderNameEmpty": "Введите название папки",
+        "folderNameTooLong": "Слишком длинное название папки",
+        "folderLimit": "Достигнуто максимальное число папок",
+        "notMovable": "Этот материал нельзя переместить",
+        "gone": "Он больше не существует",
+        "save": "Не получилось. Попробуйте ещё раз",
+        "notEmpty": "В папке ещё есть материалы. Сначала переместите их",
+        "materialNotFound": "Материал не найден или недоступен.",
+        "folderNotFound": "Папка не найдена или недоступна.",
+        "textUnavailable": "Текст материала недоступен.",
+        "derivative": "Производный материал использует имя исходного. Переименуйте исходный материал.",
+        "moveTooMany": "За один раз можно переместить не более {{limit}} материалов.",
+        "moveNotMovable": "Ничего не перемещено. Некоторые выбранные материалы недоступны или не могут быть перемещены.",
+        "toolFolderNameTooLong": "Название папки слишком длинное (не более 40 символов половинной или 20 символов полной ширины).",
+        "toolFolderLimit": "Достигнут предел папок базы знаний: {{limit}}.",
+        "mediaUnsupported": "В качестве медиа курса можно использовать только изображения, видео или аудио.",
+        "mediaStorageFull": "Недостаточно места для этого медиафайла. Освободите место и повторите попытку.",
+        "mediaNotFound": "Медиаматериал не найден или не содержит доступного медиафайла."
+      },
+      "actions": {
+        "parse": "Обработать",
+        "reparse": "Обработать заново",
+        "more": "Другие действия: {{name}}",
+        "rename": "Переименовать",
+        "delete": "Удалить",
+        "open": "Открыть",
+        "downloadOriginal": "Скачать оригинал",
+        "chat": "Обсудить этот материал"
+      },
+      "folder": {
+        "new": "Новая папка",
+        "items": "Элементов: {{count}}",
+        "items_one": "{{count}} элемент",
+        "items_other": "Элементов: {{count}}"
+      },
+      "dialog": {
+        "cancel": "Отмена",
+        "close": "Закрыть"
+      },
+      "delete": {
+        "materialTitle": "Удалить «{{name}}»?",
+        "materialLinks": "Диалоги, которые его используют, больше не смогут его прочитать; текст, уже появившийся в этих диалогах, сохранится.",
+        "materialCourses": "Содержимое, уже сохранённое в курсе, не изменится.",
+        "cannotUndo": "Это действие нельзя отменить.",
+        "folderTitle": "Удалить папку «{{name}}»?",
+        "folderContents": "Файлы будут перемещены на верхний уровень: {{count}}. Ни один файл не будет удалён."
+      },
+      "conversationFailure": {
+        "serviceUnavailable": "Для этого типа файлов не настроен сервис разбора. Попросите администратора настроить его."
+      }
+    },
     "untitledCourse": "未命名课堂",
     "sceneCount": "{{count}} 页",
     "sceneCount_one": "{{count}} 页",
@@ -2399,14 +2579,30 @@
     "courseLinkHint": "在右侧打开《{{name}}》",
     "courseLinkMore": "还有 {{count}} 节课堂",
     "courseMention": {
+      "search": "Поиск классов и материалов",
+      "searchMaterials": "Поиск материалов",
+      "searchClassrooms": "Поиск классов",
+      "courseOrder": "Сначала открытый класс, затем недавно обновлённые",
+      "materialOrder": "Сначала последние загрузки",
       "title": "为这条消息引用课堂",
+      "titleBoth": "Сослаться на класс или прикрепить материал из базы знаний к этому сообщению",
+      "titleMaterials": "Прикрепить материал из базы знаний к этому сообщению",
       "empty": "没有匹配的课堂",
       "alreadyNamed": "已引用",
       "remove": "移除{{name}}",
       "pillHint": "这条消息引用了「{{name}}」",
       "notAccepted": "Сервер временно недоступен. Повторите попытку чуть позже.",
       "reference": "引用「{{name}}」",
-      "capped": "仅显示前 {{count}} 个，继续输入以缩小范围"
+      "capped": "仅显示前 {{count}} 个，继续输入以缩小范围",
+      "classrooms": "Кабинеты",
+      "knowledgeBase": "База знаний",
+      "emptyWithMaterials": "Нет подходящих кабинетов или материалов",
+      "attachMaterial": "Прикрепить {{name}} к этому сообщению",
+      "materialUnavailable": "Не удаётся прикрепить {{name}} ({{reason}}). Откройте базу знаний, чтобы узнать причину и обработать файл заново.",
+      "materialAttached": "Уже в этой беседе",
+      "materialStaged": "Уже в этом сообщении",
+      "materialsCapped": "Показаны первые {{count}} материалов — продолжайте ввод, чтобы сузить список",
+      "materialUnavailableGuidance": "Не удалось прикрепить {{name}}. {{guidance}} Управлять материалом можно на странице базы знаний."
     },
     "heroTitle": "What will you create today?",
     "heroSubtitle": "Share an idea and turn it into a learning journey people can step into",
@@ -2427,6 +2623,11 @@
     "homeAria": "Back to home",
     "currentSession": "Current chat",
     "startLearning": "Начать обучение",
+    "classroomMode": "Режим класса",
+    "learningMode": "Учиться",
+    "editingMode": "Править",
+    "editingUnavailableGenerating": "Редактирование недоступно во время создания курса.",
+    "fullscreenLearning": "Учиться на весь экран",
     "time": {
       "justNow": "Just now",
       "minutesAgo": "{{count}}m ago",
@@ -2543,7 +2744,8 @@
     "badgeEnter": "Pro-режим",
     "badgeExit": "Вернуться в обычный режим",
     "launchPlaceholder": "Опишите учебный опыт, который хотите создать",
-    "launchSend": "Начать сборку"
+    "launchSend": "Начать сборку",
+    "mentionCourseOrMaterial": "Упомянуть кабинет или материал из базы знаний"
   },
   "workbench": {
     "tool": {

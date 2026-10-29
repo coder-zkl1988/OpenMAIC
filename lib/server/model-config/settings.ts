@@ -1,3 +1,4 @@
+import type { ConfiguredTTSVoice } from '@/lib/audio/types';
 /**
  * The model settings a workspace sees and edits (RFC #1701, tracked in #1725,
  * P2). This is the service behind `/api/model-config`: it reads the slot tree
@@ -12,6 +13,13 @@
  * read-only. Every change is validated against the whole configuration before
  * it is stored, so a stored workspace configuration always resolves.
  */
+import type { WebFetchProviderInfo } from '@/lib/web-fetch/types';
+import { DEFAULT_WEB_FETCH_PROVIDER, webFetchProviderMetadata } from '@/lib/web-fetch/registry';
+import {
+  deploymentAuthorizedModels,
+  ModelAuthorizationError,
+  usesServerCredentials,
+} from './model-authorization';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { z } from 'zod';
@@ -39,7 +47,7 @@ import {
   presetRegionalEndpointTemplate,
 } from '@/lib/config/official-endpoints';
 
-import { isForceDisabled, isLocalEndpoint } from './media';
+import { acceptsWorkspaceToolBaseUrl, isForceDisabled, isLocalEndpoint } from './media';
 import {
   checkModelConfigShape,
   thinkingEffortIssue,
@@ -47,6 +55,7 @@ import {
   type SlotAssignment,
 } from './openmaic-yml';
 import {
+  defaultWebFetchProviderId,
   findAssignment,
   lockingNode,
   resolveSlot,
@@ -80,6 +89,9 @@ export interface ProviderView {
   source: 'deployment' | 'workspace';
   baseUrl?: string;
   models?: string[];
+  /** Non-secret adapter options, also available when previewing an inactive provider. */
+  options?: Record<string, string | number | boolean>;
+  voices?: ConfiguredTTSVoice[];
   /** What it offers, with the models to pick from per capability. */
   capabilities: CapabilityModels;
   /** Workspace providers only. */
@@ -179,6 +191,7 @@ export interface SlotView {
 }
 
 export interface ModelSettingsView {
+  webFetchProviders?: WebFetchProviderInfo[];
   revision: number | null;
   /**
    * Whether users may add providers, keys and token plans of their own
@@ -259,27 +272,49 @@ function maskKey(key: string): string {
 
 /**
  * What a provider can be assigned to, with its models: a workspace provider
- * with its own endpoint serves chat only (see media.ts), and a preset whose
+ * with its own endpoint serves chat only (see media.ts), except official web search
+ * and web fetch endpoints accepted by the registries. A preset whose
  * registry catalogue says nothing about the endpoint (an OpenAI-compatible
  * server) offers only the models the provider lists.
  */
 function capabilityModels(
   preset: ProviderPreset | undefined,
   pinned?: string[],
-  { chatOnly = false }: { chatOnly?: boolean } = {},
+  {
+    chatOnly = false,
+    baseUrl,
+    strictModels = false,
+    deployment,
+    providerId,
+  }: {
+    chatOnly?: boolean;
+    baseUrl?: string;
+    strictModels?: boolean;
+    deployment?: ModelConfigFile;
+    providerId?: string;
+  } = {},
 ): CapabilityModels {
   const result: CapabilityModels = {};
   if (!preset) return result;
   for (const capability of Object.keys(preset.capabilities) as SlotCapability[]) {
-    if (chatOnly && capability !== 'chat') continue;
+    if (
+      chatOnly &&
+      capability !== 'chat' &&
+      !acceptsWorkspaceToolBaseUrl(capability, preset.capabilities[capability]!.registryId, baseUrl)
+    )
+      continue;
     // A provider the operator switched off for this capability is not offered.
     const registryId = preset.capabilities[capability]?.registryId;
     if (registryId && isForceDisabled(capability, registryId)) continue;
     const offered = preset.trustsModelCatalogue === false ? [] : presetModels(preset, capability);
     // A provider's own model list narrows (or names) the chat models it serves.
+    const authorized =
+      strictModels && providerId
+        ? deploymentAuthorizedModels(deployment, providerId, capability)
+        : pinned;
     const models =
-      capability === 'chat' && pinned?.length
-        ? pinned.map(
+      (capability === 'chat' && pinned?.length) || strictModels
+        ? (authorized ?? []).map(
             (id) =>
               offered.find((model) => model.id === id) ??
               catalogueModel(capability, registryId!, id),
@@ -404,7 +439,8 @@ function effectiveFor(
     }
     return effectiveView(resolution);
   } catch (error) {
-    if (error instanceof SlotResolutionError) return { status: 'invalid', message: error.message };
+    if (error instanceof SlotResolutionError || error instanceof ModelAuthorizationError)
+      return { status: 'invalid', message: error.message };
     throw error;
   }
 }
@@ -422,7 +458,12 @@ function sourceFor(
   workspace: ModelConfigLayer | null,
 ): SlotSourceView {
   const found = findAssignment(slot, deployment ?? undefined, workspace ?? undefined);
-  if (!found) return { kind: 'unconfigured' };
+  if (!found) {
+    if (getSlot(slot).capability === 'webFetch') {
+      return { kind: lockingNode(deployment?.config, slot) !== undefined ? 'locked' : 'default' };
+    }
+    return { kind: 'unconfigured' };
+  }
   if (found.node !== slot) return { kind: 'inherited', from: found.node };
   return { kind: found.source };
 }
@@ -440,6 +481,9 @@ export function modelSettingsView(stored: StoredWorkspaceConfig | null): ModelSe
   const workspaceProviders = counted?.config.providers ?? {};
   const unreadable = new Set(stored?.unreadableSecrets ?? []);
 
+  const implicitId = defaultWebFetchProviderId(
+    [deployment, counted].filter((layer): layer is ModelConfigLayer => !!layer),
+  );
   const providers: ProviderView[] = [
     ...Object.entries(deploymentProviders).map(([id, provider]) => ({
       id,
@@ -447,7 +491,13 @@ export function modelSettingsView(stored: StoredWorkspaceConfig | null): ModelSe
       ...presetLabel(provider.preset),
       source: 'deployment' as const,
       ...(provider.models ? { models: [...provider.models] } : {}),
-      capabilities: capabilityModels(getProviderPreset(provider.preset), provider.models),
+      ...(provider.options ? { options: { ...provider.options } } : {}),
+      ...(provider.voices ? { voices: provider.voices.map((voice) => ({ ...voice })) } : {}),
+      capabilities: capabilityModels(getProviderPreset(provider.preset), provider.models, {
+        strictModels: usesServerCredentials(provider),
+        deployment: deployment?.config,
+        providerId: id,
+      }),
     })),
     ...Object.entries(workspaceProviders).map(([id, provider]) => ({
       id,
@@ -456,9 +506,12 @@ export function modelSettingsView(stored: StoredWorkspaceConfig | null): ModelSe
       source: 'workspace' as const,
       ...(provider.baseUrl ? { baseUrl: viewEndpoint(provider.baseUrl) } : {}),
       ...(provider.models ? { models: [...provider.models] } : {}),
+      ...(provider.options ? { options: { ...provider.options } } : {}),
+      ...(provider.voices ? { voices: provider.voices.map((voice) => ({ ...voice })) } : {}),
       capabilities: capabilityModels(getProviderPreset(provider.preset), provider.models, {
         // An official regional endpoint is the service's own, not a custom one.
         chatOnly: provider.baseUrl !== undefined && !officialEndpointOf(provider),
+        baseUrl: provider.baseUrl,
       }),
       key: {
         set: Boolean(provider.apiKey) || unreadable.has(id),
@@ -466,6 +519,13 @@ export function modelSettingsView(stored: StoredWorkspaceConfig | null): ModelSe
         ...(unreadable.has(id) ? { unreadable: true } : {}),
       },
     })),
+    {
+      id: implicitId,
+      preset: DEFAULT_WEB_FETCH_PROVIDER.id,
+      ...presetLabel(DEFAULT_WEB_FETCH_PROVIDER.id),
+      source: 'deployment',
+      capabilities: { webFetch: { models: [], registryId: DEFAULT_WEB_FETCH_PROVIDER.id } },
+    },
   ];
 
   const deploymentSlots = deployment?.config.slots ?? {};
@@ -485,7 +545,10 @@ export function modelSettingsView(stored: StoredWorkspaceConfig | null): ModelSe
         : {}),
       ...(Object.hasOwn(deploymentSlots, id)
         ? { serverDefault: deploymentSlots[id as keyof typeof deploymentSlots] }
-        : {}),
+        : // Unset, web fetch falls back to the built-in reader: the server's default.
+          definition.capability === 'webFetch'
+          ? { serverDefault: implicitId }
+          : {}),
       effective: effectiveFor(id, layers),
     };
   });
@@ -519,6 +582,7 @@ export function modelSettingsView(stored: StoredWorkspaceConfig | null): ModelSe
     presets,
     providers,
     slots,
+    webFetchProviders: webFetchProviderMetadata(),
   };
 }
 
@@ -672,6 +736,12 @@ export async function applyModelSettingsChange(
         'This deployment does not let workspaces add providers',
       );
     }
+    if (change.id === DEFAULT_WEB_FETCH_PROVIDER.id) {
+      throw new ModelSettingsError(
+        'PROVIDER_RESERVED',
+        'The implicit web fetch reader id is reserved',
+      );
+    }
     if (Object.hasOwn(deploymentProviders, change.id)) {
       throw new ModelSettingsError('PROVIDER_RESERVED', 'The deployment declares this provider id');
     }
@@ -750,7 +820,15 @@ export async function applyModelSettingsChange(
       }
       if (resolution.status === 'assigned' && getSlot(slot as SlotId).capability !== 'chat') {
         for (const target of [resolution, resolution.fallback]) {
-          if (target?.providerSource === 'workspace' && target.customBaseUrl) {
+          if (
+            target?.providerSource === 'workspace' &&
+            target.customBaseUrl &&
+            !acceptsWorkspaceToolBaseUrl(
+              getSlot(slot as SlotId).capability,
+              target.registryId,
+              target.baseUrl,
+            )
+          ) {
             throw new ModelSettingsError(
               'INVALID_ASSIGNMENT',
               `${slot} cannot use ${target.providerId}: a workspace provider with its own endpoint serves chat slots only`,
@@ -759,6 +837,7 @@ export async function applyModelSettingsChange(
         }
       }
     } catch (error) {
+      if (error instanceof ModelAuthorizationError) throw error;
       if (error instanceof SlotResolutionError) {
         throw new ModelSettingsError('INVALID_ASSIGNMENT', error.message);
       }
@@ -872,6 +951,10 @@ export async function importModelSettings(
       config = await applyModelSettingsChange(config, change);
       imported.push(item);
     } catch (error) {
+      if (error instanceof ModelAuthorizationError) {
+        skipped.push({ ...item, code: 'INVALID_ASSIGNMENT', reason: error.message });
+        return;
+      }
       if (!(error instanceof ModelSettingsError)) throw error;
       skipped.push({ ...item, code: error.code, reason: error.message });
     }

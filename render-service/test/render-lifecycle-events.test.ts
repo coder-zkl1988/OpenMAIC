@@ -13,10 +13,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RenderEvent } from '../src/events.js';
 import { RenderCoordinator } from '../src/render-coordinator.js';
 import type { RenderExecutor } from '../src/render-executor.js';
+import { PreviewTimeoutError } from '../src/preview-renderer.js';
 import { Semaphore } from '../src/semaphore.js';
 import type { RenderExecutionResult, RenderJobRecord } from '../src/types.js';
 import type { JobStore } from '../src/job-store.js';
 import { createMemoryArtifactStore, createMemoryJobStore } from './support/fakes.js';
+import { admission, owner, submitRender } from './support/identities.js';
 
 process.env.RENDER_SERVICE_NO_LISTEN = 'true';
 
@@ -78,7 +80,7 @@ describe('render job lifecycle events', () => {
       outputPath: 'out.mp4',
     }));
 
-    const id = await coordinator.submit(coordinator.reserve('tester'), await projectDir(), {
+    const id = await submitRender(coordinator, 'tester', await projectDir(), {
       fps: 24,
       quality: 'draft',
       format: 'mp4',
@@ -104,7 +106,7 @@ describe('render job lifecycle events', () => {
       throw new Error('chromium crashed at /tmp/secret-project/scene.html');
     });
 
-    const id = await coordinator.submit(coordinator.reserve('tester'), await projectDir(), {
+    const id = await submitRender(coordinator, 'tester', await projectDir(), {
       fps: 24,
       quality: 'draft',
       format: 'mp4',
@@ -129,13 +131,13 @@ describe('render job lifecycle events', () => {
       return { status: 'succeeded', outputPath: 'out.mp4' };
     });
 
-    const id = await coordinator.submit(coordinator.reserve('tester'), await projectDir(), {
+    const id = await submitRender(coordinator, 'tester', await projectDir(), {
       fps: 24,
       quality: 'draft',
       format: 'mp4',
     });
     await waitForJob(jobs, id, (job) => job.status === 'running');
-    await coordinator.cancel(id);
+    await coordinator.cancelForOwner(id, owner('tester'));
     release();
     await waitForJob(jobs, id, (job) => job.status === 'cancelled');
 
@@ -165,7 +167,7 @@ describe('render job lifecycle events', () => {
       { onEvent: (event) => events.push(event) },
     );
 
-    const id = await coordinator.submit(coordinator.reserve('tester'), await projectDir(), {
+    const id = await submitRender(coordinator, 'tester', await projectDir(), {
       fps: 24,
       quality: 'draft',
       format: 'mp4',
@@ -185,7 +187,7 @@ describe('render job lifecycle events', () => {
       outputPath: 'out.mp4',
     }));
 
-    const id = await coordinator.submit(coordinator.reserve('tester'), await projectDir(), {
+    const id = await submitRender(coordinator, 'tester', await projectDir(), {
       fps: 24,
       quality: 'draft',
       format: 'mp4',
@@ -210,7 +212,7 @@ describe('render job lifecycle events', () => {
       outputPath: 'out.mp4',
     }));
 
-    const id = await coordinator.submit(coordinator.reserve('tester'), await projectDir(), {
+    const id = await submitRender(coordinator, 'tester', await projectDir(), {
       fps: 24,
       quality: 'draft',
       format: 'mp4',
@@ -248,19 +250,11 @@ describe('render job lifecycle events', () => {
     const options = { fps: 24, quality: 'draft', format: 'mp4' } as const;
 
     // The first job takes the only execution slot; the second stays queued.
-    const runningId = await coordinator.submit(
-      coordinator.reserve('tester'),
-      await projectDir(),
-      options,
-    );
+    const runningId = await submitRender(coordinator, 'tester', await projectDir(), options);
     await waitForJob(jobs, runningId, (job) => job.status === 'running');
-    const queuedId = await coordinator.submit(
-      coordinator.reserve('tester'),
-      await projectDir(),
-      options,
-    );
+    const queuedId = await submitRender(coordinator, 'tester', await projectDir(), options);
 
-    await coordinator.cancel(queuedId);
+    await coordinator.cancelForOwner(queuedId, owner('tester'));
     await waitForJob(jobs, queuedId, (job) => job.status === 'cancelled');
 
     const finished = events.filter((event) => event.event === 'render_job_finished');
@@ -285,7 +279,7 @@ describe('render job lifecycle events', () => {
     }));
 
     for (let i = 0; i < 3; i += 1) {
-      const id = await coordinator.submit(coordinator.reserve('tester'), await projectDir(), {
+      const id = await submitRender(coordinator, 'tester', await projectDir(), {
         fps: 24,
         quality: 'draft',
         format: 'mp4',
@@ -406,6 +400,92 @@ describe('admission and preview route events', () => {
     });
   });
 
+  it('records a fixed error code, not the message, when a preview fails with 500', async () => {
+    const emitted = captureEmitted();
+    const jobs = createMemoryJobStore();
+    const artifacts = createMemoryArtifactStore().store;
+    const app = createApp({
+      jobs,
+      artifacts,
+      coordinator: new RenderCoordinator(
+        executor(async () => ({ status: 'succeeded', outputPath: 'out.mp4' })),
+        jobs,
+        artifacts,
+      ),
+      extractionGate: new Semaphore(1),
+      previewRenderer: {
+        render: async () => {
+          throw new Error('Failed to launch the browser process! <scene secret>');
+        },
+      },
+      onEvent: (event) => emitted.push(event),
+    });
+
+    const response = await app.fetch(previewRequest());
+    expect(response.status).toBe(500);
+    // The caller still gets the message; the log line only the code.
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('Failed to launch'),
+    });
+
+    const preview = emitted.find((event) => event.event === 'preview_request');
+    expect(preview).toMatchObject({ status: 500, errorCode: 'browser_launch_failed' });
+    expect(JSON.stringify(preview)).not.toContain('scene secret');
+  });
+
+  it('records resource_mode_unsupported when resource mode refuses every preview', async () => {
+    const emitted = captureEmitted();
+    const jobs = createMemoryJobStore();
+    const artifacts = createMemoryArtifactStore().store;
+    const app = createApp({
+      jobs,
+      artifacts,
+      coordinator: new RenderCoordinator(
+        executor(async () => ({ status: 'succeeded', outputPath: 'out.mp4' })),
+        jobs,
+        artifacts,
+      ),
+      extractionGate: new Semaphore(1),
+      previewRenderer: { render: async () => new Uint8Array([1]) },
+      resourceMode: true,
+      onEvent: (event) => emitted.push(event),
+    });
+
+    expect((await app.fetch(previewRequest())).status).toBe(503);
+    expect(emitted.find((event) => event.event === 'preview_request')).toMatchObject({
+      status: 503,
+      errorCode: 'resource_mode_unsupported',
+    });
+  });
+
+  it('records deadline_exceeded on a preview that overran its deadline', async () => {
+    const emitted = captureEmitted();
+    const jobs = createMemoryJobStore();
+    const artifacts = createMemoryArtifactStore().store;
+    const app = createApp({
+      jobs,
+      artifacts,
+      coordinator: new RenderCoordinator(
+        executor(async () => ({ status: 'succeeded', outputPath: 'out.mp4' })),
+        jobs,
+        artifacts,
+      ),
+      extractionGate: new Semaphore(1),
+      previewRenderer: {
+        render: async () => {
+          throw new PreviewTimeoutError('Preview exceeded the deadline');
+        },
+      },
+      onEvent: (event) => emitted.push(event),
+    });
+
+    expect((await app.fetch(previewRequest())).status).toBe(504);
+    expect(emitted.find((event) => event.event === 'preview_request')).toMatchObject({
+      status: 504,
+      errorCode: 'deadline_exceeded',
+    });
+  });
+
   it('records an export admission rejection with its machine-readable reason', async () => {
     const emitted = captureEmitted();
     const jobs = createMemoryJobStore();
@@ -424,20 +504,23 @@ describe('admission and preview route events', () => {
       onEvent: (event) => emitted.push(event),
     });
 
-    const held = coordinator.reserve('exporter');
+    const held = coordinator.reserve(admission('exporter'));
     const form = new FormData();
     form.append('project', new Blob([new Uint8Array(64)]), 'project.zip');
     const response = await app.fetch(
-      new Request('http://test/render', {
+      new Request('http://test/owner-bound/render', {
         method: 'POST',
         body: form,
-        headers: { 'x-openmaic-client': 'someone-else' },
+        headers: {
+          'x-openmaic-client': 'someone-else',
+          'x-openmaic-render-owner': 'owner-a',
+        },
       }),
     );
     expect(response.status).toBe(429);
 
     expect(emitted.find((event) => event.event === 'render_admission_rejected')).toMatchObject({
-      route: '/render',
+      route: '/owner-bound/render',
       reason: 'queue_full',
       status: 429,
     });

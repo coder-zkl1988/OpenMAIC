@@ -13,6 +13,7 @@ export const IMAGE_PROVIDER_NAMES: Record<ImageProviderId, string> = {
   'nano-banana': 'providerNanoBanana',
   'minimax-image': 'providerMiniMaxImage',
   'grok-image': 'providerGrokImage',
+  'glm-image': 'providerGlmImage',
   'comfyui-image': 'providerComfyUIImage',
   'openrouter-image': 'providerOpenRouterImage',
   lemonade: 'providerLemonadeImage',
@@ -21,7 +22,6 @@ export const IMAGE_PROVIDER_NAMES: Record<ImageProviderId, string> = {
 export const VIDEO_PROVIDER_NAMES: Record<VideoProviderId, string> = {
   seedance: 'providerSeedance',
   kling: 'providerKling',
-  veo: 'providerVeo',
   'minimax-video': 'providerMiniMaxVideo',
   'grok-video': 'providerGrokVideo',
   'openrouter-video': 'providerOpenRouterVideo',

@@ -13,7 +13,6 @@
  * Currently Supported Video Providers (Phase 2):
  * - Seedance (ByteDance video generation)
  * - Kling (Kuaishou video generation)
- * - Veo (Google DeepMind video generation)
  * - HappyHorse (Alibaba Cloud Model Studio video generation)
  *
  * HOW TO ADD A NEW PROVIDER:
@@ -77,6 +76,7 @@ export type ImageProviderId =
   | 'nano-banana'
   | 'minimax-image'
   | 'grok-image'
+  | 'glm-image'
   | 'comfyui-image'
   | 'openrouter-image'
   | 'lemonade';
@@ -113,7 +113,7 @@ export interface ImageProviderConfig {
   /** Available models for this provider */
   models: ImageModelInfo[];
   /** Aspect ratios supported by this provider */
-  supportedAspectRatios: Array<'16:9' | '4:3' | '1:1' | '9:16'>;
+  supportedAspectRatios: Array<'16:9' | '4:3' | '1:1' | '9:16' | '3:4'>;
   /** Optional artistic styles supported by this provider */
   supportedStyles?: string[];
   /** Maximum supported output resolution */
@@ -215,7 +215,6 @@ export interface ImageGenerationResult {
 export type VideoProviderId =
   | 'seedance'
   | 'kling'
-  | 'veo'
   | 'minimax-video'
   | 'grok-video'
   | 'openrouter-video'

@@ -364,7 +364,7 @@ describe('useChatSessions: class memory, lecture progress and moment kinds', () 
 });
 
 describe('withLectureProgress', () => {
-  const storeState: import('@/lib/chat/agent-loop').AgentLoopStoreState = {
+  const storeState: import('@/lib/chat/store-state').AgentLoopStoreState = {
     stage: null,
     scenes: [],
     currentSceneId: 'scene-1',

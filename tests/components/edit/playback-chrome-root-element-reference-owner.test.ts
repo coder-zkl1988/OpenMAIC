@@ -54,12 +54,12 @@ const mocks = vi.hoisted(() => ({
   canvasProps: undefined as Record<string, unknown> | undefined,
   controlBarProps: undefined as Record<string, unknown> | undefined,
   captionProps: undefined as Record<string, unknown> | undefined,
-  piEnabled: true,
   coursewareReferenceEnabled: true,
   topicActive: false,
   engineMode: 'idle' as 'idle' | 'playing' | 'paused' | 'live',
   engineOptions: undefined as
     | {
+        beforeSpeech?: () => void;
         onModeChange?: (mode: 'idle' | 'playing' | 'paused' | 'live') => void;
         onProgress?: (
           snapshot: { actionIndex: number; sceneId: string },
@@ -78,6 +78,8 @@ const mocks = vi.hoisted(() => ({
   pauseBuffer: vi.fn(),
   endSession: vi.fn(),
   engineStop: vi.fn(),
+  sendFrameMessage: vi.fn(),
+  hiddenFrameMessage: vi.fn(),
   engineStart: vi.fn(),
   engineContinuePlayback: vi.fn(),
   handleUserInterrupt: vi.fn(),
@@ -455,6 +457,7 @@ vi.mock('@/lib/playback', async () => ({
       _actionEngine: unknown,
       _audioPlayer: unknown,
       options: {
+        beforeSpeech?: () => void;
         onModeChange?: (mode: 'idle' | 'playing' | 'paused' | 'live') => void;
         onUserInterrupt?: (text: string) => void;
         onComplete?: () => void;
@@ -667,7 +670,15 @@ vi.mock('@/lib/hooks/use-discussion-tts', () => ({
   }),
 }));
 vi.mock('@/lib/store/widget-iframe', () => ({
-  useWidgetIframeStore: { getState: () => ({ getSendMessage: () => undefined }) },
+  useWidgetIframeStore: {
+    getState: () => ({
+      getSendMessage: () => undefined,
+      sendMessageByScene: {
+        'scene-1': mocks.sendFrameMessage,
+        'scene-2': mocks.hiddenFrameMessage,
+      },
+    }),
+  },
 }));
 vi.mock('@/lib/orchestration/registry/store', () => ({
   agentsToParticipants: () => [],
@@ -679,7 +690,6 @@ vi.mock('@/lib/orchestration/registry/store', () => ({
 }));
 vi.mock('@/lib/hooks/use-asr-available', () => ({ useASRAvailable: () => true }));
 vi.mock('@/lib/config/feature-flags', () => ({
-  isPiChatEnabled: () => mocks.piEnabled,
   isCoursewareReferenceEnabled: () => mocks.coursewareReferenceEnabled,
 }));
 
@@ -753,7 +763,6 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.canvasProps = undefined;
     mocks.controlBarProps = undefined;
     mocks.captionProps = undefined;
-    mocks.piEnabled = true;
     mocks.coursewareReferenceEnabled = true;
     mocks.topicActive = false;
     mocks.engineMode = 'idle';
@@ -763,6 +772,9 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.endSession.mockReset();
     mocks.endSession.mockResolvedValue(undefined);
     mocks.engineStop.mockReset();
+    mocks.enginePause.mockReset();
+    mocks.sendFrameMessage.mockReset();
+    mocks.hiddenFrameMessage.mockReset();
     mocks.engineStart.mockReset();
     mocks.engineContinuePlayback.mockReset();
     mocks.handleUserInterrupt.mockReset();
@@ -844,6 +856,25 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     root = createRoot(container);
     await renderOwner(props);
   }
+
+  it('pauses playing narration when frame HTML media starts', async () => {
+    mocks.engineMode = 'playing';
+    const ownerRef = createRef<PlaybackChromeRootHandle>();
+    await renderOwner({ ref: ownerRef });
+    act(() => ownerRef.current?.pauseForInteractiveMedia());
+    expect(mocks.enginePause).toHaveBeenCalledOnce();
+    mocks.engineMode = 'paused';
+    act(() => ownerRef.current?.pauseForInteractiveMedia());
+    expect(mocks.enginePause).toHaveBeenCalledOnce();
+  });
+
+  it('notifies only the current frame before speech without awaiting a reply', async () => {
+    mocks.sendFrameMessage.mockReturnValue(new Promise(() => {}));
+    await renderOwner();
+    expect(mocks.engineOptions!.beforeSpeech!()).toBeUndefined();
+    expect(mocks.sendFrameMessage).toHaveBeenCalledWith('maic:media:control:v1', {});
+    expect(mocks.hiddenFrameMessage).not.toHaveBeenCalled();
+  });
 
   it('selects the stage snapshot whiteboard and sends an identity-only reference', async () => {
     const board = {
@@ -1104,24 +1135,6 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       );
     },
   );
-
-  it('hides the entry and sends an ordinary unreferenced message when Pi is off', async () => {
-    mocks.piEnabled = false;
-    await renderOwner();
-
-    expect(mocks.controlBarProps).toMatchObject({
-      showElementReference: false,
-      canPickElement: false,
-      elementPickActive: false,
-    });
-    expect(container.querySelector('[data-testid="toggle-pick"]')).toBeNull();
-
-    click('send');
-
-    expect(mocks.handleUserInterrupt).not.toHaveBeenCalled();
-    expect(mocks.sendMessage).toHaveBeenCalledOnce();
-    expect(mocks.sendMessage).toHaveBeenCalledWith('Explain this', undefined);
-  });
 
   it('keeps Pi messaging available while the independent reference gate clears its UI state', async () => {
     await renderOwner();

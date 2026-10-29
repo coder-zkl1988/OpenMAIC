@@ -73,6 +73,18 @@ export function runPauseOf(view: RunView, outlines: readonly SceneOutline[]): Ru
   };
 }
 
+/** The outline of the scene a paused run stopped at; null when it stopped outside the scenes. */
+export function pausedOutlineOfRun(
+  view: RunView,
+  outlines: readonly SceneOutline[],
+): SceneOutline | null {
+  if (view.state !== 'paused') return null;
+  const stopped = sceneIndexOfStep(view.error?.step);
+  return stopped === null ? null : (outlines[stopped] ?? null);
+}
+
+/** A paused run's failure, with the outline of the scene it stopped at (null outside the scenes). */
+export type RunCourseFailure = NonNullable<RunView['error']> & { outlineId: string | null };
 /** The classroom's generation status for a run state. */
 export function generationStatusOfRun(
   state: RunView['state'],
@@ -100,6 +112,8 @@ export function useRunCourse(input: { classroomId: string; ready: boolean }): {
    * the run's preview while its outline waits). Null otherwise.
    */
   generation: { status: CourseRunStatus; href: string } | null;
+  /** The paused run's failure; cleared while the run proceeds. */
+  failure: RunCourseFailure | null;
   /** Retry the failed scene of a paused run. */
   retryOutline: (outlineId: string) => Promise<void>;
   /** What the run stopped at, while it is paused. */
@@ -109,6 +123,7 @@ export function useRunCourse(input: { classroomId: string; ready: boolean }): {
 } {
   const producer = useStageStore((s) => s.outlineProducer);
   const producerRef = useStageStore((s) => s.outlineProducerRef);
+  const storeOutlines = useStageStore((s) => s.outlines);
   const loadedId = useStageStore((s) => s.stage?.id ?? null);
   const runId =
     input.ready && loadedId === input.classroomId ? runIdOfCourse(producer, producerRef) : null;
@@ -275,10 +290,16 @@ export function useRunCourse(input: { classroomId: string; ready: boolean }): {
   );
 
   const runStatus = view && !finished ? courseRunStatus(view) : null;
-  const storeOutlines = useStageStore((s) => s.outlines);
+  const pausedOutline = view
+    ? pausedOutlineOfRun(view, view.outline?.outlines ?? storeOutlines)
+    : null;
   const paused = view ? runPauseOf(view, view.outline?.outlines ?? storeOutlines) : null;
   return {
     runId: view ? runId : null,
+    failure:
+      view?.state === 'paused' && view.error
+        ? { ...view.error, outlineId: pausedOutline?.id ?? null }
+        : null,
     generation:
       view && runStatus
         ? {

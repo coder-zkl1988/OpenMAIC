@@ -16,6 +16,8 @@ interface ProactiveCardCommonProps {
   mode: 'playback' | 'paused' | 'autonomous';
   agentName?: string;
   agentAvatar?: string;
+  /** The speaking agent's persona colour, tinting the offer chip */
+  agentColor?: string;
   /**
    * The teacher opened the moment (a question to the class, or calling on a
    * classmate): the card words it as the teacher's question, not a classmate
@@ -162,6 +164,7 @@ function ProactiveCardContent({
   mode,
   agentName,
   agentAvatar,
+  agentColor,
   openedByTeacher,
   offer,
   autoSkip = true,
@@ -203,7 +206,10 @@ function ProactiveCardContent({
             {agentName}
           </span>
         )}
-        <span className="shrink-0 rounded-full bg-warning-soft px-1.5 text-[10px] leading-4 font-semibold text-warning">
+        <span
+          className="shrink-0 rounded-full bg-warning-soft px-1.5 text-[10px] leading-4 font-semibold text-warning"
+          style={agentColor ? { color: agentColor, backgroundColor: `${agentColor}18` } : undefined}
+        >
           {t(offerChipKey({ offer, openedByTeacher }))}
         </span>
         {/* A ticking number would be read out every second, so the time

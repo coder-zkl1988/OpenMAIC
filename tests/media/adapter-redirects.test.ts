@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { generateWithComfyuiImage } from '@/lib/media/adapters/comfyui-image-adapter';
+import { generateWithGlmImage } from '@/lib/media/adapters/glm-image-adapter';
 import { generateWithGrokImage } from '@/lib/media/adapters/grok-image-adapter';
 import { generateWithGrokVideo } from '@/lib/media/adapters/grok-video-adapter';
 import { generateWithHappyHorse } from '@/lib/media/adapters/happyhorse-adapter';
@@ -15,7 +16,6 @@ import { generateWithOpenAIImage } from '@/lib/media/adapters/openai-image-adapt
 import { generateWithQwenImage } from '@/lib/media/adapters/qwen-image-adapter';
 import { generateWithSeedance } from '@/lib/media/adapters/seedance-adapter';
 import { generateWithSeedream } from '@/lib/media/adapters/seedream-adapter';
-import { generateWithVeo } from '@/lib/media/adapters/veo-adapter';
 import type { ImageGenerationConfig, VideoGenerationConfig } from '@/lib/media/types';
 
 /**
@@ -80,6 +80,10 @@ const cases: RedirectCase[] = [
     run: () => generateWithGrokImage(imageConfig('grok-image'), imageOptions),
   },
   {
+    name: 'GLM image generation',
+    run: () => generateWithGlmImage(imageConfig('glm-image'), imageOptions),
+  },
+  {
     name: 'Lemonade image generation',
     run: () => generateWithLemonadeImage(imageConfig('lemonade'), imageOptions),
   },
@@ -130,10 +134,6 @@ const cases: RedirectCase[] = [
   {
     name: 'MiniMax video submission',
     run: () => generateWithMiniMaxVideo(videoConfig('minimax-video'), videoOptions),
-  },
-  {
-    name: 'Veo video submission',
-    run: () => generateWithVeo(videoConfig('veo'), videoOptions),
   },
 ];
 
