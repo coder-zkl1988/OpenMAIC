@@ -1,10 +1,12 @@
 /** Agent runtime control plane for durable follow-up messages. */
+import { assertWorkspaceModelsAuthorized } from '@/lib/server/model-config/runtime';
 import { AgentSessionAccessError } from '@openmaic/storage';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { isAgentRuntimeConfigured } from '@/lib/config/feature-flags';
 import { apiError } from '@/lib/server/api-response';
+import { supportedLocaleOf } from '@/lib/i18n/types';
 import { MAX_SESSION_TEXT_LENGTH } from '@/lib/server/agent-runtime/limits';
 import { getAgentSessionStore } from '@/lib/server/agent-runtime/store';
 import { scheduleConversationTitle } from '@/lib/server/agent-runtime/conversation-title-task';
@@ -40,6 +42,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       materialIds?: unknown;
       elementRefs?: unknown;
       courseRefs?: unknown;
+      /** The interface language the message is sent from; an unsupported value is ignored. */
+      locale?: unknown;
     } = {};
     try {
       body = ((await req.json()) ?? {}) as typeof body;
@@ -71,6 +75,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return response;
     }
     const decodedCourseRefs = decodeCourseRefs(body.courseRefs ?? []);
+    // Only a supported code is kept: it names the copy the run's tools load.
+    const locale = supportedLocaleOf(body.locale);
     if (!decodedCourseRefs.ok) {
       const response = apiError('INVALID_REQUEST', 400, decodedCourseRefs.error);
       responseHeaders.forEach((value, name) => response.headers.append(name, value));
@@ -91,6 +97,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return response;
     }
 
+    await assertWorkspaceModelsAuthorized(ownerId, [
+      'agent',
+      'agent.title',
+      'image',
+      'video',
+      'tts',
+      'asr',
+      'webSearch',
+    ]);
     try {
       const materials = materialIds.length
         ? await bindOwnerMaterialsToSession(id, ownerId, materialIds)
@@ -102,6 +117,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           ...(materials.length ? { materials } : {}),
           ...(decodedElementRefs.refs.length ? { elementRefs: decodedElementRefs.refs } : {}),
           ...(decodedCourseRefs.refs.length ? { courseRefs: decodedCourseRefs.refs } : {}),
+          ...(locale ? { locale } : {}),
         },
         { expectedOwnerId: ownerId },
       );

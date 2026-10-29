@@ -16,6 +16,7 @@
  *    generate_roster.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Value } from 'typebox/value';
 
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { GeneratedAgentConfig } from '@openmaic/dsl';
@@ -23,6 +24,7 @@ import type { GeneratedAgentConfig } from '@openmaic/dsl';
 import {
   buildRosterTools,
   ROSTER_TOOL_NAMES,
+  ROSTER_TOOLS_PROMPT,
   type CourseDocument,
   type CourseStore,
 } from '@/lib/server/agent-runtime/roster-tools';
@@ -187,6 +189,110 @@ describe('set_roster', () => {
       delivery: 'calm',
     });
     expect(doc?.stage?.agentIds).toEqual(roster?.map((agent) => agent.id));
+  });
+
+  // Codex P2 on PR #1908: set_roster must advertise and persist language-independent
+  // voiceDesign.gender. A Chinese identity like 「年轻女性学生」 has no English
+  // male/female fallback, so dropping gender on rewrite sends fallbacks back to
+  // the index pick and can mismatch catalogue gender again.
+  it('persists language-independent voiceDesign.gender for non-English identities', async () => {
+    const store = makeStore(makeDoc());
+    const result = await runTool(store, 'set_roster', {
+      stageId: 'stage-test',
+      agents: [
+        {
+          name: '林老师',
+          role: 'teacher',
+          persona: '耐心引导，总是从学生已经知道的东西出发。她说话不紧不慢，遇到卡住的人会多举一个例子。',
+          voiceDesign: {
+            identity: '中年男教师',
+            gender: 'male',
+            texture: '沉稳低沉',
+            delivery: '从容鼓励',
+          },
+        },
+        {
+          name: '小雨',
+          role: 'student',
+          persona: '好奇爱问，听到意外之处就举手。她问得急，有时还没想清楚就说出来，但很愿意被人纠正。',
+          voiceDesign: {
+            identity: '年轻女性学生',
+            gender: 'female',
+            texture: '清亮轻快',
+            delivery: '活泼认真',
+          },
+        },
+        {
+          name: '阿杰',
+          role: 'student',
+          persona: '认真听讲，笔记记得很细。他很少主动发言，除非确信自己是对的，被点名时回答得慢但完整。',
+        },
+      ],
+    });
+
+    expect(result.isError).toBeUndefined();
+    const roster = (await store.loadDocument('stage-test'))?.stage?.generatedAgentConfigs ?? [];
+    expect(roster[0]?.voiceDesign).toEqual({
+      identity: '中年男教师',
+      gender: 'male',
+      texture: '沉稳低沉',
+      delivery: '从容鼓励',
+    });
+    expect(roster[1]?.voiceDesign).toEqual({
+      identity: '年轻女性学生',
+      gender: 'female',
+      texture: '清亮轻快',
+      delivery: '活泼认真',
+    });
+    // Schema and runner guidance must advertise gender so a schema-following
+    // rewrite cannot omit it for course-language identities.
+    const tools = buildTools({ store });
+    const setRoster = tools.find((tool) => tool.name === 'set_roster');
+    expect(JSON.stringify(setRoster?.parameters)).toContain('"gender"');
+    expect(ROSTER_TOOLS_PROMPT).toMatch(/voiceDesign\.gender|gender to "male"/);
+  });
+
+  it('requires gender whenever set_roster voiceDesign is present', () => {
+    const setRoster = buildTools().find((tool) => tool.name === 'set_roster');
+    expect(setRoster).toBeDefined();
+    const teacher = { name: '林老师', role: 'teacher', persona: '耐心引导，从已知出发。' };
+    const student = { name: '小雨', role: 'student', persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。' };
+    const voiceDesign = {
+      identity: '年轻女性学生',
+      texture: '清亮轻快',
+      delivery: '活泼认真',
+    };
+    expect(
+      Value.Check(setRoster!.parameters, {
+        stageId: 'stage-test',
+        agents: [teacher, { ...student, voiceDesign: { ...voiceDesign, gender: 'female' } }],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(setRoster!.parameters, {
+        stageId: 'stage-test',
+        agents: [teacher, { ...student, voiceDesign: { ...voiceDesign, gender: 'male' } }],
+      }),
+    ).toBe(true);
+    // voiceDesign stays optional; a design without gender is not schema-valid.
+    expect(
+      Value.Check(setRoster!.parameters, {
+        stageId: 'stage-test',
+        agents: [teacher, student],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(setRoster!.parameters, {
+        stageId: 'stage-test',
+        agents: [teacher, { ...student, voiceDesign }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(setRoster!.parameters, {
+        stageId: 'stage-test',
+        agents: [teacher, { ...student, voiceDesign: { ...voiceDesign, gender: '女性' } }],
+      }),
+    ).toBe(false);
   });
 
   it('rejects fewer than 2 agents', async () => {
@@ -514,6 +620,104 @@ describe('set_roster', () => {
     expect(result.details?.error).toBe('voice-not-in-catalog');
     expect((await store.loadDocument('stage-test'))?.stage?.generatedAgentConfigs).toBeUndefined();
   });
+
+  it('accepts a catalogue voice whose gender matches voiceDesign.gender', async () => {
+    mocks.enabledServerTTSProviderIds.mockReturnValue(['openai-tts']);
+    const store = makeStore(makeDoc());
+    const result = await runTool(store, 'set_roster', {
+      stageId: 'stage-test',
+      agents: [
+        { name: '林老师', role: 'teacher', persona: '耐心引导，总是从学生已经知道的东西出发；她说话不紧不慢，遇到卡住的人会多举一个例子。' },
+        {
+          name: '小雨',
+          role: 'student',
+          persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。',
+          voice: 'openai-tts::nova',
+          voiceDesign: {
+            identity: '年轻女性学生',
+            gender: 'female',
+            texture: '清亮',
+            delivery: '轻快',
+          },
+        },
+      ],
+    });
+
+    expect(result.isError).toBeUndefined();
+    const roster = (await store.loadDocument('stage-test'))?.stage?.generatedAgentConfigs ?? [];
+    expect(roster[1]?.voiceConfig).toEqual({ providerId: 'openai-tts', voiceId: 'nova' });
+    expect(roster[1]?.voiceDesign?.gender).toBe('female');
+  });
+
+  it('accepts a neutral or unknown voice gender and a binding with no voiceDesign.gender', async () => {
+    mocks.enabledServerTTSProviderIds.mockReturnValue(['openai-tts']);
+    const store = makeStore(makeDoc());
+    const femaleDesign = {
+      identity: '年轻女性学生',
+      gender: 'female' as const,
+      texture: '清亮',
+      delivery: '轻快',
+    };
+    const neutral = await runTool(store, 'set_roster', {
+      stageId: 'stage-test',
+      agents: [
+        { name: '林老师', role: 'teacher', persona: '耐心引导，总是从学生已经知道的东西出发；她说话不紧不慢，遇到卡住的人会多举一个例子。' },
+        {
+          name: '小雨',
+          role: 'student',
+          persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。',
+          voice: 'openai-tts::alloy',
+          voiceDesign: femaleDesign,
+        },
+      ],
+    });
+    expect(neutral.isError).toBeUndefined();
+    expect(
+      (await store.loadDocument('stage-test'))?.stage?.generatedAgentConfigs?.[1]?.voiceConfig,
+    ).toEqual({ providerId: 'openai-tts', voiceId: 'alloy' });
+
+    const unknown = await runTool(
+      store,
+      'set_roster',
+      {
+        stageId: 'stage-test',
+        agents: [
+          { name: '林老师', role: 'teacher', persona: '耐心引导，总是从学生已经知道的东西出发；她说话不紧不慢，遇到卡住的人会多举一个例子。' },
+          {
+            name: '小雨',
+            role: 'student',
+            persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。',
+            voice: 'openai-tts::session-voice',
+            voiceDesign: femaleDesign,
+          },
+        ],
+      },
+      {
+        registeredVoices: [{ providerId: 'openai-tts', voiceId: 'session-voice', name: 'Session' }],
+      },
+    );
+    expect(unknown.isError).toBeUndefined();
+    expect(
+      (await store.loadDocument('stage-test'))?.stage?.generatedAgentConfigs?.[1]?.voiceConfig,
+    ).toEqual({ providerId: 'openai-tts', voiceId: 'session-voice' });
+
+    const noDesignGender = await runTool(store, 'set_roster', {
+      stageId: 'stage-test',
+      agents: [
+        {
+          name: '林老师',
+          role: 'teacher',
+          persona: '耐心引导，总是从学生已经知道的东西出发；她说话不紧不慢，遇到卡住的人会多举一个例子。',
+          voice: 'openai-tts::echo',
+        },
+        { name: '小雨', role: 'student', persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。' },
+      ],
+    });
+    expect(noDesignGender.isError).toBeUndefined();
+    expect(
+      (await store.loadDocument('stage-test'))?.stage?.generatedAgentConfigs?.[0]?.voiceConfig,
+    ).toEqual({ providerId: 'openai-tts', voiceId: 'echo' });
+  });
 });
 
 describe('list_voices', () => {
@@ -682,4 +886,90 @@ describe('roster tool registry', () => {
     expect(names).toContain('list_voices');
     expect(names).not.toContain('generate_roster');
   });
+});
+
+it.each(['openai-tts'])(
+  'uses a replacement catalogue in list_voices and set_roster for %s',
+  async (providerId) => {
+    const ttsConnection = {
+      providerId,
+      apiKey: 'test-key',
+      managed: true,
+      userEndpoint: false,
+      origin: 'configuration',
+      voices: [{ id: 'vivian', name: 'Vivian' }],
+    };
+    const store = makeStore(makeDoc());
+    const listed = await runTool(store, 'list_voices', {}, { ttsConnection });
+    expect(
+      (listed.details?.voices as Array<{ binding: string }>).map((voice) => voice.binding),
+    ).toEqual([`${providerId}::vivian`]);
+    const result = await runTool(
+      store,
+      'set_roster',
+      {
+        stageId: 'stage-test',
+        agents: [
+          {
+            name: 'Teacher',
+            role: 'teacher',
+            persona: 'A patient teacher who explains each step from what the class already knows.',
+            voice: `${providerId}::vivian`,
+          },
+          {
+            name: 'Student',
+            role: 'student',
+            persona: 'A curious learner who asks why as soon as something surprises them.',
+          },
+        ],
+      },
+      { ttsConnection },
+    );
+    expect(result.isError).toBeUndefined();
+  },
+);
+
+it('keeps excluded configured Qwen voices out of roster tools while allowing registered clones', async () => {
+  const ttsConnection = {
+    providerId: 'qwen-tts',
+    apiKey: 'test-key',
+    managed: true,
+    userEndpoint: false,
+    origin: 'configuration',
+    voices: [{ id: 'vivian', name: 'Vivian' }],
+  };
+  const registeredVoices = [
+    { providerId: 'qwen-tts', voiceId: 'my-clone', name: 'My clone', kind: 'clone' },
+  ];
+  const store = makeStore(makeDoc());
+  const listed = await runTool(store, 'list_voices', {}, { ttsConnection, registeredVoices });
+  expect(
+    (listed.details?.voices as Array<{ binding: string }>).map((voice) => voice.binding),
+  ).toEqual(['qwen-tts::my-clone']);
+  const roster = (voice: string) => ({
+    stageId: 'stage-test',
+    agents: [
+      {
+        name: 'Teacher',
+        role: 'teacher',
+        persona: 'A patient teacher who explains each step from what the class already knows.',
+        voice,
+      },
+      {
+        name: 'Student',
+        role: 'student',
+        persona: 'A curious learner who asks why as soon as something surprises them.',
+      },
+    ],
+  });
+  const rejected = await runTool(store, 'set_roster', roster('qwen-tts::vivian'), {
+    ttsConnection,
+    registeredVoices,
+  });
+  expect(rejected.isError).toBe(true);
+  const accepted = await runTool(store, 'set_roster', roster('qwen-tts::my-clone'), {
+    ttsConnection,
+    registeredVoices,
+  });
+  expect(accepted.isError).toBeUndefined();
 });

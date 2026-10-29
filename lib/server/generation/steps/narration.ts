@@ -1,9 +1,11 @@
+import { configuredDefaultVoice } from '@/lib/audio/provider-default-voice';
 /**
  * Narration: synthesize one speech line through the tts slot's provider.
  * Moved from POST /api/generate/tts, which keeps resolving the slot (with the
  * request's deprecated provider fields) and mapping provider errors to its
  * responses.
  */
+import { authorizeMediaModel } from '@/lib/server/model-config/media';
 import { generateTTS, type TTSGenerationResult } from '@/lib/audio/tts-providers';
 import { TTS_PROVIDERS, DEFAULT_TTS_VOICES, isQwenCloneVoice } from '@/lib/audio/constants';
 import type { TTSProviderId } from '@/lib/audio/types';
@@ -62,7 +64,9 @@ export async function synthesizeNarration(
   const ttsVoice =
     requestedVoice && (!requestedProviderId || requestedProviderId === ttsProviderId)
       ? requestedVoice
-      : DEFAULT_TTS_VOICES[ttsProviderId as keyof typeof DEFAULT_TTS_VOICES] || requestedVoice;
+      : configuredDefaultVoice(connection.options, connection.voices) ||
+        DEFAULT_TTS_VOICES[ttsProviderId as keyof typeof DEFAULT_TTS_VOICES] ||
+        requestedVoice;
   trace.voice = ttsVoice;
   if (!ttsVoice) {
     throw new StepRefusal<NarrationRefusal>('voice-missing', 'Missing required field: ttsVoice');
@@ -111,23 +115,26 @@ export async function synthesizeNarration(
   }
 
   // Build TTS config (managed providers may pin the model server-side)
-  const qwenCloneVoice = ttsProviderId === 'qwen-tts' && isQwenCloneVoice(ttsVoice);
+  const qwenCloneVoice =
+    ttsProviderId === 'qwen-tts' && isQwenCloneVoice(ttsVoice, connection.voices);
   const requestedSpeed = input.speed ?? 1.0;
   // A configured slot's own model; on the deprecated and default paths the
   // client's (or default) model under the legacy server pins. Qwen
   // voice-clone voices switch to the clone model either way.
   const resolvedModelId =
     connection.origin === 'configuration'
-      ? slotTTSModel(ttsProviderId, connection.modelId, ttsVoice)
+      ? slotTTSModel(ttsProviderId, connection.modelId, ttsVoice, connection.voices)
       : resolveTTSModel(
           ttsProviderId,
           connection.origin === 'request' ? input.requestedModelId : connection.modelId,
           ttsVoice,
+          connection.voices,
         );
   const config = {
     providerId: ttsProviderId as TTSProviderId,
     modelId: resolvedModelId,
     voice: ttsVoice,
+    ...(connection.voices ? { voices: connection.voices } : {}),
     speed: qwenCloneVoice ? 1 : requestedSpeed,
     apiKey: apiKey ?? '',
     baseUrl,
@@ -149,6 +156,7 @@ export async function synthesizeNarration(
   );
 
   // Generate audio
+  authorizeMediaModel(connection, 'tts', config.modelId);
   const { audio, format } = await generateTTS(config, text);
 
   void recordGenerationUsage({

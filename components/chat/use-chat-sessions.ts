@@ -50,7 +50,7 @@ import { classroomChatUsable, loadModelCapabilities } from '@/lib/model-settings
 import { USER_AVATAR } from '@/lib/types/roundtable';
 import { StreamBuffer } from '@/lib/buffer/stream-buffer';
 import type { AgentStartItem, ActionItem } from '@/lib/buffer/stream-buffer';
-import { runAgentLoop, type AgentLoopStoreState } from '@/lib/chat/agent-loop';
+import type { AgentLoopStoreState } from '@/lib/chat/store-state';
 import { ActionEngine } from '@/lib/action/engine';
 import {
   buildQuizResultsForStoreState,
@@ -58,7 +58,6 @@ import {
 } from '@/lib/chat/quiz-results-for-store-state';
 import { toast } from 'sonner';
 import { createLogger } from '@/lib/logger';
-import { isPiChatEnabled } from '@/lib/config/feature-flags';
 import type { CleanupSource } from '@/lib/playback/auto-resume';
 import { nanoid } from 'nanoid';
 import { isWhiteboardReferenceAvailable } from '@/lib/whiteboard/element-reference';
@@ -601,31 +600,6 @@ export function discussionRequestFields(
   });
 }
 
-const DISCUSSION_MOMENT_FIELD_KEYS = [
-  'discussionTopic',
-  'discussionPrompt',
-  'triggerAgentId',
-  'momentKind',
-  'learnerStance',
-] as const satisfies readonly (keyof DiscussionMomentFields)[];
-
-/**
- * The config the classic (non-Pi) loop sends. Its director dispatches the
- * trigger agent unasked on a loop's first turn and frames any request with a
- * topic as a freshly opened discussion, so the moment fields go only with the
- * request that opens it (no assistant message yet). On a follow-up or resume
- * the classic director chooses who speaks, as it always did.
- */
-export function classicLoopConfig(
-  config: ChatRequestTemplate['config'],
-  messages: readonly Pick<UIMessage, 'role'>[],
-): ChatRequestTemplate['config'] {
-  if (!messages.some((message) => message.role === 'assistant')) return config;
-  const followUp = { ...config };
-  for (const key of DISCUSSION_MOMENT_FIELD_KEYS) delete followUp[key];
-  return followUp;
-}
-
 export async function retireLiveRequestResources<
   T extends { shutdown(): void; waitForCurrentAction?(): Promise<void> },
 >(
@@ -740,22 +714,6 @@ export function getPiSingleRequestOutcome(
     return { type: 'cue_user', directorState: doneData.directorState };
   }
   return { type: 'completed', directorState: doneData.directorState };
-}
-
-/**
- * POST /api/chat (the stateless agent loop). The server resolves the model
- * from the workspace's model settings.
- */
-export function fetchStatelessChat(
-  body: Record<string, unknown>,
-  signal: AbortSignal,
-): Promise<Response> {
-  return fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  });
 }
 
 export async function runPiSingleRequest(
@@ -1702,10 +1660,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   );
 
   /**
-   * Frontend-driven agent loop. Delegates to the shared runAgentLoop
-   * from lib/chat/agent-loop.ts, wiring StreamBuffer for UI pacing.
-   *
-   * Each iteration: POST /api/chat → process SSE → wait for buffer drain → check outcome.
+   * One Pi request per classroom turn: POST /api/chat/pi and stream its SSE
+   * through StreamBuffer for UI pacing.
    */
   const runAgentLoopFn = useCallback(
     async (
@@ -1726,130 +1682,68 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         requestTemplate.config.agentConfigs = generatedConfigs;
       }
 
-      if (isPiChatEnabled()) {
-        // Pi bypasses runAgentLoop's per-iteration getStoreState, so its single
-        // request needs the snapshot built here — /api/chat/pi rejects bodies
-        // without storeState.
-        const [freshState, quizMisses] = await Promise.all([
-          buildFreshAgentLoopStoreState(),
-          loadQuizMisses(useStageStore.getState().scenes),
-        ]);
-        // What was just said on this page, read as the request leaves (I14)
-        const storeState = withLectureProgress(freshState, getLectureProgressRef.current?.());
-        const firstRequestContext = getFirstPiRequestContext(sessionId);
-        // Who has been present in this course so far, and what was said
-        // earlier (I06, I13), read as the request leaves
-        const classRequest = {
-          sessionId,
-          type: sessionType,
-          sceneId: currentSceneIdRef.current ?? undefined,
-        };
-        const classTemplate = withClassMemory(
-          withClassPresence(requestTemplate, sessionsRef.current, classRequest),
-          sessionsRef.current,
-          classRequest,
-          { quizMisses, scenes: freshState.scenes as { id: string }[] },
-        );
-        // Off by default: nobody singles the learner out by name (I10.5)
-        const presentTemplate = useSettingsStore.getState().teacherMayCallOnLearner
-          ? {
-              ...classTemplate,
-              config: { ...classTemplate.config, teacherMayCallOnLearner: true },
-            }
-          : classTemplate;
-        // Built-in agents are named in the learner's interface language (I22)
-        const piRequestTemplate = withUiLocale(
-          firstRequestContext
-            ? { ...presentTemplate, storeState, piSessionBoundary: firstRequestContext }
-            : { ...presentTemplate, storeState },
-          localeRef.current,
-        );
-        // Web search is the workspace's webSearch slot, resolved on the server.
-        await runPiSingleRequest(
-          sessionId,
-          withPiInclassWhiteboardTools(piRequestTemplate),
-          controller,
-          sessionType,
-          createStatelessStreamConsumer,
-          clearLiveSessionAfterError,
-          enterSoftClosing,
-          markSessionCompleted,
-          storeDirectorState,
-          onStopSessionRef,
-          t,
-          firstRequestContext || onElementReferenceResponseAccepted
-            ? (response) => {
-                if (firstRequestContext) {
-                  consumePiSessionBoundaryContext(
-                    piSessionBoundariesRef.current,
-                    sessionId,
-                    firstRequestContext,
-                  );
-                }
-                onElementReferenceResponseAccepted?.(response);
-              }
-            : undefined,
-        );
-        return;
-      }
-
-      const streamConsumer = createStatelessStreamConsumer(sessionId, controller, sessionType);
-
-      const outcome = await runAgentLoop(
-        {
-          config: classicLoopConfig(requestTemplate.config, requestTemplate.messages),
-          userProfile: requestTemplate.userProfile,
-        },
-        {
-          getStoreState: buildFreshAgentLoopStoreState,
-
-          getMessages: () => {
-            const currentSession = sessionsRef.current.find((s) => s.id === sessionId);
-            return currentSession?.messages ?? requestTemplate.messages;
-          },
-
-          fetchChat: (body, signal) => fetchStatelessChat(body, signal),
-
-          onEvent: streamConsumer.onEvent,
-          onIterationEnd: streamConsumer.onIterationEnd,
-        },
-        controller.signal,
+      // Pi's single request needs the store-state snapshot built here —
+      // /api/chat/pi rejects bodies without storeState.
+      const [freshState, quizMisses] = await Promise.all([
+        buildFreshAgentLoopStoreState(),
+        loadQuizMisses(useStageStore.getState().scenes),
+      ]);
+      // What was just said on this page, read as the request leaves (I14)
+      const storeState = withLectureProgress(freshState, getLectureProgressRef.current?.());
+      const firstRequestContext = getFirstPiRequestContext(sessionId);
+      // Who has been present in this course so far, and what was said
+      // earlier (I06, I13), read as the request leaves
+      const classRequest = {
+        sessionId,
+        type: sessionType,
+        sceneId: currentSceneIdRef.current ?? undefined,
+      };
+      const classTemplate = withClassMemory(
+        withClassPresence(requestTemplate, sessionsRef.current, classRequest),
+        sessionsRef.current,
+        classRequest,
+        { quizMisses, scenes: freshState.scenes as { id: string }[] },
       );
-
-      // Handle loop completion (UI-specific). Map each outcome.reason to a
-      // distinct session state — don't conflate error paths with completion.
-      if (!controller.signal.aborted) {
-        switch (outcome.reason) {
-          case 'cue_user':
-            // Session stays active; UI waits for the next user message.
-            break;
-          case 'end':
-            setSessions((prev) =>
-              prev.map((s) =>
-                s.id === sessionId
-                  ? {
-                      ...s,
-                      status: 'completed' as SessionStatus,
-                      updatedAt: nextChatUpdatedAt(s),
-                    }
-                  : s,
-              ),
-            );
-            onStopSessionRef.current?.({ sessionId, source: 'turn_complete' });
-            break;
-          case 'empty_turns':
-            clearLiveSessionAfterError(sessionId, t('chat.error.emptyAgentResponses'));
-            onStopSessionRef.current?.({ sessionId, source: 'error' });
-            break;
-          case 'no_done':
-            clearLiveSessionAfterError(sessionId, t('chat.error.streamInterrupted'));
-            onStopSessionRef.current?.({ sessionId, source: 'error' });
-            break;
-          case 'aborted':
-            // Already handled elsewhere via abort signal.
-            break;
-        }
-      }
+      // Off by default: nobody singles the learner out by name (I10.5)
+      const presentTemplate = useSettingsStore.getState().teacherMayCallOnLearner
+        ? {
+            ...classTemplate,
+            config: { ...classTemplate.config, teacherMayCallOnLearner: true },
+          }
+        : classTemplate;
+      // Built-in agents are named in the learner's interface language (I22)
+      const piRequestTemplate = withUiLocale(
+        firstRequestContext
+          ? { ...presentTemplate, storeState, piSessionBoundary: firstRequestContext }
+          : { ...presentTemplate, storeState },
+        localeRef.current,
+      );
+      // Web search is the workspace's webSearch slot, resolved on the server.
+      await runPiSingleRequest(
+        sessionId,
+        withPiInclassWhiteboardTools(piRequestTemplate),
+        controller,
+        sessionType,
+        createStatelessStreamConsumer,
+        clearLiveSessionAfterError,
+        enterSoftClosing,
+        markSessionCompleted,
+        storeDirectorState,
+        onStopSessionRef,
+        t,
+        firstRequestContext || onElementReferenceResponseAccepted
+          ? (response) => {
+              if (firstRequestContext) {
+                consumePiSessionBoundaryContext(
+                  piSessionBoundariesRef.current,
+                  sessionId,
+                  firstRequestContext,
+                );
+              }
+              onElementReferenceResponseAccepted?.(response);
+            }
+          : undefined,
+      );
     },
     [
       clearLiveSessionAfterError,
@@ -2085,10 +1979,10 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   }, [setAsideSessionId]);
 
   /**
-   * One aside turn: Pi's single request, or the classic agent loop. Its
-   * outcome only settles the aside — a cue, a completion or even a close
-   * keeps the session open for follow-ups; an error closes it — and never
-   * reaches the lecture-facing stop / cleanup callbacks.
+   * One aside turn: Pi's single request. Its outcome only settles the aside —
+   * a cue, a completion or even a close keeps the session open for follow-ups;
+   * an error closes it — and never reaches the lecture-facing stop / cleanup
+   * callbacks.
    */
   const runAsideRequest = useCallback(
     async (
@@ -2102,68 +1996,42 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       const keepOpen = (id: string, data?: { directorState?: DirectorState }) =>
         storeDirectorState(id, data?.directorState);
 
-      if (isPiChatEnabled()) {
-        const [freshState, quizMisses] = await Promise.all([
-          buildFreshAgentLoopStoreState(),
-          loadQuizMisses(useStageStore.getState().scenes),
-        ]);
-        // The assistant explains along the teacher's line of the moment (I14)
-        const storeState = withLectureProgress(freshState, getLectureProgressRef.current?.());
-        const classRequest = {
-          sessionId,
-          type: 'qa' as const,
-          sceneId: currentSceneIdRef.current ?? undefined,
-        };
-        const presentTemplate = withClassMemory(
-          withClassPresence(requestTemplate, sessionsRef.current, classRequest),
-          sessionsRef.current,
-          classRequest,
-          {
-            quizMisses,
-            scenes: freshState.scenes as { id: string }[],
-            classAgentIds: useSettingsStore.getState().selectedAgentIds ?? [],
-          },
-        );
-        await runPiSingleRequest(
-          sessionId,
-          withUiLocale({ ...presentTemplate, storeState }, localeRef.current),
-          controller,
-          'qa',
-          createAsideConsumer,
-          clearAsideAfterError,
-          keepOpen,
-          keepOpen,
-          storeDirectorState,
-          // The aside settles on its own: nothing lecture-facing is told it stopped
-          { current: undefined },
-          t,
-          onResponseAccepted,
-        );
-        return;
-      }
-
-      const streamConsumer = createStatelessStreamConsumer(sessionId, controller, 'qa', 'aside');
-      const outcome = await runAgentLoop(
-        { config: requestTemplate.config, userProfile: requestTemplate.userProfile },
+      const [freshState, quizMisses] = await Promise.all([
+        buildFreshAgentLoopStoreState(),
+        loadQuizMisses(useStageStore.getState().scenes),
+      ]);
+      // The assistant explains along the teacher's line of the moment (I14)
+      const storeState = withLectureProgress(freshState, getLectureProgressRef.current?.());
+      const classRequest = {
+        sessionId,
+        type: 'qa' as const,
+        sceneId: currentSceneIdRef.current ?? undefined,
+      };
+      const presentTemplate = withClassMemory(
+        withClassPresence(requestTemplate, sessionsRef.current, classRequest),
+        sessionsRef.current,
+        classRequest,
         {
-          getStoreState: buildFreshAgentLoopStoreState,
-          getMessages: () =>
-            sessionsRef.current.find((s) => s.id === sessionId)?.messages ??
-            requestTemplate.messages,
-          fetchChat: (body, signal) => fetchStatelessChat(body, signal),
-          onEvent: streamConsumer.onEvent,
-          onIterationEnd: streamConsumer.onIterationEnd,
+          quizMisses,
+          scenes: freshState.scenes as { id: string }[],
+          classAgentIds: useSettingsStore.getState().selectedAgentIds ?? [],
         },
-        controller.signal,
       );
-      if (controller.signal.aborted) return;
-      if (outcome.reason === 'empty_turns') {
-        clearAsideAfterError(sessionId, t('chat.error.emptyAgentResponses'));
-      } else if (outcome.reason === 'no_done') {
-        clearAsideAfterError(sessionId, t('chat.error.streamInterrupted'));
-      } else {
-        keepOpen(sessionId, { directorState: outcome.directorState });
-      }
+      await runPiSingleRequest(
+        sessionId,
+        withUiLocale({ ...presentTemplate, storeState }, localeRef.current),
+        controller,
+        'qa',
+        createAsideConsumer,
+        clearAsideAfterError,
+        keepOpen,
+        keepOpen,
+        storeDirectorState,
+        // The aside settles on its own: nothing lecture-facing is told it stopped
+        { current: undefined },
+        t,
+        onResponseAccepted,
+      );
     },
     [clearAsideAfterError, createStatelessStreamConsumer, storeDirectorState, t],
   );

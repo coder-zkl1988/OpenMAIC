@@ -26,6 +26,7 @@ import { QwenVoiceCloneManager, VoxCPMVoiceManager } from './tts-voice-managers'
 import { TTSSpeedField } from './tts-speed-field';
 import {
   ApiKeyField,
+  CredentialStorageHint,
   EndpointServerOnlyHint,
   RegionalEndpointField,
   ServerConfiguredNotice,
@@ -152,8 +153,11 @@ export function TTSSettings({ view, apply, entry }: ServicePanelProps) {
     [capabilities, ttsVoice, ttsVoiceProviderId, ttsSpeed],
   );
   const effectiveVoice =
-    use.inUse && selection ? selection.voice : defaultVoiceFor(providerId, use.modelId);
-  const cloneSpeedDisabled = providerId === 'qwen-tts' && isQwenCloneVoice(effectiveVoice);
+    use.inUse && selection
+      ? selection.voice
+      : defaultVoiceFor(providerId, use.modelId, entry.provider?.options, entry.provider?.voices);
+  const cloneSpeedDisabled =
+    providerId === 'qwen-tts' && isQwenCloneVoice(effectiveVoice, entry.provider?.voices);
   const configured = entry.state === 'deployment' || entry.state === 'workspace' || isBrowser;
   // A service that needs no key (the browser's own speech) can be made the
   // workspace's narration here: it is added first when it is not saved yet.
@@ -275,6 +279,7 @@ export function TTSSettings({ view, apply, entry }: ServicePanelProps) {
               )}
             </div>
           </div>
+          {isDoubao && <CredentialStorageHint />}
           {isDoubao && entry.provider?.key?.set && (
             <p className="text-xs text-muted-foreground">
               {t('settings.serverConfig.keyStored', { mask: entry.provider.key.mask ?? '' })}

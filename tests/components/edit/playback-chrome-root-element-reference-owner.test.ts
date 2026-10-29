@@ -54,7 +54,6 @@ const mocks = vi.hoisted(() => ({
   canvasProps: undefined as Record<string, unknown> | undefined,
   controlBarProps: undefined as Record<string, unknown> | undefined,
   captionProps: undefined as Record<string, unknown> | undefined,
-  piEnabled: true,
   coursewareReferenceEnabled: true,
   topicActive: false,
   engineMode: 'idle' as 'idle' | 'playing' | 'paused' | 'live',
@@ -679,7 +678,6 @@ vi.mock('@/lib/orchestration/registry/store', () => ({
 }));
 vi.mock('@/lib/hooks/use-asr-available', () => ({ useASRAvailable: () => true }));
 vi.mock('@/lib/config/feature-flags', () => ({
-  isPiChatEnabled: () => mocks.piEnabled,
   isCoursewareReferenceEnabled: () => mocks.coursewareReferenceEnabled,
 }));
 
@@ -753,7 +751,6 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
     mocks.canvasProps = undefined;
     mocks.controlBarProps = undefined;
     mocks.captionProps = undefined;
-    mocks.piEnabled = true;
     mocks.coursewareReferenceEnabled = true;
     mocks.topicActive = false;
     mocks.engineMode = 'idle';
@@ -1104,24 +1101,6 @@ describe('PlaybackChromeRoot element-reference ownership', () => {
       );
     },
   );
-
-  it('hides the entry and sends an ordinary unreferenced message when Pi is off', async () => {
-    mocks.piEnabled = false;
-    await renderOwner();
-
-    expect(mocks.controlBarProps).toMatchObject({
-      showElementReference: false,
-      canPickElement: false,
-      elementPickActive: false,
-    });
-    expect(container.querySelector('[data-testid="toggle-pick"]')).toBeNull();
-
-    click('send');
-
-    expect(mocks.handleUserInterrupt).not.toHaveBeenCalled();
-    expect(mocks.sendMessage).toHaveBeenCalledOnce();
-    expect(mocks.sendMessage).toHaveBeenCalledWith('Explain this', undefined);
-  });
 
   it('keeps Pi messaging available while the independent reference gate clears its UI state', async () => {
     await renderOwner();

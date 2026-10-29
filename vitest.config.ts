@@ -10,7 +10,7 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.ts'],
-    setupFiles: ['tests/setup-env.ts'],
+    setupFiles: ['tests/setup-env.ts', 'tests/pg-contract-database.ts'],
     // Hundreds of DOM suites and large document fixtures can exhaust memory
     // when a high-core-count machine starts one fork per core. Bound workers
     // instead of relaxing test timeouts or reducing coverage.

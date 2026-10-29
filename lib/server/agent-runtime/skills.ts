@@ -733,15 +733,19 @@ export async function readSkillFileText(skill: LoadedSkill): Promise<string> {
  * invocation shape and transcript semantics remain pi-native.
  */
 export function createNativeSkillReadTool(
-  skills: readonly LoadedSkill[],
+  installedSkills: readonly LoadedSkill[] | (() => readonly LoadedSkill[]),
   onActivate: (skill: LoadedSkill) => void,
 ): AgentTool<typeof NativeReadParams, unknown> {
-  const roots = [
-    skillsDir,
-    ...publicSkillsDirs,
-    ...skills.filter((skill) => skill.source === 'builtin').map((skill) => dirname(skill.filePath)),
-  ];
-  const assertAllowed = async (path: string): Promise<string> => {
+  // A long-running agent resolves the registry as each read leaves, so a skill
+  // added or dropped mid-run is visible without rebuilding the tool.
+  const readSkills = () =>
+    typeof installedSkills === 'function' ? installedSkills() : installedSkills;
+  const assertAllowed = async (path: string, skills: readonly LoadedSkill[]): Promise<string> => {
+    const roots = [
+      skillsDir,
+      ...publicSkillsDirs,
+      ...skills.filter((skill) => skill.source === 'builtin').map((skill) => dirname(skill.filePath)),
+    ];
     const canonical = await realpath(path);
     for (const root of roots) {
       let canonicalRoot: string;
@@ -761,6 +765,7 @@ export function createNativeSkillReadTool(
     description: 'Read a text file. Paths are limited to installed skill directories.',
     parameters: NativeReadParams,
     async execute(_id, params: Static<typeof NativeReadParams>) {
+      const skills = readSkills();
       // Database skills have deliberately virtual paths. Match the path
       // exactly against this run's already-loaded owner-scoped registry and
       // return memory; never pass it to realpath or widen filesystem access.
@@ -790,7 +795,7 @@ export function createNativeSkillReadTool(
       if (params.path.startsWith(USER_SKILL_VIRTUAL_ROOT)) {
         throw new Error('read is limited to the loaded user skill');
       }
-      const canonical = await assertAllowed(resolve(skillsDir, params.path));
+      const canonical = await assertAllowed(resolve(skillsDir, params.path), skills);
       await access(canonical, constants.R_OK);
       const text = await readFile(canonical, 'utf8');
       const offset = Math.max(1, Math.floor(params.offset ?? 1));

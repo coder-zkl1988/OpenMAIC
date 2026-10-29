@@ -61,6 +61,7 @@ import { useCanvasStore } from '@/lib/store/canvas';
 import { useSettingsStore } from '@/lib/store/settings';
 import { ttsSelection } from '@/lib/audio/tts-selection';
 import { detectSpeechLang } from '@/lib/audio/browser-tts-preview';
+import i18n from '@/lib/i18n/config';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('PlaybackEngine');
@@ -452,7 +453,18 @@ export class PlaybackEngine {
       if (!this.isCurrentGeneration(generation)) return false;
       const action = actions[i];
       if (isWhiteboardPlaybackAction(action)) {
-        await this.actionEngine.execute(action, { silent: true });
+        // A rejected stored action must not abort the whiteboard restoration:
+        // the rest of the prefix is still drawn and playback continues.
+        try {
+          await this.actionEngine.execute(action, { silent: true });
+        } catch (error) {
+          log.error(
+            'Skipping failed action during whiteboard restoration:',
+            action.id,
+            action.type,
+            error,
+          );
+        }
       }
     }
 
@@ -1205,9 +1217,14 @@ export class PlaybackEngine {
       case 'widget_reveal': {
         // Synchronous actions — await completion, then continue. The lecture's
         // narrator performs them (named by the whiteboard's drawing chip).
-        await this.actionEngine.execute(action, {
-          agentId: this.callbacks.getLectureAgentId?.() ?? null,
-        });
+        // A rejected stored action must not strand playback before the next action.
+        try {
+          await this.actionEngine.execute(action, {
+            agentId: this.callbacks.getLectureAgentId?.() ?? null,
+          });
+        } catch (error) {
+          log.error('Skipping failed playback action:', action.id, action.type, error);
+        }
         if (!this.isCurrentGeneration(generation)) return;
         if (this.mode === 'playing') {
           this.processNext(generation);
@@ -1300,7 +1317,7 @@ export class PlaybackEngine {
       // auto-selects an appropriate voice. For Vietnamese additionally bind an
       // installed vi voice when one exists, since browsers otherwise fall back
       // to an English voice reading Vietnamese text.
-      utterance.lang = detectSpeechLang(chunkText);
+      utterance.lang = detectSpeechLang(chunkText, i18n.language);
       if (utterance.lang === 'vi-VN') {
         const viVoice = voices.find((v) => v.lang?.toLowerCase().startsWith('vi'));
         if (viVoice) {

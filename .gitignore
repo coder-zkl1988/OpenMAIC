@@ -76,6 +76,7 @@ next-env.d.ts
 # docs
 /docs
 # Eval results
+eval/whiteboard-shapes/results/
 eval/whiteboard-layout/results/
 eval/outline-language/results/
 eval/orchestration/results/
@@ -99,3 +100,9 @@ e2e/__screenshots-619/
 
 # Local agent tool state (codex session history and lock files)
 /.trigger-tree/
+
+# Temporary render-service sources extracted by the mixed-pool regression test
+render-service/.owner-bound-parent-*/
+
+# Generated interactive libraries
+/public/vendor/interactive

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import pptxgen from 'pptxgenjs';
+import { validateShapeGeometry, RENDER_PATH_LIMITS, shapeToTextFallback } from '@openmaic/geometry';
 import tinycolor from 'tinycolor2';
 import { saveAs } from 'file-saver';
 import { toast } from 'sonner';
@@ -24,6 +25,7 @@ import { type AST, toAST } from '@/lib/export/html-parser';
 import { type SvgPoints, toPoints, getSvgPathRange } from '@/lib/export/svg-path-parser';
 import { svg2Base64 } from '@/lib/export/svg2base64';
 import { latexToOmml } from '@/lib/export/latex-to-omml';
+import { inlineMathSource, proseToPlainText } from '@/lib/export/pptx-rich-text';
 import { createLogger } from '@/lib/logger';
 import { collectSpeechText } from './narration';
 import { inlineHtmlAssets, createAssetFetcher } from './inline-assets';
@@ -124,15 +126,22 @@ function formatHTML(html: string, ratioPx2Pt: number) {
         }
       }
 
+      // An inline formula is one run holding its LaTeX source, never the
+      // text of its rendered KaTeX tree.
+      const mathSource = inlineMathSource(item);
+
       if ('tagName' in item && item.tagName === 'br') {
         slices.push({ text: '', options: { breakLine: true } });
-      } else if ('content' in item) {
-        const text = item.content
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&gt;/g, '>')
-          .replace(/&lt;/g, '<')
-          .replace(/&amp;/g, '&')
-          .replace(/\n/g, '');
+      } else if ('content' in item || mathSource !== null) {
+        const text =
+          mathSource !== null
+            ? mathSource
+            : (item as { content: string }).content
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&')
+                .replace(/\n/g, '');
         const options: pptxgen.TextPropsOptions = {};
 
         if (styleObj['font-size']) {
@@ -627,7 +636,15 @@ export async function buildPptxBlob(
     if (!slide.elements) continue;
 
     // ── Elements ──
-    for (const el of slide.elements) {
+    for (const sourceElement of slide.elements) {
+      // Export the same bounded text projection that playback uses, including
+      // historical shapes whose geometry cannot be parsed or scaled safely.
+      const el =
+        sourceElement.type === 'shape' &&
+        !validateShapeGeometry(sourceElement, RENDER_PATH_LIMITS).ok
+          ? shapeToTextFallback(sourceElement)
+          : sourceElement;
+      if (!el) continue;
       // ── TEXT ──
       if (el.type === 'text') {
         const textProps = formatHTML(el.content, ratioPx2Pt);
@@ -639,7 +656,7 @@ export async function buildPptxBlob(
           fontSize: DEFAULT_FONT_SIZE / ratioPx2Pt,
           fontFace: el.defaultFontName || DEFAULT_FONT_FAMILY,
           color: '#000000',
-          valign: 'top',
+          valign: el.vAlign ?? 'top',
           margin: 10 / ratioPx2Pt,
           paraSpaceBefore: 5 / ratioPx2Pt,
           lineSpacingMultiple: 1.5 / 1.25,
@@ -664,8 +681,25 @@ export async function buildPptxBlob(
         if (el.paragraphSpace !== undefined)
           options.paraSpaceBefore = el.paragraphSpace / ratioPx2Pt;
         if (el.vertical) options.vert = 'eaVert';
-
         pptxSlide.addText(textProps, options);
+        if (el.link) {
+          const hyperlink = getLinkOption(el.link, slideNumbers);
+          if (hyperlink) {
+            // PptxGenJS does not create a relationship for hyperlinks on a
+            // rich-text box's options (it emits rIdundefined). A transparent
+            // shape above the label also makes the whole element clickable.
+            pptxSlide.addShape('rect' as pptxgen.ShapeType, {
+              x: options.x,
+              y: options.y,
+              w: options.w,
+              h: options.h,
+              rotate: options.rotate,
+              fill: { color: '#ffffff', transparency: 100 },
+              line: { color: '#ffffff', transparency: 100 },
+              hyperlink,
+            });
+          }
+        }
       }
 
       // ── IMAGE ──
@@ -1061,7 +1095,7 @@ export async function buildPptxBlob(
             if (cell.style?.color) cellOptions.color = formatColor(cell.style.color).color;
 
             if (!hiddenCells.includes(`${i}_${j}`)) {
-              _row.push({ text: cell.text, options: cellOptions });
+              _row.push({ text: proseToPlainText(cell.text), options: cellOptions });
             }
           }
           if (_row.length) tableData.push(_row);

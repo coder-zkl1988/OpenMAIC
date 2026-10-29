@@ -11,7 +11,7 @@ import {
   looksLikeStructuredFragment,
   parseStructuredChunk,
   type ParseResult,
-} from '@/lib/orchestration/stateless-generate';
+} from '@/lib/chat/structured-output';
 import type { AgentConfig } from '@/lib/orchestration/registry/types';
 import type { AgentTurnSummary, WhiteboardActionRecord } from '@/lib/orchestration/types';
 import type { ThinkingConfig } from '@/lib/types/provider';
@@ -50,6 +50,7 @@ import {
 } from './classroom-actions';
 import { buildNativeSpotlightTool } from './native-spotlight';
 import { buildNativeWhiteboardTools } from './native-whiteboard';
+import { legacyShapeCompatibilityError } from '@/lib/whiteboard/legacy-shape';
 import type { WhiteboardRuntimeService } from '@/lib/whiteboard/runtime/store';
 import type { ElementReferenceEvidence } from '../element-reference';
 
@@ -109,7 +110,6 @@ type ActionWarning = {
   message: string;
 };
 
-const SHAPE_TYPES = new Set(['rectangle', 'circle', 'triangle']);
 const CHART_TYPES = new Set(['bar', 'column', 'line', 'pie', 'ring', 'area', 'radar', 'scatter']);
 const LINE_STYLES = new Set(['solid', 'dashed']);
 const CODE_EDIT_OPERATIONS = new Set([
@@ -327,9 +327,7 @@ function validateActionParams(action: ParsedAction): string | null {
 
   if (action.actionName === 'wb_draw_shape') {
     return (
-      (typeof params.shape === 'string' && SHAPE_TYPES.has(params.shape)
-        ? null
-        : 'wb_draw_shape requires params.shape rectangle|circle|triangle') ??
+      legacyShapeCompatibilityError(params) ??
       validateRequiredPosition(params, 'wb_draw_shape', ['x', 'y', 'width', 'height']) ??
       optionalString(params, 'fillColor', 'wb_draw_shape') ??
       validateOptionalElementId(params, 'wb_draw_shape')

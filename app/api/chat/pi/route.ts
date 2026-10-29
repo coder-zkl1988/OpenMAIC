@@ -1,17 +1,18 @@
-import { attachInteractiveState } from '@/lib/chat/pi/interactive-state-evidence';
 /**
  * Pi Director Chat API Endpoint
  *
- * POST /api/chat/pi - default path for running the in-class multi-agent chain
- * as a single server-side Pi agent loop. The build-time flag can disable this
- * route together with the corresponding client path for legacy rollback.
+ * POST /api/chat/pi - runs the in-class multi-agent chain as a single
+ * server-side Pi agent loop.
  */
+import { attachInteractiveState } from '@/lib/chat/pi/interactive-state-evidence';
+import { ModelAuthorizationError } from '@/lib/server/model-config/model-authorization';
+import { PiGeminiNativeRequiredError } from '@/lib/server/model-config/pi-gemini-route';
+import { SlotRequirementError } from '@/lib/server/model-config/llm';
 
 import { NextRequest } from 'next/server';
 import { isProviderKeyRequired } from '@/lib/ai/providers';
 import {
   isCoursewareReferenceEnabled,
-  isPiChatEnabled,
   isPiNativeChildRuntimeEnabled,
   isPiNativeChildSpotlightEnabled,
 } from '@/lib/config/feature-flags';
@@ -68,10 +69,6 @@ import {
 const log = createLogger('Pi Chat API');
 
 export async function POST(req: NextRequest) {
-  if (!isPiChatEnabled()) {
-    return apiError('INVALID_REQUEST', 404, 'Pi chat runtime is disabled');
-  }
-
   // Like every owner-resolving route, a request whose credential an owner
   // auth method refuses is refused here, before any model work. With the
   // default anonymous fallback resolution always succeeds, so this only
@@ -115,6 +112,19 @@ async function chat(req: NextRequest, principal: OwnerPrincipal): Promise<Respon
       !isCoursewareReferenceEnabled()
     ) {
       return apiError('INVALID_REQUEST', 400, 'Courseware references are disabled');
+    }
+
+    // Non-object members (null, primitives, arrays) are never valid scenes and
+    // null throws on scene.id / scene.order in reference lookup and later scene
+    // iteration. Rejecting them once here covers every path before reference
+    // resolution and model resolution.
+    if (
+      Array.isArray(body.storeState.scenes) &&
+      body.storeState.scenes.some(
+        (scene) => typeof scene !== 'object' || scene === null || Array.isArray(scene),
+      )
+    ) {
+      return apiError('INVALID_REQUEST', 400, 'storeState.scenes members must be objects');
     }
 
     let elementReference;
@@ -178,6 +188,7 @@ async function chat(req: NextRequest, principal: OwnerPrincipal): Promise<Respon
     } = await resolveModel({
       modelString: body.model,
       stage: 'chat-adapter',
+      requireToolCalling: true,
       workspaceId: await requestWorkspaceId(req),
       // Honor the classroom-interaction per-stage override the client sends in
       // `x-model-routes`. A routed stage brings its own key and base URL; otherwise the body credentials are used (never x-* headers).
@@ -282,6 +293,8 @@ async function chat(req: NextRequest, principal: OwnerPrincipal): Promise<Respon
             })
           : undefined;
     } catch (error) {
+      if (error instanceof ModelAuthorizationError)
+        return apiError(error.code, error.httpStatus, error.message);
       const message = error instanceof Error ? error.message : 'Invalid Web Search configuration';
       return apiError('INVALID_REQUEST', 400, message);
     }
@@ -377,6 +390,27 @@ async function chat(req: NextRequest, principal: OwnerPrincipal): Promise<Respon
       },
     });
   } catch (error) {
+    if (error instanceof PiGeminiNativeRequiredError) {
+      return apiError(
+        'MODEL_CONFIG_INVALID',
+        400,
+        error.message,
+        undefined,
+        'gemini_native_required',
+      );
+    }
+    if (error instanceof SlotRequirementError) {
+      return apiError(
+        'MODEL_CONFIG_INVALID',
+        400,
+        'Pi classroom chat requires a model that supports tool calling. Select one for the classroom slot in Settings → Course Model Config, or contact your administrator if this setting is managed.',
+        undefined,
+        'tool_calling_required',
+      );
+    }
+    if (error instanceof ModelAuthorizationError) {
+      return apiError('PROVIDER_DISABLED', 403, error.message);
+    }
     log.error(
       `Pi chat request failed [model=${chatModel ?? 'unknown'}, messages=${chatMessageCount ?? 0}]:`,
       error,

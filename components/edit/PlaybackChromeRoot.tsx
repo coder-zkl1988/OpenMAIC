@@ -156,7 +156,7 @@ import type {
   PlaybackInteractiveComponentPick,
   PlaybackInteractivePickerState,
 } from '@/components/scene-renderers/InteractiveIframeHost';
-import { isCoursewareReferenceEnabled, isPiChatEnabled } from '@/lib/config/feature-flags';
+import { isCoursewareReferenceEnabled } from '@/lib/config/feature-flags';
 import { getSlideElementPresentation } from '@/components/canvas/slide-element-pick-overlay';
 import { shouldClearDraftElementReference } from '@/components/chat/element-reference-receipt';
 
@@ -251,6 +251,8 @@ const LECTURE_COMPLETE_ADVANCE_MS = 1500;
  * chat to be quiescent — fire-and-forget on unmount loses that guarantee.
  */
 export interface PlaybackChromeRootHandle {
+  /** Pauses the playhead for interactive media that takes over the stage. */
+  pauseForInteractiveMedia: () => void;
   /** Ends any active SSE session, stops the engine, cleans up TTS audio. */
   teardown: () => Promise<void>;
   /** Receives one identity-only pick from the sibling Interactive iframe host. */
@@ -261,6 +263,7 @@ export interface PlaybackChromeRootHandle {
 
 interface PlaybackChromeRootProps {
   readonly onRetryOutline?: (outlineId: string) => Promise<void>;
+  readonly generationFailureMessage?: string;
   /** Whether the Pro Switch in Header should be enabled. */
   readonly canEnterProMode?: boolean;
   /** Pro Switch click handler — parent coordinates teardown + mode flip. */
@@ -285,6 +288,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
   function PlaybackChromeRoot(
     {
       onRetryOutline,
+      generationFailureMessage,
       canEnterProMode,
       onEnterProMode,
       proModeActive,
@@ -315,7 +319,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const currentScene = getCurrentScene();
     // The classroom a raised hand's unsent draft is kept under
     const draftStageId = stage?.id ?? currentScene?.stageId;
-    const piChatEnabled = isPiChatEnabled();
     const coursewareReferenceEnabled = isCoursewareReferenceEnabled();
     const [elementPickActive, setElementPickActiveState] = useState(false);
     const elementPickActiveRef = useRef(false);
@@ -1265,6 +1268,13 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
           engineRef.current?.stop();
           discussionTTS.cleanup();
           resetSceneState();
+        },
+        pauseForInteractiveMedia: () => {
+          const engine = engineRef.current;
+          if (engine?.getMode() !== 'playing') return;
+          engine.pause();
+          if (lectureSessionIdRef.current)
+            chatAreaRef.current?.pauseBuffer(lectureSessionIdRef.current);
         },
         acceptInteractivePick: (pick) => interactivePickHandlerRef.current(pick),
         cancelElementPick: () => setElementPickActive(false),
@@ -2236,7 +2246,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       ? scenes.length
       : scenes.findIndex((s) => s.id === currentSceneId);
     const totalScenesCount = scenes.length + (canAdvanceToPendingSlot ? 1 : 0);
-    const showElementReference = piChatEnabled && coursewareReferenceEnabled && mode === 'playback';
+    const showElementReference = coursewareReferenceEnabled && mode === 'playback';
     const canPickSlideElement = Boolean(
       showElementReference &&
       !whiteboardOpen &&
@@ -3297,6 +3307,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 isGenerationFailed={
                   isPendingScene && failedOutlines.some((f) => f.id === generatingOutlines[0]?.id)
                 }
+                generationFailureMessage={generationFailureMessage}
                 isGenerationInterrupted={isPendingScene && generationInterrupted}
                 onRetryGeneration={
                   onRetryOutline && generatingOutlines[0]

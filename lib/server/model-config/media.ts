@@ -1,3 +1,4 @@
+import type { ConfiguredTTSVoice } from '@/lib/audio/types';
 /**
  * Media and tool capabilities from slot resolutions (RFC #1701, tracked in
  * #1725): text to speech, speech recognition, images, video, web search and
@@ -15,9 +16,14 @@
  * workspace provider's endpoint was typed by a user: it is validated like a
  * caller-supplied base URL, and a workspace may not set a proxy.
  */
-import { getSlot, type SlotId } from '@/lib/config/model-slots';
+import { getWebFetchProvider } from '@/lib/web-fetch/registry';
+import { isOfficialWebSearchBaseUrl, WEB_SEARCH_PROVIDERS } from '@/lib/web-search/constants';
+import type { WebSearchProviderId } from '@/lib/web-search/types';
+import { assertDeploymentModelAuthorized, selectsUpstreamModel } from './model-authorization';
+import { presetIdFor } from '@/lib/config/preset-ids';
+import { getSlot, type SlotCapability, type SlotId } from '@/lib/config/model-slots';
 import { registryDefaultBaseUrl } from '@/lib/config/provider-presets';
-import { apiError } from '@/lib/server/api-response';
+import { apiError, modelAuthorizationResponse } from '@/lib/server/api-response';
 import { InvalidOwnerCredentialError } from '@/lib/server/identity/resolve';
 import { invalidOwnerCredentialResponse } from '@/lib/server/identity/with-owner';
 
@@ -66,12 +72,14 @@ export class WorkspaceEndpointError extends Error {
 
 export type MediaSlot = Extract<
   SlotId,
-  'tts' | 'asr' | 'image' | 'video' | 'webSearch' | 'document'
+  'tts' | 'asr' | 'image' | 'video' | 'webSearch' | 'webFetch' | 'document'
 >;
 
 export interface MediaConnection {
   /** The capability's registry id (e.g. `minimax-tts`, `tavily`). */
   providerId: string;
+  /** The deployment provider supplying the credential, when resolved by slot. */
+  deploymentProviderId?: string;
   /** Absent: the provider's default model. */
   modelId?: string;
   apiKey?: string;
@@ -81,6 +89,7 @@ export interface MediaConnection {
   proxy?: string;
   /** The provider's non-secret options (openmaic.yml `options`): its adapter's settings. */
   options?: Record<string, string | number | boolean>;
+  voices?: ConfiguredTTSVoice[];
   /** The provider is operator configuration (deployment or server providers). */
   managed: boolean;
   /**
@@ -118,6 +127,23 @@ export function isLocalEndpoint(url: string): boolean {
   );
 }
 
+/** Only registry-approved tool endpoints may receive a workspace's key. */
+export function acceptsWorkspaceToolBaseUrl(
+  capability: SlotCapability,
+  registryId: string,
+  baseUrl?: string,
+): boolean {
+  if (!baseUrl) return false;
+  if (capability === 'webFetch') {
+    return !!getWebFetchProvider(registryId)?.acceptsWorkspaceBaseUrl?.(baseUrl);
+  }
+  return (
+    capability === 'webSearch' &&
+    !!WEB_SEARCH_PROVIDERS[registryId as WebSearchProviderId]?.officialBaseUrls?.length &&
+    isOfficialWebSearchBaseUrl(registryId, baseUrl)
+  );
+}
+
 async function fromTarget(
   slot: MediaSlot,
   target: ResolvedModelTarget,
@@ -140,7 +166,10 @@ async function fromTarget(
         'A proxy can only be configured by the deployment (openmaic.yml)',
       );
     }
-    if (target.customBaseUrl) {
+    if (
+      target.customBaseUrl &&
+      !acceptsWorkspaceToolBaseUrl(getSlot(slot).capability, target.registryId, target.baseUrl)
+    ) {
       throw new WorkspaceEndpointError(
         `A custom endpoint for ${slot} can only be configured by the deployment (openmaic.yml)`,
       );
@@ -156,16 +185,18 @@ async function fromTarget(
   }
   return {
     providerId: target.registryId,
+    ...(managed ? { deploymentProviderId: target.providerId } : {}),
     ...(target.modelId !== undefined ? { modelId: target.modelId } : {}),
     ...(target.apiKey !== undefined ? { apiKey: target.apiKey } : {}),
     ...(target.baseUrl !== undefined ? { baseUrl: target.baseUrl } : {}),
     ...(target.credentials !== undefined ? { credentials: target.credentials } : {}),
     ...(target.proxy !== undefined ? { proxy: target.proxy } : {}),
+    ...(target.voices !== undefined ? { voices: target.voices } : {}),
     ...(target.options !== undefined ? { options: target.options } : {}),
     managed,
     // A workspace provider reaches only its preset's own public endpoint (a
     // custom one and a local-default preset are refused above), exactly the
-    // endpoint a deployment's default would use: no user-typed endpoint, so
+    // endpoint a deployment's default would use: registry-approved endpoints, so
     // the transports keep the operator's policy.
     userEndpoint: false,
     origin,
@@ -237,6 +268,8 @@ export class RequestedProviderRefusedError extends Error {
  * undefined for any other error.
  */
 export function mediaResolutionResponse(error: unknown, what: string): Response | undefined {
+  const authorization = modelAuthorizationResponse(error);
+  if (authorization) return authorization;
   if (error instanceof SlotDisabledError) {
     return apiError('PROVIDER_DISABLED', 403, `${what} is turned off on this server`);
   }
@@ -289,4 +322,26 @@ export async function serverMediaConnection(
     if (error instanceof SlotUnassignedError) return null;
     throw error;
   }
+}
+
+/** Check the final wire model, including model changes made for a voice. */
+export function authorizeMediaModel(
+  connection: MediaConnection,
+  slot: MediaSlot,
+  modelId: string | undefined,
+): void {
+  if (
+    !connection.managed ||
+    (!connection.apiKey && !Object.keys(connection.credentials ?? {}).length) ||
+    !modelId
+  )
+    return;
+  const capability = getSlot(slot).capability;
+  if (!selectsUpstreamModel(presetIdFor(capability, connection.providerId), capability)) return;
+  assertDeploymentModelAuthorized(
+    deploymentConfig().layer?.config,
+    connection.deploymentProviderId ?? presetIdFor(capability, connection.providerId),
+    modelId,
+    capability,
+  );
 }

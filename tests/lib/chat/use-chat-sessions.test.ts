@@ -7,7 +7,6 @@ import {
   createPiSessionBoundaryContext,
   getPiSessionBoundaryContext,
   getPiSingleRequestOutcome,
-  fetchStatelessChat,
   isOpenLiveSession,
   normalizeStoredSessionsForRestore,
   retireLiveRequestResources,
@@ -19,8 +18,6 @@ import {
   withPiInclassWhiteboardTools,
   MANUAL_STOP_END_OPTIONS,
   takeSoftCloseRegistration,
-  classicLoopConfig,
-  discussionRequestFields,
 } from '@/components/chat/use-chat-sessions';
 import { useCanvasStore } from '@/lib/store/canvas';
 import { useStageStore } from '@/lib/store/stage';
@@ -836,20 +833,6 @@ describe('Pi Native whiteboard Browser events', () => {
 describe('classroom chat requests carry no provider data', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('sends the stateless /api/chat request without model headers', async () => {
-    const fetchMock = vi.fn(async () => new Response('data: {}\n\n', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await fetchStatelessChat({ messages: [] }, new AbortController().signal);
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [] }),
-      signal: expect.any(AbortSignal),
-    });
-  });
-
   it('sends the /api/chat/pi request without model headers or keys', async () => {
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -884,42 +867,5 @@ describe('classroom chat requests carry no provider data', () => {
     for (const field of ['apiKey', 'baseUrl', 'model', 'providerType', 'webSearchProviderId']) {
       expect(sent).not.toHaveProperty(field);
     }
-  });
-});
-
-describe('classicLoopConfig', () => {
-  const discussion = makeSession({
-    type: 'discussion',
-    title: 'Why do the charges cancel?',
-    config: {
-      agentIds: ['default-1', 'default-4'],
-      triggerAgentId: 'default-4',
-      discussionTopic: 'Why do the charges cancel?',
-      discussionPrompt: 'Let the class reason about it',
-      momentKind: 'lecture',
-    },
-  });
-  const config = {
-    agentIds: ['default-1', 'default-4'],
-    sessionType: 'discussion',
-    ...discussionRequestFields(discussion),
-  };
-  const user = { role: 'user' as const };
-  const assistant = { role: 'assistant' as const };
-
-  it('keeps the moment fields on the request that opens the discussion', () => {
-    expect(classicLoopConfig(config, [])).toBe(config);
-    expect(classicLoopConfig(config, [user])).toMatchObject({
-      triggerAgentId: 'default-4',
-      discussionTopic: 'Why do the charges cancel?',
-    });
-  });
-
-  it('lets the classic director choose on a follow-up: no trigger agent, no fresh topic', () => {
-    const followUp = classicLoopConfig(config, [user, assistant, user]);
-    expect(followUp).toEqual({ agentIds: ['default-1', 'default-4'], sessionType: 'discussion' });
-    expect(followUp).not.toHaveProperty('triggerAgentId');
-    // The Pi request template itself is untouched
-    expect(config.triggerAgentId).toBe('default-4');
   });
 });
