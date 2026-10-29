@@ -2,7 +2,7 @@
 
 import { act, createElement, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CanvasArea } from '@/components/canvas/canvas-area';
 
@@ -10,7 +10,13 @@ vi.mock('@/lib/hooks/use-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }));
 
-beforeAll(() => {
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+let root: Root | undefined;
+beforeEach(() => {
+  // The local stage shell measures itself with a ResizeObserver, which jsdom lacks.
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -20,19 +26,11 @@ beforeAll(() => {
     },
   );
 });
-afterAll(() => {
-  vi.unstubAllGlobals();
-});
-
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-let root: Root | undefined;
 afterEach(() => {
   if (root) act(() => root!.unmount());
   root = undefined;
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
 const pending: ComponentProps<typeof CanvasArea> = {
@@ -40,6 +38,7 @@ const pending: ComponentProps<typeof CanvasArea> = {
   mode: 'playback',
   engineState: 'idle',
   whiteboardOpen: false,
+  pageNumber: 2,
   isPendingScene: true,
   onPlayPause: () => {},
   onWhiteboardClose: () => {},

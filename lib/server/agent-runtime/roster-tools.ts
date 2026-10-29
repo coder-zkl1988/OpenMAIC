@@ -394,11 +394,10 @@ export function buildRosterTools(deps: RosterToolDeps): AgentTool<never, never>[
           {
             type: 'text',
             text:
-              `Classroom roster set: ${roster.length} agents, teacher "${teacher?.name}". ${summary}.` +
-              (alike ? ` Note: ${alike}` : '') +
+              `Classroom roster set: ${roster.length} agents, teacher "${teacher?.name}". ${summary}.${alike ? ` Note: ${alike}` : ''} ` +
               // Synthesis reads the roster at call time, but only for lines it
               // voices: audio already on a page is not redone by this write.
-              ' Narration audio already on pages keeps its old voice until generate_tts runs on them with force; generate_tts reports the voice it actually used.',
+              'Narration audio already on pages keeps its old voice until generate_tts runs on them with force; generate_tts reports the voice it actually used.',
           },
         ],
         details: { roster },

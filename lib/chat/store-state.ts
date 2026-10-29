@@ -10,12 +10,6 @@ export interface AgentLoopStoreState {
   whiteboardOpen: boolean;
   whiteboardManualVisibilityRevision?: number;
   /**
-   * Lecture narration progress at request time, used to keep an in-flight
-   * lecture's context in sync while the learner chats. Bounded by the Pi
-   * route (boundLectureProgress); absent outside a running lecture.
-   */
-  lectureProgress?: LectureProgress;
-  /**
    * Post-submit quiz state for the current scene. Hydrated from RuntimeStore
    * client-side; absent when the active scene is not a graded quiz or the
    * student has not submitted yet.
@@ -31,4 +25,9 @@ export interface AgentLoopStoreState {
       aiComment?: string;
     }>;
   };
+  /**
+   * How far the lecture has got on the current scene (Pi only): the teacher
+   * and assistant hear what was just said there. Absent when not known.
+   */
+  lectureProgress?: LectureProgress;
 }

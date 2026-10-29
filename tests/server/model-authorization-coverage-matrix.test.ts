@@ -19,18 +19,7 @@ vi.mock('@/lib/ai/providers', async (original) => ({
 vi.mock('@/lib/ai/llm', () => ({
   callLLM: async () => {
     mocks.upstream();
-    return {
-      text: JSON.stringify({
-        score: 1,
-        comment: 'OK',
-        personas: [
-          {
-            id: 'teacher',
-            persona: 'Warm and patient, explains ideas with everyday examples.',
-          },
-        ],
-      }),
-    };
+    return { text: '{"score":1,"comment":"OK"}' };
   },
 }));
 vi.mock('@/lib/chat/pi/director-loop', () => ({
@@ -155,6 +144,13 @@ vi.mock('@/lib/server/agent-runtime/skills', () => ({
   inferSkillIdFromPrompt: async () => undefined,
 }));
 vi.mock('@/lib/server/usage-storage', () => ({ recordGenerationUsage: async () => {} }));
+vi.mock('@/lib/server/generation/steps/persona-upgrade', async (original) => ({
+  ...(await original<typeof import('@/lib/server/generation/steps/persona-upgrade')>()),
+  upgradePersonas: async () => {
+    mocks.upstream();
+    return [];
+  },
+}));
 vi.mock('@/lib/server/ssrf-guard', async (original) => ({
   ...(await original<typeof import('@/lib/server/ssrf-guard')>()),
   validateClientBaseUrl: async () => null,
@@ -320,6 +316,21 @@ const ROUTES: RouteCase[] = [
       ),
   },
   {
+    path: 'generate/persona-upgrade',
+    invoke: async (m) =>
+      (await import('@/app/api/generate/persona-upgrade/route')).POST(
+        request(
+          '/api/generate/persona-upgrade',
+          {
+            stage: { name: 'Photosynthesis' },
+            agents: [{ id: 'teacher', name: 'Teacher', role: 'teacher', persona: 'Teach' }],
+            targetAgentIds: ['teacher'],
+          },
+          { 'x-model': `openai:${m}` },
+        ),
+      ),
+  },
+  {
     path: 'generate/tts',
     invoke: async (m) =>
       (await import('@/app/api/generate/tts/route')).POST(
@@ -391,28 +402,6 @@ const ROUTES: RouteCase[] = [
     invoke: async () =>
       (await import('@/app/api/generate-classroom/route')).POST(
         request('/api/generate-classroom', { requirement: 'Teach' }),
-      ),
-  },
-  {
-    path: 'generate/persona-upgrade',
-    invoke: async (m) =>
-      (await import('@/app/api/generate/persona-upgrade/route')).POST(
-        request(
-          '/api/generate/persona-upgrade',
-          {
-            stage: { name: 'Photosynthesis' },
-            agents: [
-              {
-                id: 'teacher',
-                name: 'Teacher',
-                role: 'teacher',
-                persona: 'Warm and patient, explains ideas with everyday examples.',
-              },
-            ],
-            targetAgentIds: ['teacher'],
-          },
-          { 'x-model': `openai:${m}` },
-        ),
       ),
   },
   {

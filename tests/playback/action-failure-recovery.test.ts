@@ -10,6 +10,8 @@ import type { PPTElement } from '@openmaic/dsl';
 const board = vi.hoisted(() => ({
   elements: [] as PPTElement[],
   open: false,
+  // Who the canvas store believes is drawing on the board
+  drawing: null as { agentId?: string | null } | null,
 }));
 vi.mock('@/lib/api/stage-api', () => ({
   createStageAPI: () => ({
@@ -25,13 +27,19 @@ vi.mock('@/lib/api/stage-api', () => ({
 vi.mock('@/lib/store/canvas', () => ({
   useCanvasStore: {
     getState: () => ({
-      whiteboardOpen: board.open,
+      get whiteboardOpen() {
+        return board.open;
+      },
+      get whiteboardDrawing() {
+        return board.drawing;
+      },
       setWhiteboardOpen: (open: boolean) => {
         board.open = open;
       },
+      setWhiteboardDrawing: (drawing: typeof board.drawing) => {
+        board.drawing = drawing;
+      },
       setWhiteboardClearing: vi.fn(),
-      // The fork's slide lectures draw on the whiteboard; reset clears it.
-      setWhiteboardDrawing: vi.fn(),
       clearAllEffects: vi.fn(),
       pauseVideo: vi.fn(),
     }),
@@ -102,6 +110,7 @@ describe('stored action failure recovery', () => {
     vi.useFakeTimers();
     board.elements = [];
     board.open = false;
+    board.drawing = null;
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });

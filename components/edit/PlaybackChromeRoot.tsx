@@ -1,6 +1,5 @@
 'use client';
 
-import { normalizeCueUserOptions } from '@/lib/chat/cue-user-options';
 import { useModelCapabilities } from '@/lib/model-settings/use-model-settings';
 import { toast } from 'sonner';
 import {
@@ -109,7 +108,6 @@ import { ActionEngine } from '@/lib/action/engine';
 import { createAudioPlayer } from '@/lib/utils/audio-player';
 import { useDiscussionTTS } from '@/lib/hooks/use-discussion-tts';
 import { useWidgetIframeStore } from '@/lib/store/widget-iframe';
-import { MEDIA_CONTROL } from '@/lib/interactive/media-bridge';
 import type { AudioIndicatorState } from '@/components/roundtable/audio-indicator';
 import type { Action, DiscussionAction, SpeechAction } from '@/lib/types/action';
 import { cn } from '@/lib/utils';
@@ -253,6 +251,7 @@ const LECTURE_COMPLETE_ADVANCE_MS = 1500;
  * chat to be quiescent — fire-and-forget on unmount loses that guarantee.
  */
 export interface PlaybackChromeRootHandle {
+  /** Pauses the playhead for interactive media that takes over the stage. */
   pauseForInteractiveMedia: () => void;
   /** Ends any active SSE session, stops the engine, cleans up TTS audio. */
   teardown: () => Promise<void>;
@@ -466,9 +465,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const [cueAgentId, setCueAgentId] = useState<string | null>(null);
     // The cue's question to the learner (cue_user.prompt), when its last line asked one
     const [cuePrompt, setCuePrompt] = useState<string | null>(null);
-    // The director's suggested replies for its question (cue_user.options),
-    // normalized; undefined when the cue came without suggestions
-    const [cueUserOptions, setCueUserOptions] = useState<string[] | undefined>();
     // A quiz just graded with wrong answers offers to go over them (I11)
     const [quizReviewOffer, setQuizReviewOffer] = useState<QuizReviewOffer | null>(null);
     // The learner's choice on a whole-class question's card, read by the
@@ -624,10 +620,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     const lectureActionCounterRef = useRef(0);
     const currentPlaybackActionIndexRef = useRef<number | null>(currentPlaybackActionIndex);
     const activeSceneIdRef = useRef<string | null>(currentSceneId);
-    const pauseInteractiveMedia = useCallback(() => {
-      const sceneId = activeSceneIdRef.current;
-      if (sceneId) useWidgetIframeStore.getState().sendMessageByScene[sceneId]?.(MEDIA_CONTROL, {});
-    }, []);
     const discussionAbortRef = useRef<AbortController | null>(null);
     const presentationIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const cursorSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -753,7 +745,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       chatAreaRef.current?.switchToTab('interaction');
       setIsCueUser(false);
       setCuePrompt(null);
-      setCueUserOptions(undefined);
       // Immediately mark streaming for synchronized stop button
       setChatIsStreaming(true);
       setChatSessionType((prev) => prev || 'qa');
@@ -1065,7 +1056,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       setIsCueUser(false);
       setCueAgentId(null);
       setCuePrompt(null);
-      setCueUserOptions(undefined);
       setLectureResumeDeadline(undefined);
       setIsTopicPending(false);
       setChatIsStreaming(false);
@@ -1519,7 +1509,6 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
 
         // Create new PlaybackEngine
         const engineCallbacks: PlaybackEngineCallbacks = {
-          beforeSpeech: pauseInteractiveMedia,
           onModeChange: (mode) => {
             setEngineMode(mode);
             // Playing on or a Q&A ends a called hand's turn
@@ -1923,7 +1912,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     }, [playbackSpeed]);
 
     /**
-     * Start a discussion in ChatArea, which sends it through the classroom chat hook
+     * Handle discussion SSE — POST /api/chat and push events to engine
      */
     const handleDiscussionSSE = useCallback(
       async (
@@ -3125,10 +3114,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         : t('stage.composer.cueHandBack')
       : undefined;
     // "Let me think" is the learner's own time, not a message; the others are
-    // sent as the learner's reply. The director's own suggestions (cue_user
-    // options) lead when the cue carried any; the stock ones always remain.
+    // sent as the learner's reply
     const cueQuickReplies = [
-      ...(cueUserOptions && cueUserOptions.length > 0 ? cueUserOptions : []),
       t('stage.handRaise.cueReplies.unsure'),
       t('stage.handRaise.cueReplies.hint'),
     ];
@@ -3320,8 +3307,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                 isGenerationFailed={
                   isPendingScene && failedOutlines.some((f) => f.id === generatingOutlines[0]?.id)
                 }
-                isGenerationInterrupted={isPendingScene && generationInterrupted}
                 generationFailureMessage={generationFailureMessage}
+                isGenerationInterrupted={isPendingScene && generationInterrupted}
                 onRetryGeneration={
                   onRetryOutline && generatingOutlines[0]
                     ? () => onRetryOutline(generatingOutlines[0].id)
@@ -3563,20 +3550,17 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
                   setThinkingState(state);
                 });
               }}
-              onCueUser={(fromAgentId, prompt, options) => {
+              onCueUser={(fromAgentId, prompt) => {
                 setIsCueUser(true);
                 setCueAgentId(fromAgentId ?? null);
                 // The question the last line asked the learner, if it asked one
                 setCuePrompt(prompt?.trim() || null);
-                // The director's own suggested replies, when it sent some
-                setCueUserOptions(normalizeCueUserOptions(options));
               }}
               onLiveSessionError={handleLiveSessionError}
               onSoftCloseSession={() => {
                 setThinkingState(null);
                 setIsCueUser(false);
                 setCuePrompt(null);
-                setCueUserOptions(undefined);
                 setActiveBubbleId(null);
               }}
               onSoftClosingChange={(softClosing, deadline, endReason) => {

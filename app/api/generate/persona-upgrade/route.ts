@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
     // The client sends no model headers: the agent-profiles stage's model writes personas.
     model = await resolveModelFromRequest(req, body, 'agent-profiles');
   } catch (error) {
+    // The deployment authorization boundary answers with its stable 403 refusal.
     const authorization = modelAuthorizationResponse(error);
     if (authorization) return authorization;
     log.error('Model resolution failed:', error);

@@ -88,48 +88,26 @@ async function renderSurface(variant: 'page' | 'pane') {
 }
 
 describe('a course being generated, in the classroom pane', () => {
-  it('shows the generating placeholder with progress instead of a blank pane', async () => {
-    run.generation = {
-      status: { kind: 'generating', completed: 2, total: 8 },
-      href: '/classroom/stage-gen',
-    };
-    await renderSurface('pane');
+  it.each([{ kind: 'generating', completed: 2, total: 8 } as const, { kind: 'paused' } as const])(
+    'mounts the learning surface for an unfinished $kind run',
+    async (status) => {
+      run.generation = { status, href: '/classroom/stage-gen' };
+      await renderSurface('pane');
+      expect(byTestId('course-generating-placeholder')).toBeNull();
+      expect(byTestId('stage')).not.toBeNull();
+    },
+  );
 
-    const placeholder = byTestId('course-generating-placeholder');
-    expect(placeholder).not.toBeNull();
-    expect(placeholder!.textContent).toContain('workspace.courseGeneratingTitle');
-    expect(byTestId('course-generating-progress')!.textContent).toBe(
-      'classroom.runGenerating:{"completed":2,"total":8}',
-    );
-    const link = byTestId('course-generating-link') as HTMLAnchorElement;
-    expect(link.getAttribute('href')).toBe('/classroom/stage-gen');
-    expect(link.target).toBe('_blank');
-    expect(byTestId('stage')).toBeNull();
-  });
-
-  it('says a paused run is paused, and links to where its Retry lives', async () => {
-    run.generation = { status: { kind: 'paused' }, href: '/classroom/stage-gen' };
-    await renderSurface('pane');
-
-    const placeholder = byTestId('course-generating-placeholder')!;
-    expect(placeholder.dataset.runState).toBe('paused');
-    expect(placeholder.textContent).toContain('workspace.coursePausedTitle');
-    expect(byTestId('course-generating-link')!.textContent).toContain('workspace.openToRetry');
-  });
-
-  it('swaps to the course by itself when the run completes', async () => {
+  it('keeps the same classroom mounted when the run completes', async () => {
     run.generation = {
       status: { kind: 'generating', completed: 7, total: 8 },
       href: '/classroom/stage-gen',
     };
     const view = await renderSurface('pane');
-    expect(byTestId('course-generating-placeholder')).not.toBeNull();
-
+    const stage = byTestId('stage');
     run.generation = null;
     await view.rerender();
-
-    expect(byTestId('course-generating-placeholder')).toBeNull();
-    expect(byTestId('stage')).not.toBeNull();
+    expect(byTestId('stage')).toBe(stage);
   });
 
   it('leaves the standalone classroom page as it was: it follows the run itself', async () => {

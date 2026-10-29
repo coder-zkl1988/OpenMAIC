@@ -47,7 +47,7 @@ async function hydrate(state: Record<string, unknown>, version: number) {
   return useSettingsStore;
 }
 
-describe('settings store v4 → v6', () => {
+describe('settings store v4 → v5', () => {
   it('leaves a fresh speech preference unset without bumping the persisted version', async () => {
     const { useSettingsStore: store } = await import('@/lib/store/settings');
     await store.persist.rehydrate();
@@ -58,6 +58,7 @@ describe('settings store v4 → v6', () => {
         'settings-storage',
         'account',
       );
+      // Written back at the current version (v6 opens the classroom panels)
       expect(blob?.version).toBe(6);
       expect(blob?.state.asrLanguage).toBe('');
     });

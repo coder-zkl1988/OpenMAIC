@@ -147,7 +147,7 @@ interface UseChatSessionsOptions {
   onLiveSpeech?: (text: string | null, agentId?: string | null) => void;
   onSpeechProgress?: (ratio: number | null) => void;
   onThinking?: (state: { stage: string; agentId?: string } | null) => void;
-  onCueUser?: (fromAgentId?: string, prompt?: string, options?: string[]) => void;
+  onCueUser?: (fromAgentId?: string, prompt?: string) => void;
   onActiveBubble?: (messageId: string | null) => void;
   onLiveSessionError?: () => void;
   /** Called immediately when the server semantically closes a QA/Discussion session. */
@@ -600,31 +600,6 @@ export function discussionRequestFields(
   });
 }
 
-const DISCUSSION_MOMENT_FIELD_KEYS = [
-  'discussionTopic',
-  'discussionPrompt',
-  'triggerAgentId',
-  'momentKind',
-  'learnerStance',
-] as const satisfies readonly (keyof DiscussionMomentFields)[];
-
-/**
- * The config the classic (non-Pi) loop sends. Its director dispatches the
- * trigger agent unasked on a loop's first turn and frames any request with a
- * topic as a freshly opened discussion, so the moment fields go only with the
- * request that opens it (no assistant message yet). On a follow-up or resume
- * the classic director chooses who speaks, as it always did.
- */
-export function classicLoopConfig(
-  config: ChatRequestTemplate['config'],
-  messages: readonly Pick<UIMessage, 'role'>[],
-): ChatRequestTemplate['config'] {
-  if (!messages.some((message) => message.role === 'assistant')) return config;
-  const followUp = { ...config };
-  for (const key of DISCUSSION_MOMENT_FIELD_KEYS) delete followUp[key];
-  return followUp;
-}
-
 export async function retireLiveRequestResources<
   T extends { shutdown(): void; waitForCurrentAction?(): Promise<void> },
 >(
@@ -791,18 +766,11 @@ export async function runPiSingleRequest(
   });
 
   if (!response.ok) {
-    const errorBody = await response.json().catch(() => null);
-    if (
-      reference?.kind === 'whiteboard_element' &&
-      errorBody?.reason === 'whiteboard_reference_changed'
-    ) {
-      throw new Error(t('chat.elementReference.whiteboardChanged'));
-    }
-    if (response.status === 400 && errorBody?.reason === 'gemini_native_required') {
-      throw new Error(t('chat.error.geminiNativeRequired'));
-    }
-    if (response.status === 400 && errorBody?.reason === 'tool_calling_required') {
-      throw new Error(t('chat.error.toolCallingRequired'));
+    if (reference?.kind === 'whiteboard_element') {
+      const errorBody = await response.json().catch(() => null);
+      if (errorBody?.reason === 'whiteboard_reference_changed') {
+        throw new Error(t('chat.elementReference.whiteboardChanged'));
+      }
     }
     throw new Error(`Pi chat request failed: ${response.status}`);
   }
@@ -1503,7 +1471,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             onThinkingRef.current?.(data);
           },
 
-          onCueUser(fromAgentId?: string, prompt?: string, options?: string[]) {
+          onCueUser(fromAgentId?: string, prompt?: string) {
             // Track cue_user for agent loop
             if (doneDataRef.current) {
               doneDataRef.current.cueUserReceived = true;
@@ -1516,8 +1484,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
             // The learner's cue is lecture-facing (it reveals the composer as
             // the floor): the aside just waits for a follow-up
             if (aside) return;
-            if (options) onCueUserRef.current?.(fromAgentId, prompt, options);
-            else onCueUserRef.current?.(fromAgentId, prompt);
+            onCueUserRef.current?.(fromAgentId, prompt);
           },
 
           onDone(data: {
@@ -1693,9 +1660,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   );
 
   /**
-   * Run one classroom turn: a single POST /api/chat/pi, whose server owns the
-   * whole director loop. The SSE stream is paced through StreamBuffer, and the
-   * done event decides the session outcome.
+   * One Pi request per classroom turn: POST /api/chat/pi and stream its SSE
+   * through StreamBuffer for UI pacing.
    */
   const runAgentLoopFn = useCallback(
     async (
@@ -1716,8 +1682,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         requestTemplate.config.agentConfigs = generatedConfigs;
       }
 
-      // The single request carries a fresh store snapshot with class
-      // presence, class memory and lecture progress read as it leaves —
+      // Pi's single request needs the store-state snapshot built here —
       // /api/chat/pi rejects bodies without storeState.
       const [freshState, quizMisses] = await Promise.all([
         buildFreshAgentLoopStoreState(),
@@ -2014,10 +1979,10 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
   }, [setAsideSessionId]);
 
   /**
-   * One aside turn: Pi's single request. Its
-   * outcome only settles the aside — a cue, a completion or even a close
-   * keeps the session open for follow-ups; an error closes it — and never
-   * reaches the lecture-facing stop / cleanup callbacks.
+   * One aside turn: Pi's single request. Its outcome only settles the aside —
+   * a cue, a completion or even a close keeps the session open for follow-ups;
+   * an error closes it — and never reaches the lecture-facing stop / cleanup
+   * callbacks.
    */
   const runAsideRequest = useCallback(
     async (

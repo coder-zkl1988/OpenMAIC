@@ -203,8 +203,7 @@ describe('set_roster', () => {
         {
           name: '林老师',
           role: 'teacher',
-          persona:
-            '耐心引导，总是从学生已经知道的地方出发，一步步把新的知识讲清楚，鼓励学生大胆提问，也认真对待每一个小问题。',
+          persona: '耐心引导，总是从学生已经知道的东西出发。她说话不紧不慢，遇到卡住的人会多举一个例子。',
           voiceDesign: {
             identity: '中年男教师',
             gender: 'male',
@@ -215,8 +214,7 @@ describe('set_roster', () => {
         {
           name: '小雨',
           role: 'student',
-          persona:
-            '好奇心很强，遇到没听懂的地方就爱追问为什么，喜欢把新知识和生活里见过的事物联系起来，回答问题很积极。',
+          persona: '好奇爱问，听到意外之处就举手。她问得急，有时还没想清楚就说出来，但很愿意被人纠正。',
           voiceDesign: {
             identity: '年轻女性学生',
             gender: 'female',
@@ -227,8 +225,7 @@ describe('set_roster', () => {
         {
           name: '阿杰',
           role: 'student',
-          persona:
-            '听讲很认真，笔记记得工整细致，虽然不常主动发言，但被点名回答时总能条理清楚地把自己的想法讲明白。',
+          persona: '认真听讲，笔记记得很细。他很少主动发言，除非确信自己是对的，被点名时回答得慢但完整。',
         },
       ],
     });
@@ -258,18 +255,8 @@ describe('set_roster', () => {
   it('requires gender whenever set_roster voiceDesign is present', () => {
     const setRoster = buildTools().find((tool) => tool.name === 'set_roster');
     expect(setRoster).toBeDefined();
-    const teacher = {
-      name: '林老师',
-      role: 'teacher',
-      persona:
-        '耐心引导，总是从学生已经知道的地方出发，一步步把新的知识讲清楚，鼓励学生大胆提问，也认真对待每一个小问题。',
-    };
-    const student = {
-      name: '小雨',
-      role: 'student',
-      persona:
-        '好奇心很强，遇到没听懂的地方就爱追问为什么，喜欢把新知识和生活里见过的事物联系起来，回答问题很积极。',
-    };
+    const teacher = { name: '林老师', role: 'teacher', persona: '耐心引导，从已知出发。' };
+    const student = { name: '小雨', role: 'student', persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。' };
     const voiceDesign = {
       identity: '年轻女性学生',
       texture: '清亮轻快',
@@ -640,17 +627,11 @@ describe('set_roster', () => {
     const result = await runTool(store, 'set_roster', {
       stageId: 'stage-test',
       agents: [
-        {
-          name: '林老师',
-          role: 'teacher',
-          persona:
-            '耐心引导，总是从学生已经知道的地方出发，一步步把新的知识讲清楚，鼓励学生大胆提问，也认真对待每一个小问题。',
-        },
+        { name: '林老师', role: 'teacher', persona: '耐心引导，总是从学生已经知道的东西出发；她说话不紧不慢，遇到卡住的人会多举一个例子。' },
         {
           name: '小雨',
           role: 'student',
-          persona:
-            '好奇心很强，遇到没听懂的地方就爱追问为什么，喜欢把新知识和生活里见过的事物联系起来，回答问题很积极。',
+          persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。',
           voice: 'openai-tts::nova',
           voiceDesign: {
             identity: '年轻女性学生',
@@ -680,17 +661,11 @@ describe('set_roster', () => {
     const neutral = await runTool(store, 'set_roster', {
       stageId: 'stage-test',
       agents: [
-        {
-          name: '林老师',
-          role: 'teacher',
-          persona:
-            '耐心引导，总是从学生已经知道的地方出发，一步步把新的知识讲清楚，鼓励学生大胆提问，也认真对待每一个小问题。',
-        },
+        { name: '林老师', role: 'teacher', persona: '耐心引导，总是从学生已经知道的东西出发；她说话不紧不慢，遇到卡住的人会多举一个例子。' },
         {
           name: '小雨',
           role: 'student',
-          persona:
-            '好奇心很强，遇到没听懂的地方就爱追问为什么，喜欢把新知识和生活里见过的事物联系起来，回答问题很积极。',
+          persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。',
           voice: 'openai-tts::alloy',
           voiceDesign: femaleDesign,
         },
@@ -707,17 +682,11 @@ describe('set_roster', () => {
       {
         stageId: 'stage-test',
         agents: [
-          {
-            name: '林老师',
-            role: 'teacher',
-            persona:
-              '耐心引导，总是从学生已经知道的地方出发，一步步把新的知识讲清楚，鼓励学生大胆提问，也认真对待每一个小问题。',
-          },
+          { name: '林老师', role: 'teacher', persona: '耐心引导，总是从学生已经知道的东西出发；她说话不紧不慢，遇到卡住的人会多举一个例子。' },
           {
             name: '小雨',
             role: 'student',
-            persona:
-              '好奇心很强，遇到没听懂的地方就爱追问为什么，喜欢把新知识和生活里见过的事物联系起来，回答问题很积极。',
+            persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。',
             voice: 'openai-tts::session-voice',
             voiceDesign: femaleDesign,
           },
@@ -738,16 +707,10 @@ describe('set_roster', () => {
         {
           name: '林老师',
           role: 'teacher',
-          persona:
-            '耐心引导，总是从学生已经知道的地方出发，一步步把新的知识讲清楚，鼓励学生大胆提问，也认真对待每一个小问题。',
+          persona: '耐心引导，总是从学生已经知道的东西出发；她说话不紧不慢，遇到卡住的人会多举一个例子。',
           voice: 'openai-tts::echo',
         },
-        {
-          name: '小雨',
-          role: 'student',
-          persona:
-            '好奇心很强，遇到没听懂的地方就爱追问为什么，喜欢把新知识和生活里见过的事物联系起来，回答问题很积极。',
-        },
+        { name: '小雨', role: 'student', persona: '好奇爱问，听到意外之处就举手；她问得急，有时还没想清楚就说出来，但很愿意被人纠正。' },
       ],
     });
     expect(noDesignGender.isError).toBeUndefined();
@@ -950,15 +913,13 @@ it.each(['openai-tts'])(
           {
             name: 'Teacher',
             role: 'teacher',
-            persona:
-              'Patient and warm, she builds every idea from what the class already knows and checks understanding before moving on.',
+            persona: 'A patient teacher who explains each step from what the class already knows.',
             voice: `${providerId}::vivian`,
           },
           {
             name: 'Student',
             role: 'student',
-            persona:
-              'Curious and quick to ask why, he connects each new idea to things he has seen in daily life and answers eagerly.',
+            persona: 'A curious learner who asks why as soon as something surprises them.',
           },
         ],
       },
@@ -991,15 +952,13 @@ it('keeps excluded configured Qwen voices out of roster tools while allowing reg
       {
         name: 'Teacher',
         role: 'teacher',
-        persona:
-          'Patient and warm, she builds every idea from what the class already knows and checks understanding before moving on.',
+        persona: 'A patient teacher who explains each step from what the class already knows.',
         voice,
       },
       {
         name: 'Student',
         role: 'student',
-        persona:
-          'Curious and quick to ask why, he connects each new idea to things he has seen in daily life and answers eagerly.',
+        persona: 'A curious learner who asks why as soon as something surprises them.',
       },
     ],
   });

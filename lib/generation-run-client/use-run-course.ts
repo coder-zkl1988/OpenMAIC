@@ -62,6 +62,19 @@ export interface RunPause {
   failure: FailureText | null;
 }
 
+/** The outline of the scene a paused run stopped at; null when it stopped outside the scenes. */
+export function pausedOutlineOfRun(
+  view: RunView,
+  outlines: readonly SceneOutline[],
+): SceneOutline | null {
+  if (view.state !== 'paused') return null;
+  const stopped = sceneIndexOfStep(view.error?.step);
+  return stopped === null ? null : (outlines[stopped] ?? null);
+}
+
+/** A paused run's failure, with the outline of the scene it stopped at (null outside the scenes). */
+export type RunCourseFailure = NonNullable<RunView['error']> & { outlineId: string | null };
+
 /** What a paused run stopped at, or null for a run that is not paused. */
 export function runPauseOf(view: RunView, outlines: readonly SceneOutline[]): RunPause | null {
   if (view.state !== 'paused') return null;
@@ -294,6 +307,9 @@ export function useRunCourse(input: { classroomId: string; ready: boolean }): {
     ? pausedOutlineOfRun(view, view.outline?.outlines ?? storeOutlines)
     : null;
   const paused = view ? runPauseOf(view, view.outline?.outlines ?? storeOutlines) : null;
+  const pausedOutline = view
+    ? pausedOutlineOfRun(view, view.outline?.outlines ?? storeOutlines)
+    : null;
   return {
     runId: view ? runId : null,
     failure:

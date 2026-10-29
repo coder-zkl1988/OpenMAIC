@@ -61,8 +61,8 @@ import { useCanvasStore } from '@/lib/store/canvas';
 import { useSettingsStore } from '@/lib/store/settings';
 import { ttsSelection } from '@/lib/audio/tts-selection';
 import { detectSpeechLang } from '@/lib/audio/browser-tts-preview';
-import { createLogger } from '@/lib/logger';
 import i18n from '@/lib/i18n/config';
+import { createLogger } from '@/lib/logger';
 
 const log = createLogger('PlaybackEngine');
 
@@ -453,6 +453,8 @@ export class PlaybackEngine {
       if (!this.isCurrentGeneration(generation)) return false;
       const action = actions[i];
       if (isWhiteboardPlaybackAction(action)) {
+        // A rejected stored action must not abort the whiteboard restoration:
+        // the rest of the prefix is still drawn and playback continues.
         try {
           await this.actionEngine.execute(action, { silent: true });
         } catch (error) {
@@ -542,7 +544,6 @@ export class PlaybackEngine {
     } else {
       // Resume lecture
       this.setMode('playing');
-      this.callbacks.beforeSpeech?.();
       if (this.browserTTSPausedChunks.length > 0) {
         // Browser TTS was paused via cancel — re-speak remaining chunks
         this.browserTTSActive = true;
@@ -1075,7 +1076,6 @@ export class PlaybackEngine {
       case 'speech': {
         const speechAction = action as SpeechAction;
         this.speechSource = null;
-        this.callbacks.beforeSpeech?.();
         this.callbacks.onSpeechStart?.(speechAction.text);
 
         // onEnded → processNext; if paused, resume() will call processNext

@@ -38,10 +38,6 @@ afterEach(() => {
 
 it('carries string suggestions through real SSE without saving them and sends return-to-lesson as ordinary text', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
-    configurable: true,
-    value: vi.fn(),
-  });
   vi.useFakeTimers();
   fixture.state.chats = [];
   const requests: Array<{ messages: ChatSession['messages'] }> = [];

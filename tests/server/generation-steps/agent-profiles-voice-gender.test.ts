@@ -92,9 +92,7 @@ function token(voiceId: string): string {
 
 function profile(extra: Record<string, unknown> & { name: string; role: string }) {
   return {
-    // The fork's persona gate (lib/orchestration/persona-guide) refuses
-    // rosters whose personas are under PERSONA_MIN_CHARS (40) characters.
-    persona: 'Warm and patient, explains ideas with everyday examples.',
+    persona: 'Takes part in the class and asks a question whenever a step is unclear.',
     avatar: '/a.png',
     color: '#111111',
     priority: extra.role === 'teacher' ? 10 : 5,

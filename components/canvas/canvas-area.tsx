@@ -47,6 +47,7 @@ interface CanvasAreaProps {
   readonly isPendingScene?: boolean;
   readonly isCourseComplete?: boolean;
   readonly isGenerationFailed?: boolean;
+  /** What the failure card says; absent falls back to the generic message. */
   readonly generationFailureMessage?: string;
   /** The pending scene will never be produced (its generation was interrupted). */
   readonly isGenerationInterrupted?: boolean;
@@ -255,7 +256,7 @@ export function CanvasArea({
                       />
                     </svg>
                   </div>
-                  <span className="max-w-md px-4 text-center text-sm text-red-500 dark:text-red-400 font-medium">
+                  <span className="text-sm text-red-500 dark:text-red-400 font-medium">
                     {isGenerationInterrupted
                       ? t('stage.generationInterrupted')
                       : (generationFailureMessage ?? t('stage.generationFailed'))}
